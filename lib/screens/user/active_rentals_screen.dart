@@ -271,6 +271,7 @@ class RentalBookingCard extends StatelessWidget {
         rental.paymentProofStatus == 'REJECTED';
     final paymentUnderReview = rental.paymentMethod.toUpperCase() == 'QR' &&
         rental.paymentProofStatus == 'PENDING_REVIEW';
+    final isRentAndPlayPickup = rental.isRentAndPlayPickup;
     final (heading, message) = paymentRejected
         ? (
             'Payment needs an update',
@@ -293,11 +294,19 @@ class RentalBookingCard extends StatelessWidget {
                 : rental.isAwaitingPickup
                     ? (
                         rental.deliveryStatus == 'PREPARED'
-                            ? 'Ready for handoff'
-                            : 'Approved · preparing handoff',
+                            ? isRentAndPlayPickup
+                                ? 'Ready at Rent & Play'
+                                : 'Ready for delivery'
+                            : isRentAndPlayPickup
+                                ? 'Approved · preparing your item'
+                                : 'Approved · preparing delivery',
                         rental.deliveryStatus == 'PREPARED'
-                            ? 'Go to ${rental.deliveryLocation} and show your rental QR and a valid ID.'
-                            : 'The operator is preparing your item for ${rental.deliveryLocation}. Your rental timer has not started.'
+                            ? isRentAndPlayPickup
+                                ? 'Pumunta sa Rent & Play sa ASRI Hotspring Resort. Ipakita ang rental QR at valid ID para makuha ang item.'
+                                : 'Your item is ready. The operator will bring it to ${rental.deliveryLocation}. Show your rental QR and a valid ID at handoff.'
+                            : isRentAndPlayPickup
+                                ? 'The operator is checking your item at Rent & Play in ASRI. Your rental timer starts when it is handed to you.'
+                                : 'The operator is preparing your item for ${rental.deliveryLocation}. Your rental timer has not started.'
                       )
                     : rental.isActive && rental.hasPendingReturnRequest
                         ? (
@@ -416,8 +425,8 @@ class RentalBookingCard extends StatelessWidget {
       if (rental.isAwaitingPickup || rental.isPendingAdminReview)
         _RentalDetailLine(
             icon: Icons.place_outlined,
-            label: 'Pickup location',
-            value: rental.deliveryLocation),
+            label: isRentAndPlayPickup ? 'Get your item at' : 'Delivery to',
+            value: rental.customerHandoffLocation),
       if (rental.holdExpiresAt != null && rental.canCancel)
         _RentalDetailLine(
             icon: Icons.schedule_outlined,

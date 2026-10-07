@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+const rentAndPlayPickupLocation = 'Rent & Play at ASRI Hotspring Resort';
+
 class RentalModel {
   final String rentalId;
   final String itemId;
@@ -8,7 +10,7 @@ class RentalModel {
   final String customerId;
   final String customerName;
   final String terminalId;
-  final String deliveryLocation; // Private Resort delivery address
+  final String deliveryLocation; // Pickup point or resort delivery location
   final DateTime startDate;
   final DateTime dueDate;
   final DateTime? returnedDate;
@@ -33,6 +35,17 @@ class RentalModel {
   final String paymentProofNote;
   final String deliveryStatus;
   bool get isAwaitingPickup => normalizedStatus == 'APPROVED';
+  bool get isRentAndPlayPickup {
+    final location = deliveryLocation.trim().toLowerCase();
+    return location.isEmpty ||
+        location == 'shop pickup' ||
+        location.startsWith('asri hotspring resort') ||
+        location.startsWith(rentAndPlayPickupLocation.toLowerCase());
+  }
+
+  String get customerHandoffLocation => isRentAndPlayPickup
+      ? 'Rent & Play · ASRI Hotspring Resort'
+      : deliveryLocation;
   bool get isAwaitingInspection =>
       normalizedStatus == 'RETURN_PENDING_INSPECTION';
   bool get canCancel => isPendingAdminReview || isAwaitingPickup;
@@ -89,7 +102,7 @@ class RentalModel {
     required this.customerId,
     required this.customerName,
     required this.terminalId,
-    this.deliveryLocation = 'ASRI Hotspring Resort',
+    this.deliveryLocation = rentAndPlayPickupLocation,
     required this.startDate,
     required this.dueDate,
     this.returnedDate,
@@ -189,7 +202,7 @@ class RentalModel {
       terminalId: text(map['terminal_id'] ?? map['terminalId']),
       deliveryLocation: text(
           map['delivery_location'] ?? map['deliveryLocation'] ?? map['resort'],
-          'Shop pickup'),
+          rentAndPlayPickupLocation),
       startDate: parseDate(map['confirmed_rental_at'] ??
               map['start_at'] ??
               map['startDate'] ??

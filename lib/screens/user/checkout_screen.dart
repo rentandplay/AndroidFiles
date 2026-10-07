@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
+import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/rental_ui.dart';
@@ -19,8 +20,9 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final _form = GlobalKey<FormState>();
   int _selectedDurationMinutes = 60;
-  String _deliveryLocation = 'Shop pickup';
+  String _selectedResort = '';
   final _customResortController = TextEditingController();
+  final _deliveryDetailsController = TextEditingController();
   String _paymentMethod = 'CASH';
   bool _isSubmitting = false, _quoteLoading = true, _paymentConfirmed = false;
   Map<String, dynamic>? _quote;
@@ -59,7 +61,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   static const privateResorts = [
-    'Shop pickup',
     'ASRI Hotspring Resort',
     '23 Prime Resort',
     'Springcrest Villa',
@@ -199,6 +200,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _quoteVersion++;
     _customResortController.dispose();
+    _deliveryDetailsController.dispose();
     _paymentReferenceController.dispose();
     super.dispose();
   }
@@ -234,9 +236,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         itemName: widget.item.name,
         itemCode: widget.item.qrCode,
         durationMinutes: _selectedDurationMinutes,
-        deliveryLocation: _deliveryLocation == 'Other / Custom Resort'
-            ? _customResortController.text.trim()
-            : _deliveryLocation,
+        deliveryLocation: _selectedResort == 'ASRI Hotspring Resort'
+            ? rentAndPlayPickupLocation
+            : [
+                _selectedResort == 'Other / Custom Resort'
+                    ? _customResortController.text.trim()
+                    : _selectedResort,
+                _deliveryDetailsController.text.trim(),
+              ].where((part) => part.isNotEmpty).join(' — '),
         paymentMethod: _paymentMethod,
         requestKey: _requestKey,
         paymentProofImageDataUrl: _paymentProofImage,
@@ -344,37 +351,85 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     }),
                       ]),
                       const SizedBox(height: 14),
+                      Text('Saang resort ka naka-check in?',
+                          style: TextStyle(
+                              color: scheme.onSurfaceVariant,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 8),
                       DropdownButtonFormField<String>(
-                        initialValue: _deliveryLocation,
+                        initialValue:
+                            _selectedResort.isEmpty ? null : _selectedResort,
                         isExpanded: true,
-                        decoration:
-                            const InputDecoration(labelText: 'Pickup / resort'),
+                        decoration: const InputDecoration(
+                            labelText: 'Piliin ang resort'),
                         items: privateResorts
                             .map((place) => DropdownMenuItem(
                                 value: place,
                                 child: Text(place,
                                     overflow: TextOverflow.ellipsis)))
                             .toList(),
+                        validator: (place) => place == null || place.isEmpty
+                            ? 'Piliin kung saang resort ka naka-check in.'
+                            : null,
                         onChanged: _isSubmitting
                             ? null
                             : (place) {
-                                if (place != null)
-                                  setState(() => _deliveryLocation = place);
+                                if (place != null) {
+                                  setState(() => _selectedResort = place);
+                                }
                               },
                       ),
-                      if (_deliveryLocation == 'Other / Custom Resort') ...[
-                        const SizedBox(height: 14),
+                      if (_selectedResort == 'ASRI Hotspring Resort') ...[
+                        const SizedBox(height: 8),
+                        const RentalNotice(
+                          icon: Icons.storefront_outlined,
+                          title: 'Kunin sa Rent & Play',
+                          message:
+                              'Nasa ASRI Hotspring Resort ang Rent & Play, kaya hindi na ihahatid ang item. Ipakita ang rental QR at valid ID sa staff.',
+                        ),
+                      ] else if (_selectedResort.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        RentalNotice(
+                          icon: Icons.delivery_dining_outlined,
+                          title: _selectedResort == 'Other / Custom Resort'
+                              ? 'Ihahatid sa resort mo'
+                              : 'Ihahatid sa $_selectedResort',
+                          message:
+                              'Ilagay ang villa o cottage para malaman ng staff kung saan ihahatid ang item.',
+                        ),
+                        if (_selectedResort == 'Other / Custom Resort') ...[
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: _customResortController,
+                            enabled: !_isSubmitting,
+                            maxLength: 120,
+                            textInputAction: TextInputAction.next,
+                            decoration: const InputDecoration(
+                                labelText: 'Pangalan ng resort',
+                                hintText: 'Ilagay ang resort'),
+                            validator: (value) =>
+                                _selectedResort != 'Other / Custom Resort'
+                                    ? null
+                                    : value == null || value.trim().isEmpty
+                                        ? 'Ilagay ang pangalan ng resort.'
+                                        : null,
+                          ),
+                        ],
+                        const SizedBox(height: 10),
                         TextFormField(
-                          controller: _customResortController,
+                          controller: _deliveryDetailsController,
                           enabled: !_isSubmitting,
-                          maxLength: 180,
+                          maxLength: 100,
                           textInputAction: TextInputAction.done,
                           decoration: const InputDecoration(
-                              labelText: 'Resort name / location',
-                              hintText: 'Enter the handoff location'),
-                          validator: (value) =>
-                              value == null || value.trim().isEmpty
-                                  ? 'Enter your resort or pickup location.'
+                              labelText: 'Villa / cottage / drop-off point',
+                              hintText: 'Hal. Villa 3 o Cottage A'),
+                          validator: (value) => _selectedResort.isEmpty ||
+                                  _selectedResort == 'ASRI Hotspring Resort'
+                              ? null
+                              : value == null || value.trim().isEmpty
+                                  ? 'Ilagay kung saan mismo ihahatid sa resort.'
                                   : null,
                         ),
                       ],

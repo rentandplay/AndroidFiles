@@ -151,7 +151,9 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                   const Divider(height: 28),
                   if (widget.isAdmin)
                     RentalValueRow('Customer', rental.customerName),
-                  RentalValueRow('Pickup / resort', rental.deliveryLocation),
+                  RentalValueRow(
+                      rental.isRentAndPlayPickup ? 'Kunin sa' : 'Ihahatid sa',
+                      rental.customerHandoffLocation),
                   RentalValueRow('Rental date', _date(rental.startDate)),
                   if (rental.dueDate.millisecondsSinceEpoch > 0)
                     RentalValueRow('Due', _date(rental.dueDate)),
