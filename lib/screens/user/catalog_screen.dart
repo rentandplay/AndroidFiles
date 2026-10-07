@@ -1,3 +1,4 @@
+import '../../services/mobile_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
@@ -8,7 +9,7 @@ import '../auth/id_verification_screen.dart';
 import 'item_details_screen.dart';
 import 'active_rentals_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
-import '../alerts/alerts_screen.dart';
+import '../../widgets/notification_widgets.dart';
 import '../rental/rental_history_screen.dart';
 import '../profile/profile_screen.dart';
 
@@ -21,6 +22,7 @@ class CatalogScreen extends StatefulWidget {
 
 class _CatalogScreenState extends State<CatalogScreen> {
   String selectedCategory = 'All';
+  UserModel? _currentUserModel;
   final List<String> categories = [
     'All',
     'Sports',
@@ -29,19 +31,59 @@ class _CatalogScreenState extends State<CatalogScreen> {
     'Tech Rentals',
   ];
 
-  late List<ItemModel> catalogItems;
+  List<ItemModel> catalogItems = [];
+  bool _catalogLoading = true;
+  String _catalogError = "";
 
   @override
   void initState() {
     super.initState();
-    catalogItems = ItemModel.getInitialCatalog();
+    _loadCatalog();
+    _loadCurrentUserModel();
+  }
+
+  Future<void> _loadCurrentUserModel() async {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userModel = await authService.getCurrentUserModel();
+      if (mounted) setState(() => _currentUserModel = userModel);
+    } catch (_) {
+      // Keep customer-facing navigation available if the profile is unavailable.
+    }
+  }
+
+  Future<void> _loadCatalog() async {
+    setState(() {
+      _catalogLoading = true;
+      _catalogError = '';
+    });
+    try {
+      final records = await MobileApiService.instance.catalog();
+      if (mounted) {
+        setState(() {
+          catalogItems = records
+              .map((row) => ItemModel.fromMap(row, id: row['id'].toString()))
+              .toList();
+          _catalogLoading = false;
+        });
+      }
+    } catch (error) {
+      if (mounted) {
+        setState(() {
+          _catalogError = error.toString();
+          _catalogLoading = false;
+        });
+      }
+    }
   }
 
   List<ItemModel> get filteredItems {
-    if (selectedCategory == 'All') {
-      return catalogItems;
-    }
-    return catalogItems.where((item) => item.category == selectedCategory).toList();
+    final items = (selectedCategory == 'All'
+            ? catalogItems
+            : catalogItems.where((item) => item.category == selectedCategory))
+        .toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return items;
   }
 
   void _handleRentalClick(ItemModel item) async {
@@ -64,13 +106,20 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
 
-    UserModel? userModel = await authService.getCurrentUserModel();
+    UserModel? userModel;
+    try {
+      userModel = await authService.getCurrentUserModel();
+    } catch (error) {
+      if (mounted) messenger.showSnackBar(SnackBar(content: Text('$error')));
+      return;
+    }
     if (!mounted) return;
 
     if (userModel == null || !userModel.hasAcceptedTerms) {
       messenger.showSnackBar(
         const SnackBar(
-          content: Text('Please review rental policies and accept terms before renting.'),
+          content: Text(
+              'Please review rental policies and accept terms before renting.'),
         ),
       );
       navigator.push(
@@ -127,6 +176,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
           ],
         ),
         actions: [
+          IconButton(
+              onPressed: _catalogLoading ? null : _loadCatalog,
+              tooltip: 'Refresh equipment',
+              icon: const Icon(Icons.refresh)),
           if (user == null)
             TextButton.icon(
               onPressed: () {
@@ -147,22 +200,12 @@ class _CatalogScreenState extends State<CatalogScreen> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (_) => const ActiveRentalsScreen()),
+                  MaterialPageRoute(
+                      builder: (_) => const ActiveRentalsScreen()),
                 );
               },
             ),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              icon: const Icon(Icons.notifications_outlined, size: 22),
-              tooltip: 'Alerts & Timers',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const AlertsScreen()),
-                );
-              },
-            ),
+            const RentalNotificationBell(),
             PopupMenuButton<String>(
               padding: EdgeInsets.zero,
               icon: const Icon(Icons.more_vert, size: 22),
@@ -176,18 +219,23 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 } else if (value == 'history') {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const RentalHistoryScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => const RentalHistoryScreen()),
                   );
-                } else if (value == 'admin') {
+                } else if (value == 'admin' &&
+                    ['ADMIN', 'OWNER'].contains(
+                        _currentUserModel?.role.toUpperCase())) {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (_) => const AdminDashboardScreen()),
+                    MaterialPageRoute(
+                        builder: (_) => const AdminDashboardScreen()),
                   );
                 } else if (value == 'logout') {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Logged out successfully.')),
                   );
-                  authService.logout();
+                  await authService.logout();
+                  if (mounted) setState(() => _currentUserModel = null);
                 }
               },
               itemBuilder: (context) => [
@@ -195,7 +243,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                   value: 'profile',
                   child: Row(
                     children: [
-                      Icon(Icons.person_outline, size: 20, color: Colors.black87),
+                      Icon(Icons.person_outline,
+                          size: 20, color: Colors.black87),
                       SizedBox(width: 10),
                       Text('Profile & Settings'),
                     ],
@@ -211,32 +260,19 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     ],
                   ),
                 ),
-                PopupMenuItem(
-                  value: 'admin',
-                  child: FutureBuilder<UserModel?>(
-                    future: authService.getCurrentUserModel(),
-                    builder: (context, snapshot) {
-                      final isAdmin = snapshot.data?.role.toLowerCase() == 'admin';
-                      return Row(
-                        children: [
-                          Icon(
-                            Icons.admin_panel_settings_outlined,
-                            size: 20,
-                            color: isAdmin ? const Color(0xFFF57C00) : Colors.grey,
-                          ),
-                          const SizedBox(width: 10),
-                          Text(
-                            'Operator Dashboard',
-                            style: TextStyle(
-                              color: isAdmin ? const Color(0xFFF57C00) : Colors.grey,
-                              fontWeight: isAdmin ? FontWeight.bold : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
+                if (['ADMIN', 'OWNER']
+                    .contains(_currentUserModel?.role.toUpperCase()))
+                  const PopupMenuItem(
+                    value: 'admin',
+                    child: Row(
+                      children: [
+                        Icon(Icons.admin_panel_settings_outlined,
+                            size: 20, color: Color(0xFFF57C00)),
+                        SizedBox(width: 10),
+                        Text('Staff Dashboard'),
+                      ],
+                    ),
                   ),
-                ),
                 const PopupMenuDivider(),
                 const PopupMenuItem(
                   value: 'logout',
@@ -244,7 +280,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     children: [
                       Icon(Icons.logout, size: 20, color: Colors.red),
                       SizedBox(width: 10),
-                      Text('Logout', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+                      Text('Logout',
+                          style: TextStyle(
+                              color: Colors.red, fontWeight: FontWeight.bold)),
                     ],
                   ),
                 ),
@@ -256,6 +294,16 @@ class _CatalogScreenState extends State<CatalogScreen> {
       ),
       body: Column(
         children: [
+          if (_catalogLoading) const LinearProgressIndicator(),
+          if (_catalogError.isNotEmpty)
+            Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(children: [
+                  Text(_catalogError),
+                  TextButton(
+                      onPressed: _loadCatalog,
+                      child: const Text('Retry catalog'))
+                ])),
           // Category Selector Bar
           Container(
             height: 54,
@@ -274,13 +322,18 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     label: Text(category),
                     selected: isSelected,
                     selectedColor: Theme.of(context).primaryColor,
-                    backgroundColor: isDark ? const Color(0xFF131D2D) : Colors.white,
-                    side: BorderSide(color: isDark ? const Color(0xFF1E2C42) : Colors.grey.shade300),
+                    backgroundColor:
+                        isDark ? const Color(0xFF131D2D) : Colors.white,
+                    side: BorderSide(
+                        color: isDark
+                            ? const Color(0xFF1E2C42)
+                            : Colors.grey.shade300),
                     labelStyle: TextStyle(
                       color: isSelected
                           ? Colors.white
                           : (isDark ? const Color(0xFFF8FAFC) : Colors.black87),
-                      fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      fontWeight:
+                          isSelected ? FontWeight.bold : FontWeight.normal,
                     ),
                     onSelected: (selected) {
                       if (selected) {
@@ -301,7 +354,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 ? const Center(child: Text('No items found in this category.'))
                 : GridView.builder(
                     padding: const EdgeInsets.all(16),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: 2,
                       childAspectRatio: 0.64,
                       crossAxisSpacing: 12,
@@ -340,7 +394,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
           Stack(
             children: [
               ClipRRect(
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(12)),
                 child: Container(
                   height: 110,
                   width: double.infinity,
@@ -352,7 +407,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                 top: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: statusColor.withValues(alpha: 0.9),
                     borderRadius: BorderRadius.circular(12),
@@ -409,17 +465,20 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     height: 34,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: isAvailable ? const Color(0xFFF57C00) : Colors.grey,
+                        backgroundColor:
+                            isAvailable ? const Color(0xFFF57C00) : Colors.grey,
                         foregroundColor: Colors.white,
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(8),
                         ),
                       ),
-                      onPressed: isAvailable ? () => _handleRentalClick(item) : null,
+                      onPressed:
+                          isAvailable ? () => _handleRentalClick(item) : null,
                       child: Text(
                         item.isForSale ? 'Rent / Buy' : 'Rent Now',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),

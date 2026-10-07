@@ -8,6 +8,7 @@ import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
 import '../../providers/theme_provider.dart';
 import '../auth/login_screen.dart';
+import '../../widgets/notification_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -26,7 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  String _selectedTab = 'Business'; // "Business", "Appearance", "Preferences", "Users", "Account & security"
+  String _selectedTab = 'My profile';
   bool _isEditing = false;
   bool _isLoading = false;
   Uint8List? _imageBytes;
@@ -57,7 +58,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _nameController.text = userModel.name;
         _phoneController.text = userModel.phone;
-        _profileImageUrl = userModel.validIdUrl != null && userModel.validIdUrl!.startsWith('http')
+        _profileImageUrl = userModel.validIdUrl != null &&
+                userModel.validIdUrl!.startsWith('http')
             ? userModel.validIdUrl
             : null;
       });
@@ -67,7 +69,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickAndUploadImage() async {
     try {
       final picker = ImagePicker();
-      final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      final pickedFile =
+          await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
       if (pickedFile == null) return;
 
       final bytes = await pickedFile.readAsBytes();
@@ -80,11 +83,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() => _isLoading = true);
 
-      final ref = FirebaseStorage.instance.ref().child('profile_pics').child('${user.uid}.jpg');
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('profile_pics')
+          .child('${user.uid}.jpg');
       await ref.putData(bytes);
       final url = await ref.getDownloadURL();
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
         'profileImageUrl': url,
       });
 
@@ -113,7 +122,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = authService.currentUser;
       if (user == null) return;
 
-      await FirebaseFirestore.instance.collection('users').doc(user.uid).update({
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .update({
         'name': _nameController.text.trim(),
         'phone': _phoneController.text.trim(),
       });
@@ -142,13 +154,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final themeProvider = Provider.of<ThemeProvider>(context);
     final user = authService.currentUser;
 
-    final isDark = themeProvider.isDarkMode || Theme.of(context).brightness == Brightness.dark;
+    final isDark = themeProvider.isDarkMode ||
+        Theme.of(context).brightness == Brightness.dark;
     final bgColor = isDark ? const Color(0xFF0B1320) : const Color(0xFFF8FAFC);
     final cardBg = isDark ? const Color(0xFF131D2D) : Colors.white;
-    final cardBorder = isDark ? const Color(0xFF1E2C42) : const Color(0xFFE2E8F0);
-    final textPrimary = isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final textSecondary = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final inputFill = isDark ? const Color(0xFF1A2638) : const Color(0xFFF8FAFC);
+    final cardBorder =
+        isDark ? const Color(0xFF1E2C42) : const Color(0xFFE2E8F0);
+    final textPrimary =
+        isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+    final textSecondary =
+        isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final inputFill =
+        isDark ? const Color(0xFF1A2638) : const Color(0xFFF8FAFC);
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -173,11 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             tooltip: 'Refresh',
             onPressed: () => setState(() {}),
           ),
-          IconButton(
-            icon: Icon(Icons.notifications_outlined, color: textSecondary, size: 22),
-            tooltip: 'Notifications',
-            onPressed: () {},
-          ),
+          RentalNotificationBell(color: textSecondary),
           const Padding(
             padding: EdgeInsets.only(right: 14.0),
             child: CircleAvatar(
@@ -204,6 +217,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           final userModel = snapshot.data;
           final role = userModel?.role.toUpperCase() ?? 'USER';
+          final isAdmin = role == 'ADMIN' || role == 'OWNER';
+          final isOwner = role == 'OWNER';
+          final tabs = _settingsTabs(isAdmin);
+          final selectedTab = tabs.any((tab) => tab['name'] == _selectedTab)
+              ? _selectedTab
+              : (isAdmin ? 'Business' : 'My profile');
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -211,19 +230,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 1. Sub-Navigation Tabs
-                _buildSubNavTabs(isDark, cardBg, cardBorder, textPrimary, textSecondary),
+                _buildSubNavTabs(
+                  isAdmin,
+                  selectedTab,
+                  isDark,
+                  cardBg,
+                  cardBorder,
+                  textPrimary,
+                  textSecondary,
+                ),
 
                 const SizedBox(height: 20),
 
                 // 2. Tab Content View
-                if (_selectedTab == 'Business')
-                  _buildBusinessTabCard(isDark, cardBg, cardBorder, textPrimary, textSecondary, inputFill)
-                else if (_selectedTab == 'Appearance')
-                  _buildAppearanceTabCard(themeProvider, isDark, cardBg, cardBorder, textPrimary, textSecondary)
-                else if (_selectedTab == 'Users' || _selectedTab == 'Account & security')
-                  _buildUsersAccountTabCard(userModel, user, role, isDark, cardBg, cardBorder, textPrimary, textSecondary, inputFill)
+                if (isAdmin && selectedTab == 'Business')
+                  _buildBusinessTabCard(isDark, cardBg, cardBorder, textPrimary,
+                      textSecondary, inputFill, canEdit: isOwner)
+                else if (selectedTab == 'Appearance')
+                  _buildAppearanceTabCard(themeProvider, isDark, cardBg,
+                      cardBorder, textPrimary, textSecondary)
+                else if (isAdmin &&
+                    (selectedTab == 'Users' ||
+                        selectedTab == 'Account & security'))
+                  _buildUsersAccountTabCard(userModel, user, role, isDark,
+                      cardBg, cardBorder, textPrimary, textSecondary, inputFill)
+                else if (isAdmin && selectedTab == 'Preferences')
+                  _buildPreferencesTabCard(
+                      isDark, cardBg, cardBorder, textPrimary, textSecondary)
                 else
-                  _buildPreferencesTabCard(isDark, cardBg, cardBorder, textPrimary, textSecondary),
+                  _buildUsersAccountTabCard(userModel, user, role, isDark,
+                      cardBg, cardBorder, textPrimary, textSecondary, inputFill),
 
                 const SizedBox(height: 30),
 
@@ -235,7 +271,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     style: OutlinedButton.styleFrom(
                       foregroundColor: Colors.red,
                       side: const BorderSide(color: Colors.red),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                     ),
                     onPressed: () async {
                       await authService.logout();
@@ -247,7 +284,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       );
                     },
                     icon: const Icon(Icons.logout, size: 20),
-                    label: const Text('Log Out', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+                    label: const Text('Log Out',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
                 ),
               ],
@@ -258,21 +297,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  List<Map<String, Object>> _settingsTabs(bool isAdmin) {
+    if (!isAdmin) {
+      return [
+        {'name': 'My profile', 'icon': Icons.person_outline},
+        {'name': 'Appearance', 'icon': Icons.wb_sunny_outlined},
+      ];
+    }
+
+    return [
+      {'name': 'Business', 'icon': Icons.storefront_outlined},
+      {'name': 'Appearance', 'icon': Icons.wb_sunny_outlined},
+      {'name': 'Preferences', 'icon': Icons.tune},
+      {'name': 'Account & security', 'icon': Icons.lock_outline},
+    ];
+  }
+
   // --- SUB NAV TABS ---
   Widget _buildSubNavTabs(
+    bool isAdmin,
+    String selectedTab,
     bool isDark,
     Color cardBg,
     Color cardBorder,
     Color textPrimary,
     Color textSecondary,
   ) {
-    final tabs = [
-      {'name': 'Business', 'icon': Icons.storefront_outlined},
-      {'name': 'Appearance', 'icon': Icons.wb_sunny_outlined},
-      {'name': 'Preferences', 'icon': Icons.tune},
-      {'name': 'Users', 'icon': Icons.people_outline},
-      {'name': 'Account & security', 'icon': Icons.lock_outline},
-    ];
+    final tabs = _settingsTabs(isAdmin);
 
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -287,15 +338,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: tabs.map((tab) {
             final name = tab['name'] as String;
             final icon = tab['icon'] as IconData;
-            final isSelected = _selectedTab == name;
+            final isSelected = selectedTab == name;
 
             return GestureDetector(
               onTap: () => setState(() => _selectedTab = name),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? (isDark ? const Color(0xFF332015) : const Color(0xFFFEF3EA))
+                      ? (isDark
+                          ? const Color(0xFF332015)
+                          : const Color(0xFFFEF3EA))
                       : Colors.transparent,
                   borderRadius: BorderRadius.circular(10),
                 ),
@@ -304,15 +358,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Icon(
                       icon,
                       size: 16,
-                      color: isSelected ? const Color(0xFFF57C00) : textSecondary,
+                      color:
+                          isSelected ? const Color(0xFFF57C00) : textSecondary,
                     ),
                     const SizedBox(width: 6),
                     Text(
                       name,
                       style: TextStyle(
                         fontSize: 12,
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? const Color(0xFFF57C00) : textSecondary,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected
+                            ? const Color(0xFFF57C00)
+                            : textSecondary,
                       ),
                     ),
                   ],
@@ -333,7 +391,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color textPrimary,
     Color textSecondary,
     Color inputFill,
-  ) {
+    {required bool canEdit}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20.0),
@@ -365,7 +423,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 2),
           Text(
-            'Business details are shared with everyone in this workspace.',
+            canEdit
+                ? 'Business details are shared with everyone in this workspace.'
+                : 'Only the super admin owner can change shared business settings.',
             style: TextStyle(fontSize: 12, color: textSecondary),
           ),
           const SizedBox(height: 20),
@@ -377,17 +437,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Business name', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textPrimary)),
+                    Text('Business name',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _businessNameController,
+                      enabled: canEdit,
                       style: TextStyle(fontSize: 13, color: textPrimary),
                       decoration: InputDecoration(
                         fillColor: inputFill,
                         filled: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFF57C00))),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: cardBorder)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFF57C00))),
                       ),
                     ),
                   ],
@@ -398,17 +469,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Location', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textPrimary)),
+                    Text('Location',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _locationController,
+                      enabled: canEdit,
                       style: TextStyle(fontSize: 13, color: textPrimary),
                       decoration: InputDecoration(
                         fillColor: inputFill,
                         filled: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFF57C00))),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: cardBorder)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFF57C00))),
                       ),
                     ),
                   ],
@@ -426,7 +508,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Currency', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textPrimary)),
+                    Text('Currency',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _currencyController,
@@ -435,13 +521,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decoration: InputDecoration(
                         fillColor: inputFill,
                         filled: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFF57C00))),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: cardBorder)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFF57C00))),
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text('Reports display Philippine pesos (PHP)', style: TextStyle(fontSize: 9, color: textSecondary)),
+                    Text('Reports display Philippine pesos (PHP)',
+                        style: TextStyle(fontSize: 9, color: textSecondary)),
                   ],
                 ),
               ),
@@ -450,7 +543,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Timezone', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textPrimary)),
+                    Text('Timezone',
+                        style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary)),
                     const SizedBox(height: 6),
                     TextField(
                       controller: _timezoneController,
@@ -459,13 +556,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       decoration: InputDecoration(
                         fillColor: inputFill,
                         filled: true,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFF57C00))),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 10),
+                        enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide(color: cardBorder)),
+                        focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide:
+                                const BorderSide(color: Color(0xFFF57C00))),
                       ),
                     ),
                     const SizedBox(height: 2),
-                    Text('Reports use Philippine time (Asia/Manila)', style: TextStyle(fontSize: 9, color: textSecondary)),
+                    Text('Reports use Philippine time (Asia/Manila)',
+                        style: TextStyle(fontSize: 9, color: textSecondary)),
                   ],
                 ),
               ),
@@ -475,55 +579,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 14),
 
           // Grace period
-          Text('Default late grace period (hours)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: textPrimary)),
+          Text('Default late grace period (hours)',
+              style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                  color: textPrimary)),
           const SizedBox(height: 6),
           TextField(
             controller: _gracePeriodController,
+            enabled: canEdit,
             keyboardType: TextInputType.number,
             style: TextStyle(fontSize: 13, color: textPrimary),
             decoration: InputDecoration(
               fillColor: inputFill,
               filled: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: cardBorder)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFF57C00))),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: BorderSide(color: cardBorder)),
+              focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  borderSide: const BorderSide(color: Color(0xFFF57C00))),
             ),
           ),
           const SizedBox(height: 4),
-          Text('Administrative default for overdue calculations', style: TextStyle(fontSize: 10, color: textSecondary)),
+          Text('Administrative default for overdue calculations',
+              style: TextStyle(fontSize: 10, color: textSecondary)),
 
           const SizedBox(height: 20),
 
           // Notice
-          const Text('Changes apply after you select Save business settings.', style: TextStyle(fontSize: 11, color: Color(0xFFF57C00))),
+          if (canEdit)
+            const Text('Changes apply after you select Save business settings.',
+                style: TextStyle(fontSize: 11, color: Color(0xFFF57C00))),
 
-          const SizedBox(height: 16),
+          if (canEdit) const SizedBox(height: 16),
 
-          // Action Buttons
-          Row(
+          if (canEdit)
+            Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               OutlinedButton(
                 style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                 ),
                 onPressed: () {},
-                child: Text('Discard changes', style: TextStyle(fontSize: 12, color: textSecondary)),
+                child: Text('Discard changes',
+                    style: TextStyle(fontSize: 12, color: textSecondary)),
               ),
               const SizedBox(width: 10),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFF57C00),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8)),
                   elevation: 0,
                 ),
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Business settings saved successfully!')),
+                    const SnackBar(
+                        content: Text('Business settings saved successfully!')),
                   );
                 },
-                child: const Text('Save business settings', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                child: const Text('Save business settings',
+                    style:
+                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
               ),
             ],
           ),
@@ -554,12 +677,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           const Text(
             'APPEARANCE & THEME',
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF57C00), letterSpacing: 1.0),
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFF57C00),
+                letterSpacing: 1.0),
           ),
           const SizedBox(height: 4),
           Text(
-            'Workspace Theme',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary),
+            'App appearance',
+            style: TextStyle(
+                fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary),
           ),
           const SizedBox(height: 16),
           SwitchListTile(
@@ -567,9 +695,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
               color: const Color(0xFFF57C00),
             ),
-            title: Text('Dark Mode', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textPrimary)),
+            title: Text('Dark Mode',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: textPrimary)),
             subtitle: Text(
-              themeProvider.isDarkMode ? 'Dark theme enabled for workspace' : 'Light theme enabled for workspace',
+              themeProvider.isDarkMode
+                  ? 'Dark appearance is enabled'
+                  : 'Light appearance is enabled',
               style: TextStyle(color: textSecondary),
             ),
             value: themeProvider.isDarkMode,
@@ -599,13 +733,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('PREFERENCES', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFF57C00), letterSpacing: 1.0)),
+          const Text('PREFERENCES',
+              style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFF57C00),
+                  letterSpacing: 1.0)),
           const SizedBox(height: 4),
-          Text('Workspace Preferences', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary)),
+          Text('Workspace Preferences',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: textPrimary)),
           const SizedBox(height: 12),
-          Text('• ESP32 Hardware Auto-Sync Enabled', style: TextStyle(fontSize: 13, color: textSecondary)),
+          Text('• ESP32 terminal on standby',
+              style: TextStyle(fontSize: 13, color: textSecondary)),
           const SizedBox(height: 6),
-          Text('• Real-Time Notification Sound Enabled', style: TextStyle(fontSize: 13, color: textSecondary)),
+          Text('• Real-Time Notification Sound Enabled',
+              style: TextStyle(fontSize: 13, color: textSecondary)),
         ],
       ),
     );
@@ -639,7 +784,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               CircleAvatar(
                 radius: 48,
-                backgroundColor: isDark ? const Color(0xFF1E2C42) : Colors.grey.shade200,
+                backgroundColor:
+                    isDark ? const Color(0xFF1E2C42) : Colors.grey.shade200,
                 backgroundImage: _imageBytes != null
                     ? MemoryImage(_imageBytes!)
                     : (_profileImageUrl != null
@@ -656,7 +802,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundColor: const Color(0xFFF57C00),
                   radius: 16,
                   child: IconButton(
-                    icon: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                    icon: const Icon(Icons.camera_alt,
+                        size: 14, color: Colors.white),
                     onPressed: _pickAndUploadImage,
                   ),
                 ),
@@ -667,7 +814,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           Text(
             userModel?.name ?? 'Rental User',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textPrimary),
+            style: TextStyle(
+                fontSize: 18, fontWeight: FontWeight.bold, color: textPrimary),
           ),
           const SizedBox(height: 2),
           Text(
@@ -679,15 +827,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
-              color: role == 'ADMIN'
+              color: ['ADMIN', 'OWNER'].contains(role)
                   ? (isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFEDD5))
-                  : (isDark ? const Color(0xFF0F2A3F) : const Color(0xFFE0F2FE)),
+                  : (isDark
+                      ? const Color(0xFF0F2A3F)
+                      : const Color(0xFFE0F2FE)),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
               role,
               style: TextStyle(
-                color: role == 'ADMIN' ? const Color(0xFFF57C00) : const Color(0xFF0284C7),
+                color: ['ADMIN', 'OWNER'].contains(role)
+                    ? const Color(0xFFF57C00)
+                    : const Color(0xFF0284C7),
                 fontWeight: FontWeight.bold,
                 fontSize: 10,
               ),
@@ -709,9 +861,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     labelStyle: TextStyle(color: textSecondary),
                     fillColor: inputFill,
                     filled: true,
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: cardBorder)),
-                    focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Color(0xFFF57C00))),
-                    prefixIcon: Icon(Icons.person_outline, size: 18, color: textSecondary),
+                    enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: cardBorder)),
+                    focusedBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: Color(0xFFF57C00))),
+                    prefixIcon: Icon(Icons.person_outline,
+                        size: 18, color: textSecondary),
                   ),
                 ),
               ),
@@ -727,9 +882,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     labelStyle: TextStyle(color: textSecondary),
                     fillColor: inputFill,
                     filled: true,
-                    enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: cardBorder)),
-                    focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Color(0xFFF57C00))),
-                    prefixIcon: Icon(Icons.phone_outlined, size: 18, color: textSecondary),
+                    enabledBorder: OutlineInputBorder(
+                        borderSide: BorderSide(color: cardBorder)),
+                    focusedBorder: const OutlineInputBorder(
+                        borderSide: BorderSide(color: Color(0xFFF57C00))),
+                    prefixIcon: Icon(Icons.phone_outlined,
+                        size: 18, color: textSecondary),
                   ),
                 ),
               ),
@@ -742,7 +900,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               IconButton(
-                icon: Icon(_isEditing ? Icons.close : Icons.edit, color: const Color(0xFFF57C00)),
+                icon: Icon(_isEditing ? Icons.close : Icons.edit,
+                    color: const Color(0xFFF57C00)),
                 onPressed: () => setState(() => _isEditing = !_isEditing),
               ),
               if (_isEditing)
@@ -756,7 +915,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? const SizedBox(
                           width: 16,
                           height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
                         )
                       : const Text('Save Profile'),
                 ),

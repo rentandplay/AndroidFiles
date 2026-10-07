@@ -1,0 +1,12 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Rent & Play: Forward local API over USB",
+      "type": "process",
+      "command": "${env:LOCALAPPDATA}/Android/Sdk/platform-tools/adb.exe",
+      "args": ["reverse", "tcp:3000", "tcp:3000"],
+      "problemMatcher": []
+    }
+  ]
+}

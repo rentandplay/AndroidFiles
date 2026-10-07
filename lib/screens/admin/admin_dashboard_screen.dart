@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_firestore_service.dart';
 import 'admin_module_view.dart';
+import '../../widgets/notification_widgets.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({
@@ -22,8 +23,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     'Dashboard',
     Icons.space_dashboard_outlined,
   );
-  static const _reportsItem = _AdminNavItem('Reports', Icons.bar_chart_outlined);
-  static const _settingsItem = _AdminNavItem('Settings', Icons.settings_outlined);
+  static const _reportsItem =
+      _AdminNavItem('Reports', Icons.bar_chart_outlined);
+  static const _settingsItem =
+      _AdminNavItem('Settings', Icons.settings_outlined);
   static const _navGroups = <_AdminNavGroup>[
     _AdminNavGroup('Management', Icons.inventory_2_outlined, [
       _AdminNavItem('Equipment', Icons.inventory_2_outlined),
@@ -106,7 +109,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _signIn() async {
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.isEmpty) {
-      setState(() => _loginError = 'Enter your admin email and password.');
+      setState(() => _loginError = 'Enter your staff email and password.');
       return;
     }
     setState(() {
@@ -240,7 +243,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 child: _brandMark(),
               )
             : null,
-        titleSpacing: isWide ? 16 : width < 480 ? 6 : null,
+        titleSpacing: isWide
+            ? 16
+            : width < 480
+                ? 6
+                : null,
         title: Text(
           title,
           maxLines: 1,
@@ -255,33 +262,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           IconButton(
             tooltip: 'Refresh workspace',
             onPressed: _loading ? null : () => _refresh(withInventory: true),
-            icon: Icon(Icons.refresh_rounded, color: _AdminColors.getInk(isDark)),
+            icon:
+                Icon(Icons.refresh_rounded, color: _AdminColors.getInk(isDark)),
           ),
-          IconButton(
-            tooltip: 'Notifications',
-            onPressed: () => _showNotifications(context),
-            icon: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(Icons.notifications_none_rounded, color: _AdminColors.getInk(isDark)),
-                if (_notificationCount > 0)
-                  Positioned(
-                    top: 0,
-                    right: 0,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: _AdminColors.orange,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          RentalNotificationBell(color: _AdminColors.getInk(isDark)),
           PopupMenuButton<String>(
-            tooltip: 'Admin account',
+            tooltip: 'Staff account',
             onSelected: (value) {
               if (value == 'profile') _selectPage('Profile');
               if (value == 'admin-settings') _selectPage('Admin settings');
@@ -298,7 +284,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               padding: EdgeInsets.symmetric(horizontal: width < 480 ? 8 : 14),
               child: CircleAvatar(
                 radius: 17,
-                backgroundColor: isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFE7D5),
+                backgroundColor:
+                    isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFE7D5),
                 child: Text(
                   _initials(user['name']?.toString() ?? 'Admin'),
                   style: const TextStyle(
@@ -371,11 +358,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         ],
       ),
     );
-  }
-
-  int get _notificationCount {
-    final stats = _map(_dashboard['stats']);
-    return _number(stats['overdue']) + _list(_dashboard['pending']).length;
   }
 
   Widget _buildSignInPage() {
@@ -587,9 +569,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Container(
               padding: const EdgeInsets.all(11),
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF1A2638)
-                    : const Color(0xFFF7F8FA),
+                color:
+                    isDark ? const Color(0xFF1A2638) : const Color(0xFFF7F8FA),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(color: _AdminColors.getLine(isDark)),
               ),
@@ -674,8 +655,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ),
                       ),
                       tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                      childrenPadding:
-                          const EdgeInsets.fromLTRB(10, 0, 0, 6),
+                      childrenPadding: const EdgeInsets.fromLTRB(10, 0, 0, 6),
                       collapsedShape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12)),
                       shape: RoundedRectangleBorder(
@@ -727,9 +707,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
               decoration: BoxDecoration(
-                color: isDark
-                    ? const Color(0xFF14271F)
-                    : const Color(0xFFF3F8F5),
+                color:
+                    isDark ? const Color(0xFF14271F) : const Color(0xFFF3F8F5),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(children: [
@@ -782,7 +761,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             },
             leading: CircleAvatar(
               radius: 18,
-              backgroundColor: isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFE7D5),
+              backgroundColor:
+                  isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFE7D5),
               child: Text(
                 _initials(user['name']?.toString() ?? 'Admin'),
                 style: const TextStyle(
@@ -803,8 +783,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
             subtitle: Text(
-              'Administrator',
-              style: TextStyle(color: _AdminColors.getMuted(isDark), fontSize: 11),
+              'Staff account',
+              style:
+                  TextStyle(color: _AdminColors.getMuted(isDark), fontSize: 11),
             ),
             trailing: Icon(Icons.chevron_right,
                 size: 19, color: _AdminColors.getMuted(isDark)),
@@ -829,17 +810,22 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         horizontalTitleGap: 10,
         minTileHeight: 48,
         selected: selected,
-        selectedTileColor: isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFF1E8),
+        selectedTileColor:
+            isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFF1E8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         leading: Icon(
           item.icon,
-          color: selected ? _AdminColors.orangeDark : _AdminColors.getMuted(isDark),
+          color: selected
+              ? _AdminColors.orangeDark
+              : _AdminColors.getMuted(isDark),
           size: 20,
         ),
         title: Text(
           item.label,
           style: TextStyle(
-            color: selected ? _AdminColors.orangeDark : _AdminColors.getInk(isDark),
+            color: selected
+                ? _AdminColors.orangeDark
+                : _AdminColors.getInk(isDark),
             fontSize: 13,
             fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           ),
@@ -865,80 +851,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         Icons.sports_basketball_rounded,
         color: inverse ? _AdminColors.orange : Colors.white,
         size: 22,
-      ),
-    );
-  }
-
-  void _showNotifications(BuildContext context) {
-    final pending = _list(_dashboard['pending']);
-    final rentals = _list(_dashboard['rentals']);
-    final overdue =
-        rentals.where((row) => row['displayStatus'] == 'Overdue').toList();
-    showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              const Text(
-                'Alerts & notifications',
-                style: TextStyle(
-                  color: _AdminColors.ink,
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 12),
-              if (overdue.isEmpty && pending.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 28),
-                  child: Text(
-                    'You are all caught up. No overdue rentals or pending handoffs.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: _AdminColors.muted),
-                  ),
-                ),
-              for (final rental in overdue.take(4))
-                ListTile(
-                  leading: const Icon(
-                    Icons.warning_amber_rounded,
-                    color: _AdminColors.orange,
-                  ),
-                  title:
-                      Text('${rental['item_name'] ?? 'Equipment'} is overdue'),
-                  subtitle: Text(
-                    '${rental['customer'] ?? 'Customer'} · ${rental['rental_code'] ?? ''}',
-                  ),
-                ),
-              for (final request in pending.take(4))
-                ListTile(
-                  leading: const Icon(
-                    Icons.memory_outlined,
-                    color: _AdminColors.navy,
-                  ),
-                  title: Text(
-                    '${request['transaction_type'] ?? 'Handoff'} needs terminal confirmation',
-                  ),
-                  subtitle: Text(
-                    '${request['item_name'] ?? 'Equipment'} · ${request['customer'] ?? 'Customer'}',
-                  ),
-                ),
-              const SizedBox(height: 10),
-              OutlinedButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                  _selectPage('ESP32 / Verification');
-                },
-                child: const Text('Open verification activity'),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }
@@ -1001,11 +913,13 @@ class _AdminColors {
   static const canvas = Color(0xFFF6F7F9);
   static const line = Color(0xFFE9EDF1);
 
-  static Color getNavy(bool isDark) => isDark ? const Color(0xFF1E293B) : navy;
   static Color getInk(bool isDark) => isDark ? const Color(0xFFF8FAFC) : ink;
-  static Color getMuted(bool isDark) => isDark ? const Color(0xFF94A3B8) : muted;
-  static Color getCanvas(bool isDark) => isDark ? const Color(0xFF0B1320) : canvas;
-  static Color getCardBg(bool isDark) => isDark ? const Color(0xFF131D2D) : Colors.white;
+  static Color getMuted(bool isDark) =>
+      isDark ? const Color(0xFF94A3B8) : muted;
+  static Color getCanvas(bool isDark) =>
+      isDark ? const Color(0xFF0B1320) : canvas;
+  static Color getCardBg(bool isDark) =>
+      isDark ? const Color(0xFF131D2D) : Colors.white;
   static Color getLine(bool isDark) => isDark ? const Color(0xFF1E2C42) : line;
 }
 
@@ -1014,13 +928,6 @@ Map<String, dynamic> _map(dynamic value) {
   if (value is Map) return value.map((key, value) => MapEntry('$key', value));
   return <String, dynamic>{};
 }
-
-List<Map<String, dynamic>> _list(dynamic value) {
-  if (value is! List) return <Map<String, dynamic>>[];
-  return value.map(_map).toList();
-}
-
-int _number(dynamic value) => int.tryParse('$value') ?? 0;
 
 String _initials(String name) {
   final parts =

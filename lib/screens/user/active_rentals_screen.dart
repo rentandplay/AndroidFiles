@@ -1,265 +1,327 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../models/rental_model.dart';
-import '../../models/item_model.dart';
 import '../../services/auth_service.dart';
-import '../shared/equipment_qr_label_dialog.dart';
+import '../../services/mobile_api_service.dart';
+import '../../widgets/rental_ui.dart';
+import '../shared/transaction_ticket_dialog.dart';
 import 'return_equipment_screen.dart';
 
-class ActiveRentalsScreen extends StatelessWidget {
+class ActiveRentalsScreen extends StatefulWidget {
   const ActiveRentalsScreen({super.key});
+  @override
+  State<ActiveRentalsScreen> createState() => _ActiveRentalsScreenState();
+}
+
+class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
+  List<RentalModel>? _rentals;
+  Timer? _poll;
+  bool _refreshing = false;
+  String _error = '', _filter = 'All';
+  final _cancelling = <String>{};
+  @override
+  void initState() {
+    super.initState();
+    _refreshRentals();
+    _poll =
+        Timer.periodic(const Duration(seconds: 20), (_) => _refreshRentals());
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshRentals() async {
+    if (_refreshing || !mounted) return;
+    _refreshing = true;
+    try {
+      final next = await MobileApiService.instance.listRentals();
+      if (mounted)
+        setState(() {
+          _rentals = next;
+          _error = '';
+        });
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  bool _matches(RentalModel rental) => switch (_filter) {
+        'Review' => rental.isPendingAdminReview,
+        'Pickup' => rental.isAwaitingPickup,
+        'In use' => rental.isActive,
+        'Inspection' => rental.isAwaitingInspection,
+        _ => true,
+      };
+
+  Future<void> _cancelBooking(RentalModel rental) async {
+    final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+              title: const Text('Cancel this booking?'),
+              content: const Text(
+                  'The equipment hold will be released. Any verified payments remain recorded for refund.'),
+              actions: [
+                TextButton(
+                    onPressed: () => Navigator.pop(c, false),
+                    child: const Text('Keep booking')),
+                FilledButton(
+                    onPressed: () => Navigator.pop(c, true),
+                    child: const Text('Cancel booking')),
+              ],
+            ));
+    if (confirmed != true || !mounted) return;
+    setState(() => _cancelling.add(rental.rentalId));
+    try {
+      await MobileApiService.instance.cancelRental(rental.rentalId);
+      if (mounted) await _refreshRentals();
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _cancelling.remove(rental.rentalId));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final authService = Provider.of<AuthService>(context);
-    final user = authService.currentUser;
-
-    if (user == null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text('My Active Rentals')),
-        body: const Center(
-          child: Text('Please log in to view your active rentals.'),
-        ),
-      );
-    }
-
+    final user = context.watch<AuthService>().currentUser;
+    final open = (_rentals ?? []).where((rental) => rental.isOpen).toList()
+      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+    final visible = open.where(_matches).toList();
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Active Rentals'),
-        centerTitle: true,
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('rentals')
-            .where('customerId', isEqualTo: user.uid)
-            .where('status', whereIn: ['active', 'pending_esp32_rent', 'pending_esp32_return'])
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.inventory_2_outlined, size: 70, color: Colors.grey.shade400),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'No Active Rentals',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Your active gear rentals will appear here.',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-          }
-
-          final rentals = snapshot.data!.docs
-              .map((doc) => RentalModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id))
-              .toList();
-
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: rentals.length,
-            itemBuilder: (context, index) {
-              final rental = rentals[index];
-              return _buildRentalCard(context, rental);
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildRentalCard(BuildContext context, RentalModel rental) {
-    final now = DateTime.now();
-    final isOverdue = now.isAfter(rental.dueDate);
-    final diff = rental.dueDate.difference(now);
-
-    String durationText;
-    if (isOverdue) {
-      durationText = 'OVERDUE by ${now.difference(rental.dueDate).inHours} hrs';
-    } else {
-      if (diff.inHours > 0) {
-        durationText = '${diff.inHours}h ${diff.inMinutes % 60}m remaining';
-      } else {
-        durationText = '${diff.inMinutes}m remaining';
-      }
-    }
-
-    Color statusColor;
-    if (rental.status == 'active') {
-      statusColor = Colors.green;
-    } else if (rental.status == 'pending_esp32_rent') {
-      statusColor = Colors.orange;
-    } else {
-      statusColor = Colors.purple;
-    }
-
-    return Card(
-      elevation: 2,
-      margin: const EdgeInsets.only(bottom: 16),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Top Row: Item Name & Status Pill
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    rental.itemName,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    rental.status.toUpperCase().replaceAll('_', ' '),
-                    style: TextStyle(
-                      color: statusColor,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 20),
-
-            // Details
-            _buildInfoRow('Delivery Resort', rental.deliveryLocation, valueColor: const Color(0xFFF57C00)),
-            _buildInfoRow('Terminal ID', rental.terminalId),
-            _buildInfoRow('Due Date', DateFormat('yyyy-MM-dd HH:mm').format(rental.dueDate)),
-            _buildInfoRow(
-              'Time Remaining',
-              durationText,
-              valueColor: isOverdue ? Colors.red : Colors.blue.shade800,
-            ),
-            _buildInfoRow('Security Deposit', '₱${rental.deposit.toStringAsFixed(2)}'),
-
-            const SizedBox(height: 16),
-
-            // Action Buttons: QR Code Pass & Return
-            Row(
-              children: [
-                Expanded(
-                  child: SizedBox(
-                    height: 46,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: const BorderSide(color: Color(0xFFF57C00), width: 1.5),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        final qrCode = _lookupQrCode(rental);
-                        EquipmentQrLabelDialog.show(
-                          context,
-                          qrCode: qrCode,
-                          itemName: rental.itemName,
-                          customerName: rental.customerName,
-                          rentalId: rental.rentalId,
-                        );
-                      },
-                      icon: const Icon(Icons.qr_code_2, color: Color(0xFFF57C00)),
-                      label: const Text(
-                        'QR Pass',
-                        style: TextStyle(
-                          color: Color(0xFFF57C00),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: SizedBox(
-                    height: 46,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ReturnEquipmentScreen(rental: rental),
+      appBar: AppBar(title: const Text('My Rentals'), actions: [
+        IconButton(
+            tooltip: 'Refresh rentals',
+            onPressed: _refreshRentals,
+            icon: const Icon(Icons.refresh)),
+      ]),
+      body: user == null
+          ? const RentalEmptyState(
+              title: 'Sign in to view rentals',
+              message: 'Your bookings and equipment in use will appear here.')
+          : _rentals == null && _error.isEmpty
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _refreshRentals,
+                  child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        if (_error.isNotEmpty) ...[
+                          RentalNotice(
+                              isError: true,
+                              title: _rentals == null
+                                  ? 'Could not load rentals'
+                                  : 'Could not refresh rentals',
+                              message: _rentals == null
+                                  ? _error
+                                  : 'Showing your last loaded records. Pull down to retry.',
+                              action: TextButton(
+                                  onPressed: _refreshRentals,
+                                  child: const Text('Try again'))),
+                          const SizedBox(height: 16),
+                        ],
+                        if (open.isNotEmpty) ...[
+                          Text(
+                              '${open.length} open rental${open.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(
+                              'Follow approval, pickup and return in one place.',
+                              style: TextStyle(
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant)),
+                          const SizedBox(height: 14),
+                          Wrap(spacing: 6, runSpacing: 6, children: [
+                            for (final label in [
+                              'All',
+                              'Review',
+                              'Pickup',
+                              'In use',
+                              'Inspection'
+                            ])
+                              ChoiceChip(
+                                  label: Text(label),
+                                  selected: label == _filter,
+                                  onSelected: (_) =>
+                                      setState(() => _filter = label)),
+                          ]),
+                          const SizedBox(height: 16),
+                        ],
+                        if (visible.isEmpty && _rentals != null)
+                          RentalEmptyState(
+                            title: open.isEmpty
+                                ? 'No open rentals yet'
+                                : 'Nothing in this stage',
+                            message: open.isEmpty
+                                ? 'Choose equipment from the catalog to start a booking.'
+                                : 'Try another filter to see your other rentals.',
+                            action: open.isNotEmpty
+                                ? TextButton(
+                                    onPressed: () =>
+                                        setState(() => _filter = 'All'),
+                                    child: const Text('Show all rentals'))
+                                : null,
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.assignment_return_outlined),
-                      label: const Text(
-                        'Start Return',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                      ),
-                    ),
-                  ),
+                        for (final rental in visible)
+                          RentalBookingCard(
+                            rental: rental,
+                            onTicket: () =>
+                                TransactionTicketDialog.show(context, rental),
+                            onCancel: _cancelling.contains(rental.rentalId)
+                                ? null
+                                : () => _cancelBooking(rental),
+                            onReturn: () async {
+                              await Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => ReturnEquipmentScreen(
+                                          rental: rental)));
+                              if (mounted) _refreshRentals();
+                            },
+                            onRefresh: _refreshRentals,
+                          ),
+                      ]),
                 ),
-              ],
-            ),
-          ],
-        ),
-      ),
     );
   }
+}
 
-  String _lookupQrCode(RentalModel rental) {
-    final matched = ItemModel.findByCode(rental.itemId) ?? ItemModel.findByCode(rental.itemName);
-    if (matched != null && matched.qrCode != null && matched.qrCode!.isNotEmpty) {
-      return matched.qrCode!;
-    }
-    return rental.itemId.isNotEmpty ? rental.itemId.toUpperCase() : 'SPORT-EQUIP-001';
-  }
-
-  Widget _buildInfoRow(String label, String value, {Color? valueColor}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                fontSize: 13,
-                color: valueColor ?? Colors.black87,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
+class RentalBookingCard extends StatelessWidget {
+  const RentalBookingCard(
+      {super.key,
+      required this.rental,
+      this.onTicket,
+      this.onCancel,
+      this.onReturn,
+      this.onRefresh});
+  final RentalModel rental;
+  final VoidCallback? onTicket, onCancel, onReturn, onRefresh;
+  String _date(DateTime value) =>
+      DateFormat('MMM d · h:mm a').format(value.toLocal());
+  @override
+  Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final holdEnded = rental.canCancel &&
+        rental.holdExpiresAt != null &&
+        now.isAfter(rental.holdExpiresAt!);
+    final hasDueDate = rental.dueDate.millisecondsSinceEpoch > 0;
+    final overdue =
+        rental.isActive && hasDueDate && now.isAfter(rental.dueDate);
+    final minutes = rental.dueDate.difference(now).inMinutes.abs();
+    final time = minutes >= 60
+        ? '${minutes ~/ 60}h ${minutes % 60}m'
+        : '${minutes < 1 ? 1 : minutes}m';
+    final (heading, message) = holdEnded
+        ? (
+            'Hold ended',
+            'Refresh to check the latest status before making another booking.'
+          )
+        : rental.isPendingAdminReview
+            ? (
+                'Waiting for admin approval',
+                'Your booking is being reviewed. The rental clock has not started.'
+              )
+            : rental.isAwaitingPickup
+                ? (
+                    'Ready to receive your equipment',
+                    'Show your booking QR and valid ID to the admin. Pay and check the item at handoff.'
+                  )
+                : rental.isAwaitingInspection
+                    ? (
+                        'Equipment received',
+                        'Your rental clock has stopped. The admin is checking condition and final charges.'
+                      )
+                    : rental.hasPendingReturnRequest
+                        ? (
+                            'Bring the item back to the admin',
+                            'Your return request is sent. The clock stops when the admin records physical receipt.'
+                          )
+                        : rental.isActive
+                            ? (
+                                overdue
+                                    ? 'Overdue by $time'
+                                    : hasDueDate
+                                        ? '$time remaining'
+                                        : 'Return time not recorded',
+                                'Return the equipment to the admin before your due time.'
+                              )
+                            : (
+                                'Awaiting confirmation',
+                                'Ask the admin to confirm the current status of this rental.'
+                              );
+    return RentalSection(
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Text(rental.itemName,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+      const SizedBox(height: 5),
+      Text(rental.rentalCode.isEmpty ? rental.rentalId : rental.rentalCode,
+          style: TextStyle(
+              fontSize: 12,
+              color: Theme.of(context).colorScheme.onSurfaceVariant)),
+      const SizedBox(height: 10),
+      Align(
+          alignment: Alignment.centerLeft,
+          child: RentalStatusBadge(status: rental.normalizedStatus)),
+      const SizedBox(height: 14),
+      RentalNotice(
+          title: heading,
+          message: message,
+          isError: holdEnded || overdue,
+          icon: overdue
+              ? Icons.schedule
+              : rental.isAwaitingInspection
+                  ? Icons.task_alt
+                  : Icons.info_outline),
+      const SizedBox(height: 12),
+      RentalValueRow('Pickup / resort', rental.deliveryLocation),
+      if (rental.holdExpiresAt != null && rental.canCancel)
+        RentalValueRow(
+            rental.isPendingAdminReview ? 'Review hold ends' : 'Pickup before',
+            _date(rental.holdExpiresAt!)),
+      if (rental.isActive)
+        RentalValueRow(
+            'Return by', hasDueDate ? _date(rental.dueDate) : 'Ask the admin'),
+      if (rental.receivedAt != null)
+        RentalValueRow('Received', _date(rental.receivedAt!)),
+      RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
+      RentalValueRow('Security deposit', rentalMoney(rental.deposit)),
+      if (rental.balanceDue > 0 && !rental.canCancel)
+        RentalValueRow('Balance due', rentalMoney(rental.balanceDue)),
+      if (rental.refundDue > 0)
+        RentalValueRow('Refund due', rentalMoney(rental.refundDue)),
+      if (rental.canCancel) ...[
+        const SizedBox(height: 14),
+        if (holdEnded)
+          OutlinedButton.icon(
+              onPressed: onRefresh,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Refresh booking'))
+        else
+          FilledButton.icon(
+              onPressed: onTicket,
+              icon: const Icon(Icons.qr_code),
+              label: const Text('Show booking QR')),
+        TextButton(onPressed: onCancel, child: const Text('Cancel booking')),
+      ],
+      if (rental.isActive && !rental.hasPendingReturnRequest) ...[
+        const SizedBox(height: 14),
+        OutlinedButton.icon(
+            onPressed: onReturn,
+            icon: const Icon(Icons.assignment_return_outlined),
+            label: const Text('Request return')),
+      ],
+    ]));
   }
 }

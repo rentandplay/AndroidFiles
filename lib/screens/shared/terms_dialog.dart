@@ -43,28 +43,28 @@ class TermsDialog extends StatelessWidget {
               const SizedBox(height: 12),
               _buildSectionTitle('1. Operating Hours'),
               _buildSectionText(
-                '• Business & Terminal Operating Hours: 8:00 AM – 8:00 PM daily.\n'
-                '• All same-day rental items must be returned by 8:00 PM sharp to avoid overnight late penalties.',
+                '• Confirm pickup and return arrangements with the admin.\n'
+                '• The rental timer starts at physical release. Return the item by the due time shown in your active rental.',
               ),
               const SizedBox(height: 10),
               _buildSectionTitle('2. ID Verification & Security Deposit'),
               _buildSectionText(
                 '• A valid Government or Student ID photo must be uploaded to your profile.\n'
-                '• High-value rentals (Bicycles, Gaming Consoles like PS5) require a refundable security deposit (e.g. ₱500 for PS5).\n'
-                '• Deposits are refunded upon inspection and safe return of the item.',
+                '• Review the rental price and required refundable deposit shown at checkout.\n'
+                '• The admin records payments and refunds after inspection and settlement.',
               ),
               const SizedBox(height: 10),
               _buildSectionTitle('3. Damaged & Lost Items Policy'),
               _buildSectionText(
-                '• Lost board game or card set pieces incur a fixed penalty of ₱50 per piece.\n'
-                '• Damaged gear, broken consoles, or unreturned items will forfeit the security deposit and may incur additional charges up to the full replacement value of the item.',
+                '• The admin checks the equipment and included accessories at release and return.\n'
+                '• Late fees use the saved rental rate. Damage or missing-part charges are recorded with a reason after inspection.',
               ),
               const SizedBox(height: 10),
-              _buildSectionTitle('4. ESP32 Smart Cabinet & Unlock Safety'),
+              _buildSectionTitle('4. Pickup & Return Verification'),
               _buildSectionText(
-                '• Equipment is stored in ESP32-controlled smart cabinets.\n'
-                '• Lockers will unlock automatically upon Admin payment confirmation or valid QR code scan.\n'
-                '• Ensure the cabinet door is securely shut after retrieving or returning your item.',
+                '• Show your transaction QR to the admin at pickup.\n'
+                '• The admin scans the physical equipment QR and confirms the handoff.\n'
+                '• On return, the admin records physical receipt to stop the timer, then completes inspection.',
               ),
             ],
           ),

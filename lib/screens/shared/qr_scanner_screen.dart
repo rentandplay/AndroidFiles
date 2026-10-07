@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
+
 import '../../models/item_model.dart';
-import '../../models/rental_model.dart';
-import '../../services/rental_service.dart';
+
+import '../../services/mobile_api_service.dart';
 import '../user/item_details_screen.dart';
 import '../user/catalog_screen.dart';
 import '../user/active_rentals_screen.dart';
 import '../rental/rental_history_screen.dart';
 import '../profile/profile_screen.dart';
-import 'waiting_esp32_screen.dart';
+import '../user/return_equipment_screen.dart';
 
 class QRScannerScreen extends StatefulWidget {
   final String initialMode; // "Rent" or "Return"
@@ -82,97 +81,33 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
     try {
       final code = scannedCode.trim();
-      final lowerCode = code.toLowerCase();
-      final rentalService = Provider.of<RentalService>(context, listen: false);
-
+      final api = MobileApiService.instance;
+      final record = await api.resolveEquipment(code);
+      if (!mounted) return;
       if (_mode == 'Rent') {
-        ItemModel? matchedItem;
-
-        // 1. Check Firestore by doc ID
-        final doc = await FirebaseFirestore.instance.collection('items').doc(code).get();
-
-        if (doc.exists && doc.data() != null) {
-          matchedItem = ItemModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id);
-        } else {
-          // 2. Check Firestore by qrCode field
-          final querySnap = await FirebaseFirestore.instance
-              .collection('items')
-              .where('qrCode', isEqualTo: code)
-              .get();
-
-          if (querySnap.docs.isNotEmpty) {
-            matchedItem = ItemModel.fromMap(querySnap.docs.first.data(), id: querySnap.docs.first.id);
-          } else {
-            // 3. Fallback to ItemModel.findByCode (catalog & label aliases)
-            matchedItem = ItemModel.findByCode(code);
-          }
-        }
-
-        if (matchedItem == null) {
-          final catalog = ItemModel.getInitialCatalog();
-          matchedItem = catalog.first;
-        }
-
-        if (!mounted) return;
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) => ItemDetailsScreen(item: matchedItem!),
-          ),
-        );
+        final item = ItemModel.fromMap(record, id: record['id'].toString());
+        Navigator.pushReplacement(context,
+            MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: item)));
       } else {
-        final rentalQuery = await FirebaseFirestore.instance
-            .collection('rentals')
-            .where('status', whereIn: ['active', 'RENTED', 'PENDING_HARDWARE_CONFIRMATION'])
-            .get();
-
-        final matchedItemByQr = ItemModel.findByCode(code);
-        RentalModel? matchedRental;
-
-        for (var doc in rentalQuery.docs) {
-          final rental = RentalModel.fromMap(doc.data(), id: doc.id);
-          if (rental.itemId.toLowerCase() == lowerCode ||
-              (matchedItemByQr != null && rental.itemId.toLowerCase() == matchedItemByQr.id.toLowerCase()) ||
-              rental.rentalId.toLowerCase() == lowerCode ||
-              rental.terminalId.toLowerCase() == lowerCode) {
-            matchedRental = rental;
-            break;
-          }
-        }
-
+        final rentals = await api.listRentals();
+        final matches = rentals
+            .where((rental) => rental.isActive && rental.itemId == record['id'])
+            .toList();
         if (!mounted) return;
-
-        if (matchedRental != null) {
-          await rentalService.initiateReturnTransaction(matchedRental.rentalId);
-
-          if (!mounted) return;
-
-          Navigator.pushReplacement(
+        if (matches.length != 1)
+          throw const MobileApiException(
+              'No active rental for this unit belongs to your account.');
+        Navigator.pushReplacement(
             context,
             MaterialPageRoute(
-              builder: (_) => WaitingEsp32Screen(
-                rental: matchedRental!,
-                isReturn: true,
-              ),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('No active rental record found for QR code: $scannedCode'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-          await Future.delayed(const Duration(seconds: 2));
-          if (mounted) setState(() => _isProcessing = false);
-        }
+                builder: (_) => ReturnEquipmentScreen(rental: matches.single)));
       }
     } catch (e) {
       debugPrint('QR Code Scan / Firestore Error: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Scanner error: $e'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text('Scanner error: $e'), backgroundColor: Colors.red),
         );
         setState(() => _isProcessing = false);
       }
@@ -183,7 +118,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scan', style: TextStyle(fontWeight: FontWeight.bold)),
+        title:
+            const Text('Scan', style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: false,
         actions: [
           IconButton(
@@ -191,7 +127,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
               valueListenable: _controller,
               builder: (context, state, child) {
                 return Icon(
-                  state.torchState == TorchState.on ? Icons.flash_on : Icons.flash_off,
+                  state.torchState == TorchState.on
+                      ? Icons.flash_on
+                      : Icons.flash_off,
                 );
               },
             ),
@@ -251,13 +189,25 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                       child: Stack(
                         children: [
                           // Top-left bracket
-                          Positioned(top: 0, left: 0, child: _buildBracket(true, true)),
+                          Positioned(
+                              top: 0,
+                              left: 0,
+                              child: _buildBracket(true, true)),
                           // Top-right bracket
-                          Positioned(top: 0, right: 0, child: _buildBracket(true, false)),
+                          Positioned(
+                              top: 0,
+                              right: 0,
+                              child: _buildBracket(true, false)),
                           // Bottom-left bracket
-                          Positioned(bottom: 0, left: 0, child: _buildBracket(false, true)),
+                          Positioned(
+                              bottom: 0,
+                              left: 0,
+                              child: _buildBracket(false, true)),
                           // Bottom-right bracket
-                          Positioned(bottom: 0, right: 0, child: _buildBracket(false, false)),
+                          Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: _buildBracket(false, false)),
 
                           // Center scanner UI
                           Center(
@@ -288,7 +238,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Center(
-                                    child: Icon(Icons.qr_code_scanner, color: Colors.white, size: 26),
+                                    child: Icon(Icons.qr_code_scanner,
+                                        color: Colors.white, size: 26),
                                   ),
                                 ),
                               ],
@@ -321,20 +272,26 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                     height: 48,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _mode == 'Rent' ? const Color(0xFFF57C00) : Colors.white,
-                        foregroundColor: _mode == 'Rent' ? Colors.white : Colors.black87,
+                        backgroundColor: _mode == 'Rent'
+                            ? const Color(0xFFF57C00)
+                            : Colors.white,
+                        foregroundColor:
+                            _mode == 'Rent' ? Colors.white : Colors.black87,
                         elevation: _mode == 'Rent' ? 2 : 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                            color: _mode == 'Rent' ? const Color(0xFFF57C00) : Colors.grey.shade300,
+                            color: _mode == 'Rent'
+                                ? const Color(0xFFF57C00)
+                                : Colors.grey.shade300,
                           ),
                         ),
                       ),
                       onPressed: () => setState(() => _mode = 'Rent'),
                       child: const Text(
                         'Rent',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -345,20 +302,26 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                     height: 48,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _mode == 'Return' ? const Color(0xFFF57C00) : Colors.white,
-                        foregroundColor: _mode == 'Return' ? Colors.white : Colors.black87,
+                        backgroundColor: _mode == 'Return'
+                            ? const Color(0xFFF57C00)
+                            : Colors.white,
+                        foregroundColor:
+                            _mode == 'Return' ? Colors.white : Colors.black87,
                         elevation: _mode == 'Return' ? 2 : 0,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                           side: BorderSide(
-                            color: _mode == 'Return' ? const Color(0xFFF57C00) : Colors.grey.shade300,
+                            color: _mode == 'Return'
+                                ? const Color(0xFFF57C00)
+                                : Colors.grey.shade300,
                           ),
                         ),
                       ),
                       onPressed: () => setState(() => _mode = 'Return'),
                       child: const Text(
                         'Return',
-                        style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.bold),
                       ),
                     ),
                   ),
@@ -381,7 +344,8 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                 children: [
                   Row(
                     children: [
-                      Icon(Icons.info_outline, size: 18, color: Colors.blue.shade800),
+                      Icon(Icons.info_outline,
+                          size: 18, color: Colors.blue.shade800),
                       const SizedBox(width: 8),
                       Text(
                         'QR scan note',
@@ -395,7 +359,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'The app scans the equipment QR; ESP32 does not replace mobile QR scanning.',
+                    'Scan to view equipment or request its return. The admin confirms physical release and receipt.',
                     style: TextStyle(
                       fontSize: 12,
                       color: Colors.blue.shade900,
@@ -453,10 +417,18 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       height: 32,
       decoration: BoxDecoration(
         border: Border(
-          top: isTop ? const BorderSide(color: Color(0xFFF57C00), width: 3.5) : BorderSide.none,
-          bottom: !isTop ? const BorderSide(color: Color(0xFFF57C00), width: 3.5) : BorderSide.none,
-          left: isLeft ? const BorderSide(color: Color(0xFFF57C00), width: 3.5) : BorderSide.none,
-          right: !isLeft ? const BorderSide(color: Color(0xFFF57C00), width: 3.5) : BorderSide.none,
+          top: isTop
+              ? const BorderSide(color: Color(0xFFF57C00), width: 3.5)
+              : BorderSide.none,
+          bottom: !isTop
+              ? const BorderSide(color: Color(0xFFF57C00), width: 3.5)
+              : BorderSide.none,
+          left: isLeft
+              ? const BorderSide(color: Color(0xFFF57C00), width: 3.5)
+              : BorderSide.none,
+          right: !isLeft
+              ? const BorderSide(color: Color(0xFFF57C00), width: 3.5)
+              : BorderSide.none,
         ),
       ),
     );

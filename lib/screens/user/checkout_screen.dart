@@ -1,35 +1,34 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
-import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
-import '../../models/user_model.dart';
-import 'esp32_verification_screen.dart';
+import '../../services/mobile_api_service.dart';
+import '../../widgets/rental_ui.dart';
+import 'active_rentals_screen.dart';
 
 class CheckoutScreen extends StatefulWidget {
+  const CheckoutScreen({super.key, required this.item, this.api});
   final ItemModel item;
-
-  const CheckoutScreen({
-    super.key,
-    required this.item,
-  });
-
+  final MobileApiService? api;
   @override
   State<CheckoutScreen> createState() => _CheckoutScreenState();
 }
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
+  final _form = GlobalKey<FormState>();
   int _selectedHours = 1;
-  late DateTime _startDate;
-  late DateTime _dueDate;
-  String _terminalId = 'TERM-01';
   String _deliveryLocation = 'ASRI Hotspring Resort';
   final _customResortController = TextEditingController();
-  String _paymentMethod = 'QR'; // "QR" or "Cash"
-  bool _isSubmitting = false;
+  String _paymentMethod = 'QR';
+  bool _isSubmitting = false, _quoteLoading = true;
+  Map<String, dynamic>? _quote;
+  String _quoteError = '';
+  int _quoteVersion = 0;
+  String _requestKey = MobileApiService.operationKey();
+  MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
-  static const List<String> privateResorts = [
+  static const privateResorts = [
+    'Shop pickup',
     'ASRI Hotspring Resort',
     '23 Prime Resort',
     'Springcrest Villa',
@@ -51,102 +50,84 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   @override
   void initState() {
     super.initState();
-    _startDate = DateTime.now();
-    _dueDate = _startDate.add(Duration(hours: _selectedHours));
+    _loadQuote();
+  }
+
+  Future<void> _loadQuote() async {
+    final version = ++_quoteVersion;
+    setState(() {
+      _quoteLoading = true;
+      _quoteError = '';
+      _quote = null;
+    });
+    try {
+      final quote = await _api.quoteRental(widget.item.id, _selectedHours * 60);
+      if (mounted && version == _quoteVersion) {
+        setState(() {
+          _quote = quote;
+          _quoteLoading = false;
+        });
+      }
+    } catch (error) {
+      if (mounted && version == _quoteVersion) {
+        setState(() {
+          _quoteError = error.toString();
+          _quoteLoading = false;
+        });
+      }
+    }
   }
 
   @override
   void dispose() {
+    _quoteVersion++;
     _customResortController.dispose();
     super.dispose();
   }
 
-  void _updateDuration(int hours) {
-    setState(() {
-      _selectedHours = hours;
-      _dueDate = _startDate.add(Duration(hours: hours));
-    });
-  }
-
-  double get _baseFee => widget.item.rateHourly * _selectedHours;
-  double get _deposit => widget.item.deposit;
-  double get _totalInitialAmount => _baseFee + _deposit;
-
+  num? get _baseFee => _quote?['rental_fee'] as num?;
+  num? get _deposit => _quote?['deposit_amount'] as num?;
+  num? get _total =>
+      _baseFee == null || _deposit == null ? null : _baseFee! + _deposit!;
+  int get _billedMinutes =>
+      (_quote?['billed_minutes'] as num?)?.toInt() ?? _selectedHours * 60;
+  String get _packageLength => _billedMinutes % 60 == 0
+      ? '${_billedMinutes ~/ 60} hour${_billedMinutes == 60 ? '' : 's'}'
+      : '$_billedMinutes minutes';
   Future<void> _submitRentalRequest() async {
+    if (_quote == null || !_form.currentState!.validate()) return;
+    FocusScope.of(context).unfocus();
     setState(() => _isSubmitting = true);
-
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final user = authService.currentUser;
-
-      if (user == null) throw Exception('User not logged in.');
-
-      UserModel? userModel = await authService.getCurrentUserModel();
-
-      final String newRentalId = FirebaseFirestore.instance.collection('rentals').doc().id;
-
-      final String finalDeliveryLocation = _deliveryLocation == 'Other / Custom Resort'
-          ? (_customResortController.text.trim().isNotEmpty
-              ? _customResortController.text.trim()
-              : 'Custom Private Resort')
-          : _deliveryLocation;
-
-      final rental = RentalModel(
-        rentalId: newRentalId,
+      final user = Provider.of<AuthService>(context, listen: false).currentUser;
+      if (user == null)
+        throw const MobileApiException(
+            'Please sign in again to book equipment.');
+      await _api.createRentalRequest(
         itemId: widget.item.id,
         itemName: widget.item.name,
-        customerId: user.uid,
-        customerName: userModel?.name ?? user.email ?? 'Customer',
-        terminalId: _terminalId,
-        deliveryLocation: finalDeliveryLocation,
-        startDate: _startDate,
-        dueDate: _dueDate,
-        rateFee: _baseFee,
-        deposit: _deposit,
+        itemCode: widget.item.qrCode,
+        durationMinutes: _selectedHours * 60,
+        deliveryLocation: _deliveryLocation == 'Other / Custom Resort'
+            ? _customResortController.text.trim()
+            : _deliveryLocation,
         paymentMethod: _paymentMethod,
-        paymentConfirmedByAdmin: false,
-        status: 'pending_esp32_rent',
-        returnCondition: 'Good',
+        requestKey: _requestKey,
+        expectedQuote: {
+          'rentalFee': _baseFee,
+          'depositAmount': _deposit,
+          'billedMinutes': _quote!['billed_minutes']
+        },
       );
-
-      // Save to Firestore
-      await FirebaseFirestore.instance
-          .collection('rentals')
-          .doc(newRentalId)
-          .set(rental.toMap());
-
-      // Update Item Status to 'rented'
-      await FirebaseFirestore.instance
-          .collection('items')
-          .doc(widget.item.id)
-          .set(
-            widget.item.copyWith(status: 'rented').toMap(),
-            SetOptions(merge: true),
-          );
-
       if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Rental request submitted successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => Esp32VerificationScreen(rental: rental),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to submit rental: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Booking sent. Track approval in My Rentals.')));
+      Navigator.pushReplacement(context,
+          MaterialPageRoute(builder: (_) => const ActiveRentalsScreen()));
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not send your booking. $error')));
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -154,437 +135,200 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Start Rental'),
-        centerTitle: true,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Title & Subtitle Header
-            Text(
-              'Start Rental Request',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Confirm the request details before sending it to the ESP32 terminal.',
-              style: TextStyle(color: Colors.grey, fontSize: 13),
-            ),
-            const SizedBox(height: 16),
-
-            // Physical Valid ID Notice Banner
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade300),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.badge_outlined, color: Colors.blue.shade800, size: 24),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Physical Valid ID Required: Renter must present 1 physical valid ID to the operator at the terminal upon pickup.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue.shade900,
-                        height: 1.4,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Item Banner Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+    final scheme = Theme.of(context).colorScheme;
+    return PopScope(
+      canPop: !_isSubmitting,
+      child: Scaffold(
+        appBar: AppBar(title: const Text('Review booking')),
+        bottomNavigationBar: RentalActionBar(
+          summaryLabel: 'Due at handoff',
+          summaryValue: _quoteLoading ? 'Updating…' : rentalMoney(_total),
+          label: 'Send booking request',
+          busy: _isSubmitting,
+          onPressed:
+              !_quoteLoading && _quote != null ? _submitRentalRequest : null,
+        ),
+        body: Form(
+          key: _form,
+          child: SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(16),
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              RentalSection(
+                  child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        height: 70,
-                        width: 70,
-                        color: Colors.grey.shade100,
-                        child: widget.item.buildImage(fit: BoxFit.cover, height: 70, width: 70),
-                      ),
-                    ),
+                        borderRadius: BorderRadius.circular(12),
+                        child: SizedBox(
+                            height: 72,
+                            width: 72,
+                            child: widget.item.buildImage(
+                                fit: BoxFit.cover, height: 72, width: 72))),
                     const SizedBox(width: 14),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            widget.item.name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Category: ${widget.item.category}',
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                          Text(widget.item.name,
+                              style: const TextStyle(
+                                  fontSize: 20, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
-                          Text(
-                            widget.item.description,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: Colors.grey.shade700, fontSize: 11),
-                          ),
+                          Text(widget.item.category,
+                              style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                  fontSize: 13)),
                           const SizedBox(height: 6),
-                          Text(
-                            'Rate: ${widget.item.rateText}',
-                            style: TextStyle(
-                              color: Theme.of(context).primaryColor,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                          Text(widget.item.rateText,
+                              style: TextStyle(
+                                  color: scheme.primary,
+                                  fontWeight: FontWeight.w600)),
+                        ])),
+                  ])),
+              RentalSection(
+                title: 'How long will you use it?',
+                icon: Icons.schedule_outlined,
+                subtitle:
+                    'Your rental clock starts when the admin hands over the equipment.',
+                child: Wrap(spacing: 8, runSpacing: 8, children: [
+                  for (final hours in [1, 2, 3, 5, 8])
+                    ChoiceChip(
+                        label: Text('$hours hr${hours == 1 ? '' : 's'}'),
+                        selected: hours == _selectedHours,
+                        onSelected: _isSubmitting
+                            ? null
+                            : (_) {
+                                setState(() {
+                                  _selectedHours = hours;
+                                  _requestKey = MobileApiService.operationKey();
+                                });
+                                _loadQuote();
+                              }),
+                ]),
               ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Duration Selector
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Rental Duration',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    const SizedBox(height: 10),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        children: [1, 2, 3, 5, 8].map((hours) {
-                          final isSelected = _selectedHours == hours;
-                          final isDark = Theme.of(context).brightness == Brightness.dark;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 8.0),
-                            child: ChoiceChip(
-                              label: Text('$hours hr${hours > 1 ? 's' : ''}'),
-                              selected: isSelected,
-                              selectedColor: Theme.of(context).primaryColor,
-                              backgroundColor: isDark ? const Color(0xFF131D2D) : Colors.white,
-                              side: BorderSide(color: isDark ? const Color(0xFF1E2C42) : Colors.grey.shade300),
-                              labelStyle: TextStyle(
-                                color: isSelected ? Colors.white : (isDark ? const Color(0xFFF8FAFC) : Colors.black87),
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                              ),
-                              onSelected: (_) => _updateDuration(hours),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ),
-                    const Divider(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('Due Return Time:', style: TextStyle(fontSize: 13, color: Colors.black87)),
-                        Text(
-                          '${_dueDate.hour.toString().padLeft(2, '0')}:${_dueDate.minute.toString().padLeft(2, '0')} (${_dueDate.month}/${_dueDate.day})',
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueAccent),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Private Resort Delivery Location Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.location_on, color: Color(0xFFF57C00)),
-                        SizedBox(width: 8),
-                        Text(
-                          'Delivery Location (Private Resort)',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Select the private resort/villa where the operator will deliver your equipment:',
-                      style: TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: _deliveryLocation,
-                      isExpanded: true,
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      items: privateResorts.map((resort) {
-                        return DropdownMenuItem<String>(
-                          value: resort,
-                          child: Text(resort, style: const TextStyle(fontSize: 13)),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _deliveryLocation = val);
-                        }
-                      },
-                    ),
-                    if (_deliveryLocation == 'Other / Custom Resort') ...[
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: _customResortController,
-                        decoration: InputDecoration(
-                          hintText: 'Enter Private Resort Name / Location',
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Terminal Selection
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Row(
-                      children: [
-                        Icon(Icons.developer_board, color: Colors.orange),
-                        SizedBox(width: 8),
-                        Text(
-                          'ESP32 Terminal:',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                      ],
-                    ),
-                    DropdownButton<String>(
-                      value: _terminalId,
-                      items: const [
-                        DropdownMenuItem(value: 'TERM-01', child: Text('TERM-01 (Cabinet A)')),
-                        DropdownMenuItem(value: 'TERM-02', child: Text('TERM-02 (Cabinet B)')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _terminalId = val);
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Rental Summary Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Payment Breakdown',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    const Divider(height: 20),
-                    _buildCostRow('Base Rental Fee ($_selectedHours hrs)', '₱${_baseFee.toStringAsFixed(2)}'),
-                    _buildCostRow('Security Deposit (Refundable)', '₱${_deposit.toStringAsFixed(2)}'),
-                    const Divider(height: 20),
-                    _buildCostRow(
-                      'Total Initial Amount',
-                      '₱${_totalInitialAmount.toStringAsFixed(2)}',
-                      isTotal: true,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Payment Method Selector
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              child: Padding(
-                padding: const EdgeInsets.all(14.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Payment Method',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    const SizedBox(height: 8),
-                    RadioGroup<String>(
-                      groupValue: _paymentMethod,
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() => _paymentMethod = value);
-                      },
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          RadioListTile<String>(
-                            title: const Row(
-                              children: [
-                                Icon(Icons.qr_code_2, color: Colors.blue),
-                                SizedBox(width: 8),
-                                Text('GCash / QR Code'),
-                              ],
-                            ),
-                            value: 'QR',
-                          ),
-                          RadioListTile<String>(
-                            title: const Row(
-                              children: [
-                                Icon(Icons.payments_outlined, color: Colors.green),
-                                SizedBox(width: 8),
-                                Text('Cash to Operator'),
-                              ],
-                            ),
-                            value: 'Cash',
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.info_outline, size: 18, color: Colors.blue),
-                          SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Operator / Admin will verify your payment before releasing the ESP32 cabinet lock.',
-                              style: TextStyle(fontSize: 11, color: Colors.blue),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Primary Action Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF57C00), // Primary Orange
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              RentalSection(
+                title: 'Where will you receive it?',
+                icon: Icons.place_outlined,
+                subtitle:
+                    'Choose pickup or your resort. The admin will confirm the handoff arrangements.',
+                child: Column(children: [
+                  DropdownButtonFormField<String>(
+                    initialValue: _deliveryLocation,
+                    isExpanded: true,
+                    decoration:
+                        const InputDecoration(labelText: 'Pickup / resort'),
+                    items: privateResorts
+                        .map((place) => DropdownMenuItem(
+                            value: place,
+                            child:
+                                Text(place, overflow: TextOverflow.ellipsis)))
+                        .toList(),
+                    onChanged: _isSubmitting
+                        ? null
+                        : (place) {
+                            if (place != null)
+                              setState(() => _deliveryLocation = place);
+                          },
                   ),
-                  elevation: 2,
+                  if (_deliveryLocation == 'Other / Custom Resort') ...[
+                    const SizedBox(height: 14),
+                    TextFormField(
+                      controller: _customResortController,
+                      enabled: !_isSubmitting,
+                      maxLength: 180,
+                      textInputAction: TextInputAction.done,
+                      decoration: const InputDecoration(
+                          labelText: 'Resort name / location',
+                          hintText: 'Enter the handoff location'),
+                      validator: (value) =>
+                          value == null || value.trim().isEmpty
+                              ? 'Enter your resort or pickup location.'
+                              : null,
+                    ),
+                  ],
+                ]),
+              ),
+              RentalSection(
+                title: 'Price summary',
+                icon: Icons.receipt_long_outlined,
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (_quoteLoading) ...[
+                        const LinearProgressIndicator(),
+                        const SizedBox(height: 12),
+                        const Text('Checking the current rental price…'),
+                      ] else if (_quoteError.isNotEmpty)
+                        RentalNotice(
+                          isError: true,
+                          title: 'Price unavailable',
+                          message: _quoteError,
+                          action: TextButton.icon(
+                              onPressed: _loadQuote,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Retry price')),
+                        )
+                      else ...[
+                        RentalValueRow('Rental fee', rentalMoney(_baseFee)),
+                        RentalValueRow('Refundable security deposit',
+                            rentalMoney(_deposit)),
+                        const Divider(height: 22),
+                        RentalValueRow('Due at handoff', rentalMoney(_total),
+                            emphasis: true),
+                        const SizedBox(height: 10),
+                        Text(
+                            'Rental fee covers $_packageLength.${_billedMinutes > _selectedHours * 60 ? ' This item has a minimum package duration.' : ''}',
+                            style: TextStyle(
+                                fontSize: 13,
+                                color: scheme.onSurfaceVariant,
+                                height: 1.4)),
+                        const SizedBox(height: 6),
+                        Text(
+                            'The deposit is refundable after inspection, subject to any outstanding charges.',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: scheme.onSurfaceVariant,
+                                height: 1.4)),
+                      ],
+                    ]),
+              ),
+              RentalSection(
+                title: 'Payment preference',
+                icon: Icons.payments_outlined,
+                subtitle:
+                    'Pay at handoff. Choosing a method does not mark this booking as paid.',
+                child: RadioGroup<String>(
+                  groupValue: _paymentMethod,
+                  onChanged: (value) {
+                    if (value != null && !_isSubmitting)
+                      setState(() => _paymentMethod = value);
+                  },
+                  child: Column(children: [
+                    RadioListTile<String>(
+                        value: 'QR',
+                        title: const Text('QR payment'),
+                        subtitle: const Text(
+                            'Ask the admin for payment instructions.'),
+                        contentPadding: EdgeInsets.zero),
+                    RadioListTile<String>(
+                        value: 'Cash',
+                        title: const Text('Cash'),
+                        subtitle: const Text(
+                            'Pay the admin when receiving the item.'),
+                        contentPadding: EdgeInsets.zero),
+                  ]),
                 ),
-                onPressed: _isSubmitting ? null : _submitRentalRequest,
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text(
-                        'Submit Rental Request',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
               ),
-            ),
-          ],
+              const RentalNotice(
+                  title: 'Bring a valid ID',
+                  icon: Icons.badge_outlined,
+                  message:
+                      'After approval, show your booking QR and one physical valid ID to the admin. Check the equipment together before handoff.'),
+              const SizedBox(height: 16),
+            ]),
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildCostRow(String title, String amount, {bool isTotal = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: TextStyle(
-                fontSize: isTotal ? 15 : 13,
-                fontWeight: isTotal ? FontWeight.bold : FontWeight.normal,
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            amount,
-            style: TextStyle(
-              fontSize: isTotal ? 16 : 13,
-              fontWeight: FontWeight.bold,
-              color: isTotal ? const Color(0xFFF57C00) : Colors.black87,
-            ),
-          ),
-        ],
       ),
     );
   }

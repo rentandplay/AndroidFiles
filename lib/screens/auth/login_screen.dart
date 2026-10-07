@@ -51,7 +51,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (userModel != null) {
-        if (userModel.role.toLowerCase() == 'admin') {
+        if (['ADMIN', 'OWNER'].contains(userModel.role.toUpperCase())) {
           await AdminFirestoreService.instance.restoreAdminSession();
           if (!mounted) return;
           Navigator.of(context).pushAndRemoveUntil(
@@ -136,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (userModel != null) {
-        if (userModel.role.toLowerCase() == 'admin') {
+        if (['ADMIN', 'OWNER'].contains(userModel.role.toUpperCase())) {
           Navigator.of(context).pushAndRemoveUntil(
             MaterialPageRoute(
               builder: (_) => AdminDashboardScreen(

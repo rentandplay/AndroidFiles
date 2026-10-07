@@ -1,3 +1,4 @@
+import 'hardware_features.dart';
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
@@ -16,6 +17,7 @@ class RentalService extends ChangeNotifier {
     required double rateFee,
     required double deposit,
   }) async {
+    HardwareFeatures.requireEnabled();
     try {
       final docRef = _firestore.collection('rentals').doc();
       final now = DateTime.now();
@@ -49,12 +51,15 @@ class RentalService extends ChangeNotifier {
   }
 
   // Stream real-time Firestore transaction document snapshots
-  Stream<DocumentSnapshot<Map<String, dynamic>>> streamTransaction(String transactionId) {
+  Stream<DocumentSnapshot<Map<String, dynamic>>> streamTransaction(
+      String transactionId) {
+    if (!HardwareFeatures.enabled) return const Stream.empty();
     return _firestore.collection('rentals').doc(transactionId).snapshots();
   }
 
   // Initiate Return Flow - Status: PENDING_RETURN_VERIFICATION
   Future<void> initiateReturnTransaction(String transactionId) async {
+    HardwareFeatures.requireEnabled();
     try {
       // ESP32 HARDWARE TRIGGER 2:
       // Status becomes PENDING_RETURN_VERIFICATION.
@@ -77,6 +82,7 @@ class RentalService extends ChangeNotifier {
     required String itemId,
     required bool isReturn,
   }) async {
+    HardwareFeatures.requireEnabled();
     try {
       final finalStatus = isReturn ? 'COMPLETED' : 'RENTED';
       final itemStatus = isReturn ? 'available' : 'rented';
@@ -104,6 +110,7 @@ class RentalService extends ChangeNotifier {
 
   // Cancel Transaction on Timeout or User Rejection
   Future<void> cancelTransaction(String transactionId, String reason) async {
+    HardwareFeatures.requireEnabled();
     try {
       // ESP32 HARDWARE TRIGGER 4:
       // Transaction cancelled or 60s timeout exceeded.

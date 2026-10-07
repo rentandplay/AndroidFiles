@@ -20,7 +20,6 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
     final rateHourlyController = TextEditingController(text: item?.rateHourly.toString() ?? '100');
     final depositController = TextEditingController(text: item?.deposit.toString() ?? '100');
     final specialRateController = TextEditingController(text: item?.specialRate ?? '');
-    final qrCodeController = TextEditingController(text: item?.qrCode ?? '');
     String category = item?.category ?? 'Sports';
     String status = item?.status ?? 'available';
 
@@ -94,9 +93,11 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
                 ],
               ),
               const SizedBox(height: 10),
-              TextField(
-                controller: qrCodeController,
-                decoration: const InputDecoration(labelText: 'QR Code Label (e.g. SPORT-BADMINTON-001)', border: OutlineInputBorder()),
+              InputDecorator(
+                decoration: const InputDecoration(labelText: 'Equipment item code', border: OutlineInputBorder()),
+                child: Text(isEditing
+                    ? (item?.qrCode ?? 'Assigned in the equipment inventory')
+                    : 'Generated automatically as RENT-001, RENT-002, and so on'),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
@@ -132,13 +133,49 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
                     specialRate: specialRateController.text.trim().isNotEmpty ? specialRateController.text.trim() : null,
                     imageUrl: item?.imageUrl ?? 'assets/images/logo_rent_and_play.png',
                     status: status,
-                    qrCode: qrCodeController.text.trim().isNotEmpty ? qrCodeController.text.trim() : null,
+                    qrCode: item?.qrCode,
                   );
 
-                  await FirebaseFirestore.instance
-                      .collection('items')
-                      .doc(newItemId)
-                      .set(newItem.toMap(), SetOptions(merge: true));
+                  final itemRef = FirebaseFirestore.instance.collection('items').doc(newItemId);
+                  if (isEditing) {
+                    final itemData = newItem.toMap();
+                    if (item?.qrCode != null) itemData['item_code'] = item!.qrCode;
+                    await itemRef.set(itemData, SetOptions(merge: true));
+                  } else {
+                    final counterRef = FirebaseFirestore.instance.collection('counters').doc('item_codes_RENT');
+                    final codeBase = FirebaseFirestore.instance.collection('item_codes');
+                    await FirebaseFirestore.instance.runTransaction((transaction) async {
+                      final counter = await transaction.get(counterRef);
+                      final rawSequence = counter.data()?['next_sequence'];
+                      final parsedSequence = rawSequence is int ? rawSequence : int.tryParse('$rawSequence') ?? 1;
+                      final start = parsedSequence < 1 ? 1 : parsedSequence;
+                      DocumentReference<Map<String, dynamic>>? codeRef;
+                      var generatedCode = '';
+                      var sequence = start;
+                      for (var offset = 0; offset < 25; offset++) {
+                        final candidateSequence = start + offset;
+                        final candidate = 'RENT-${candidateSequence.toString().padLeft(3, '0')}';
+                        final candidateRef = codeBase.doc(candidate);
+                        final candidateSnapshot = await transaction.get(candidateRef);
+                        if (!candidateSnapshot.exists) {
+                          codeRef = candidateRef;
+                          generatedCode = candidate;
+                          sequence = candidateSequence;
+                          break;
+                        }
+                      }
+                      if (codeRef == null) throw StateError('Could not allocate an equipment code. Try again.');
+                      final now = DateTime.now();
+                      final itemData = newItem.toMap()
+                        ..['item_code'] = generatedCode
+                        ..['qrCode'] = generatedCode
+                        ..['created_at'] = now
+                        ..['updated_at'] = now;
+                      transaction.set(codeRef, {'item_id': itemRef.id, 'created_at': now});
+                      transaction.set(counterRef, {'next_sequence': sequence + 1, 'updated_at': now}, SetOptions(merge: true));
+                      transaction.set(itemRef, itemData);
+                    });
+                  }
 
                   if (!ctx.mounted) return;
                   Navigator.pop(ctx);

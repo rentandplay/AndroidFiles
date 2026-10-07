@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+rimport 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
@@ -7,6 +8,13 @@ import 'services/esp32_service.dart';
 import 'services/rental_service.dart';
 import 'providers/theme_provider.dart';
 import 'screens/user/catalog_screen.dart';
+import 'services/notification_service.dart';
+import 'widgets/notification_widgets.dart';
+
+@pragma('vm:entry-point')
+Future<void> rentalNotificationBackground(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,6 +23,7 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
 
+  FirebaseMessaging.onBackgroundMessage(rentalNotificationBackground);
   runApp(const RentAndPlayApp());
 }
 
@@ -26,6 +35,10 @@ class RentAndPlayApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
+        ChangeNotifierProxyProvider<AuthService, RentalNotificationService>(
+            create: (_) => RentalNotificationService(),
+            update: (_, auth, notifications) =>
+                notifications!..setSession(auth.currentUser?.uid)),
         ChangeNotifierProvider(create: (_) => Esp32Service()),
         ChangeNotifierProvider(create: (_) => RentalService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
@@ -33,6 +46,9 @@ class RentAndPlayApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
+            navigatorKey: rentalNavigatorKey,
+            scaffoldMessengerKey: rentalMessengerKey,
+            builder: (_, child) => RentalNotificationHost(child: child!),
             title: 'Rent & Play',
             debugShowCheckedModeBanner: false,
             theme: themeProvider.lightTheme,

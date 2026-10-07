@@ -1,3 +1,4 @@
+import 'rental_admin_view.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -66,11 +67,22 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       'Equipment' => equipment(),
       'Customers' => customerPage(),
       'Rates & Fees' => rates(),
-      'Rentals' => transactionPage('Rentals'),
-      'Returns' => transactionPage('Returns'),
-      'Transaction History' => transactionPage('Transaction History'),
+      'Rentals' => RentalAdminView(
+          page: 'Rentals', workspace: workspace, onChanged: widget.onChanged),
+      'Returns' => RentalAdminView(
+          page: 'Returns', workspace: workspace, onChanged: widget.onChanged),
+      'Transaction History' => RentalAdminView(
+          page: 'Transaction History',
+          workspace: workspace,
+          onChanged: widget.onChanged),
       'Maintenance' => maintenance(),
-      'ESP32 / Verification' => verificationPage(),
+      'ESP32 / Verification' => Column(children: [
+          const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text(
+                  'ESP32 terminal is on standby. Rental and return confirmations are handled by the admin.')),
+          Expanded(child: verificationPage())
+        ]),
       'Reports' => reports(),
       'Settings' => settings(),
       'Admin settings' => adminSettings(),
@@ -86,7 +98,13 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         ? (rev['This week'] as List).map(n).toList()
         : List<double>.filled(7, 0);
     final open = rows(widget.dashboard['rentals'])
-        .where((x) => ['ACTIVE', 'PENDING_VERIFICATION'].contains(x['status']))
+        .where((x) => [
+              'ACTIVE',
+              'APPROVED',
+              'PENDING_ADMIN_APPROVAL',
+              'RETURN_PENDING_INSPECTION',
+              'PENDING_VERIFICATION'
+            ].contains(x['status']))
         .toList();
     final activeItems = rows(workspace['items'])
         .where((item) => item['is_active'] != false)
@@ -264,8 +282,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                       ],
                     ),
                   ),
-                  const Icon(Icons.arrow_forward,
-                      size: 16, color: Clr.muted),
+                  const Icon(Icons.arrow_forward, size: 16, color: Clr.muted),
                 ]),
               ),
             ),
@@ -1173,8 +1190,12 @@ class _AdminModuleViewState extends State<AdminModuleView> {
             s(x['customer_name'] ?? 'Customer')),
         Text(
             'Deliver to: ' +
-                s(x['deliveryLocation'] ?? x['delivery_location'] ?? x['resort'] ?? 'ASRI Hotspring Resort'),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Clr.orange)),
+                s(x['deliveryLocation'] ??
+                    x['delivery_location'] ??
+                    x['resort'] ??
+                    'ASRI Hotspring Resort'),
+            style: const TextStyle(
+                fontWeight: FontWeight.bold, fontSize: 11, color: Clr.orange)),
         Text(
             'Code ' +
                 s(x['verification_code']) +
@@ -1271,7 +1292,12 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
                   rowData('Equipment', x['item_name']),
                   rowData('Customer', x['customer_name']),
-                  rowData('Delivery Resort', x['deliveryLocation'] ?? x['delivery_location'] ?? x['resort'] ?? 'ASRI Hotspring Resort'),
+                  rowData(
+                      'Delivery Resort',
+                      x['deliveryLocation'] ??
+                          x['delivery_location'] ??
+                          x['resort'] ??
+                          'ASRI Hotspring Resort'),
                   rowData('Status', rentalStatus(x)),
                   rowData('Rented',
                       date(x['confirmed_rental_at'] ?? x['created_at'])),
@@ -1586,9 +1612,11 @@ class _AdminModuleViewState extends State<AdminModuleView> {
 
   Widget settings() {
     final b = map(workspace['settings']), users = rows(workspace['users']);
+    final isOwner = s(map(api.currentUser)['role']).toUpperCase() == 'OWNER';
     return col([
-      title('Settings',
-          'Manage shared business details and administrator access.'),
+      title('Settings', isOwner
+          ? 'Manage shared business details and staff accounts.'
+          : 'View shared business details. Staff access is managed by the owner.'),
       panel(
           'Business profile',
           'Shared business details and rental defaults.',
@@ -1598,26 +1626,30 @@ class _AdminModuleViewState extends State<AdminModuleView> {
             rowData('Currency', b['currency'] ?? 'PHP'),
             rowData('Timezone', b['timezone'] ?? 'Asia/Manila'),
             rowData('Grace hours', b['default_late_grace_hours'] ?? 0),
-            TextButton.icon(
-                onPressed: () => editBusiness(b),
-                icon: const Icon(Icons.edit),
-                label: const Text('Edit business'))
+            if (isOwner)
+              TextButton.icon(
+                  onPressed: () => editBusiness(b),
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit business'))
           ])),
-      panel(
-          'Admin accounts',
-          'Only active ADMIN accounts can access the workspace.',
+      if (isOwner) panel(
+          'Workspace accounts',
+          'Customers use USER accounts. Operators use ADMIN accounts. Owners use OWNER accounts.',
           Column(children: [
             Align(
                 alignment: Alignment.centerRight,
                 child: FilledButton.icon(
                     onPressed: addAdmin,
                     icon: const Icon(Icons.person_add),
-                    label: const Text('Add admin'))),
+                    label: const Text('Add operator'))),
             for (final x in users)
               ListTile(
                   title: Text(s(x['full_name'] ?? x['name'])),
-                  subtitle: Text(s(x['email']) + ' · ' + s(x['role'])),
-                  trailing: PopupMenuButton<String>(
+                  subtitle: Text(s(x['email']) + ' · ' + _roleLabel(x['role'])),
+                  trailing: s(x['role']).toUpperCase() == 'OWNER' ||
+                          s(x['id']) == s(map(api.currentUser)['id'])
+                      ? null
+                      : PopupMenuButton<String>(
                       onSelected: (_) => toggleAdmin(x),
                       itemBuilder: (_) => [
                             PopupMenuItem(
@@ -1626,7 +1658,10 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                                     ? 'Activate'
                                     : 'Deactivate'))
                           ]))
-          ])),
+          ])) else panel(
+          'Workspace access',
+          'Customers, operators, and owners use separate sign-in accounts. Ask the owner to change staff access.',
+          const SizedBox.shrink()),
       panel(
           'Session',
           'Admin session is held in memory on this device.',
@@ -1662,7 +1697,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   }
 
   Future<void> addAdmin() async {
-    final v = await form('Add administrator', [
+    final v = await form('Add operator account', [
       const Field('fullName', 'Full name'),
       const Field('email', 'Email', email: true),
       const Field('password', 'Temp password (12+ chars)', obscure: true)
@@ -1676,17 +1711,24 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         'role': 'ADMIN'
       });
       await widget.onChanged();
-    }, ok: 'Administrator added.');
+    }, ok: 'Operator account added.');
   }
 
   Future<void> toggleAdmin(Map<String, dynamic> x) async {
     final enable = x['is_active'] == false;
+    final role = s(x['role']).toUpperCase();
     await mutate(() async {
       await api.patch('/users/' + s(x['id']),
-          body: {'role': 'ADMIN', 'isActive': enable});
+          body: {'role': role, 'isActive': enable});
       await widget.onChanged();
-    }, ok: enable ? 'Administrator activated.' : 'Administrator deactivated.');
+    }, ok: enable ? 'Account activated.' : 'Account deactivated.');
   }
+
+  String _roleLabel(dynamic role) => switch (s(role).toUpperCase()) {
+        'OWNER' => 'Owner · Super admin',
+        'ADMIN' => 'Operator · Admin',
+        _ => 'Customer · Mobile',
+      };
 
   Widget adminSettings() {
     final u = map(api.currentUser);
@@ -1750,14 +1792,16 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   Widget profile() {
     final u = map(api.currentUser);
     return col([
-      title('Admin profile', 'Signed-in administrator details.'),
+      title('Staff profile', 'Signed-in staff account details.'),
       panel(
           'Account profile',
           'From the admin service.',
           Column(children: [
             rowData('Name', u['name'] ?? u['full_name']),
             rowData('Email', u['email']),
-            rowData('Role', u['role'] ?? 'ADMIN'),
+              rowData('Role', s(u['role']).toUpperCase() == 'OWNER'
+                  ? 'Owner · Super admin'
+                  : 'Operator · Admin'),
             TextButton.icon(
                 onPressed: editProfile,
                 icon: const Icon(Icons.edit),
@@ -1798,7 +1842,9 @@ class _AdminModuleViewState extends State<AdminModuleView> {
     final name = s(x['name']).isNotEmpty
         ? s(x['name'])
         : (s(x['itemName']).isNotEmpty ? s(x['itemName']) : s(x['item_name']));
-    final customer = s(x['customerName']).isNotEmpty ? s(x['customerName']) : s(x['customer_name']);
+    final customer = s(x['customerName']).isNotEmpty
+        ? s(x['customerName'])
+        : s(x['customer_name']);
 
     EquipmentQrLabelDialog.show(
       context,
@@ -1914,15 +1960,17 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   Widget card(Widget x) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 7),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF131D2D) : Colors.white,
-          border: Border.all(color: isDark ? const Color(0xFF1E2C42) : Clr.line),
-          borderRadius: BorderRadius.circular(14)),
-      child: x);
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF131D2D) : Colors.white,
+            border:
+                Border.all(color: isDark ? const Color(0xFF1E2C42) : Clr.line),
+            borderRadius: BorderRadius.circular(14)),
+        child: x);
   }
+
   Widget metrics(List<M> x) => LayoutBuilder(builder: (c, b) {
         final n = b.maxWidth >= 900
                 ? 4
@@ -2124,35 +2172,44 @@ class MetricCard extends StatelessWidget {
   Widget build(BuildContext c) {
     final isDark = Theme.of(c).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-          color: isDark ? const Color(0xFF131D2D) : Colors.white,
-          border: Border.all(color: isDark ? const Color(0xFF1E2C42) : Clr.line),
-          borderRadius: BorderRadius.circular(15)),
-      child: Row(children: [
-        Container(
-            width: 36,
-            height: 36,
-            decoration: BoxDecoration(
-                color: x.color.withValues(alpha: .1),
-                borderRadius: BorderRadius.circular(10)),
-            child: Icon(x.icon, color: x.color, size: 19)),
-        const SizedBox(width: 8),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(x.title, style: TextStyle(fontSize: 11, color: isDark ? const Color(0xFF94A3B8) : Clr.muted)),
-          Text(x.value,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  fontSize: 18, fontWeight: FontWeight.w900, color: isDark ? const Color(0xFFF8FAFC) : Clr.ink)),
-          Text(x.note,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 10, color: isDark ? const Color(0xFF94A3B8) : Clr.muted))
-        ]))
-      ]));
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF131D2D) : Colors.white,
+            border:
+                Border.all(color: isDark ? const Color(0xFF1E2C42) : Clr.line),
+            borderRadius: BorderRadius.circular(15)),
+        child: Row(children: [
+          Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                  color: x.color.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(10)),
+              child: Icon(x.icon, color: x.color, size: 19)),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(x.title,
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: isDark ? const Color(0xFF94A3B8) : Clr.muted)),
+                Text(x.value,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
+                        color: isDark ? const Color(0xFFF8FAFC) : Clr.ink)),
+                Text(x.note,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: isDark ? const Color(0xFF94A3B8) : Clr.muted))
+              ]))
+        ]));
   }
 }
 

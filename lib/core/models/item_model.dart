@@ -132,7 +132,7 @@ class ItemModel {
       isForSale: map['isForSale'] ?? false,
       imageUrl: rawImageUrl,
       status: map['status'] ?? 'available',
-      qrCode: map['qrCode'],
+      qrCode: map['qrCode'] ?? map['item_code'] ?? map['qr_code'],
     );
   }
 
@@ -237,7 +237,7 @@ class ItemModel {
     return [
       ItemModel(
         id: 'item_bike',
-        qrCode: 'SPORT-BIKE-001',
+        qrCode: 'RENT-003',
         name: 'Bicycle',
         category: 'Sports',
         description: 'Durable 21-speed mountain bike with adjustable seat, helmet, and safety reflectors suitable for all terrains.',
@@ -251,7 +251,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_pickleball',
-        qrCode: 'SPORT-PICKLEBALL-001',
+        qrCode: 'RENT-009',
         name: 'Pickleball Set',
         category: 'Sports',
         description: 'Complete set including 4 lightweight graphite paddles, 6 outdoor pickleballs, and a portable net system.',
@@ -264,7 +264,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_badminton',
-        qrCode: 'SPORT-BADMINTON-001',
+        qrCode: 'RENT-001',
         name: 'Badminton Set',
         category: 'Sports',
         description: 'Includes 4 steel rackets, 6 durable shuttlecocks, and a quick-setup net for outdoor or indoor court play.',
@@ -277,7 +277,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_basketball',
-        qrCode: 'SPORT-BASKETBALL-001',
+        qrCode: 'RENT-002',
         name: 'Basketball',
         category: 'Sports',
         description: 'Official size 7 indoor/outdoor composite leather basketball with deep channels for superior grip and bounce.',
@@ -291,7 +291,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_volleyball',
-        qrCode: 'SPORT-VOLLEYBALL-001',
+        qrCode: 'RENT-014',
         name: 'Volleyball',
         category: 'Sports',
         description: 'Official regulation size 5 soft-touch leather volleyball ideal for beach or indoor court recreational play.',
@@ -307,7 +307,7 @@ class ItemModel {
       // Cards
       ItemModel(
         id: 'item_cards_deck',
-        qrCode: 'CARD-DECK-001',
+        qrCode: 'RENT-006',
         name: 'Deck of Cards',
         category: 'Cards',
         description: 'Standard 52-card poker deck made of plastic-coated cardstock for smooth shuffling and long-lasting durability.',
@@ -322,7 +322,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_uno',
-        qrCode: 'CARD-UNO-001',
+        qrCode: 'RENT-013',
         name: 'Uno Cards',
         category: 'Cards',
         description: 'Classic Uno card game featuring 112 cards including Wild, Draw Four, and custom rule action cards.',
@@ -337,7 +337,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_bingo',
-        qrCode: 'CARD-BINGO-001',
+        qrCode: 'RENT-004',
         name: 'Bingo Set',
         category: 'Cards',
         description: 'Bingo Set: Includes master board, cage, numbered balls, and reusable bingo cards for group entertainment.',
@@ -354,7 +354,7 @@ class ItemModel {
       // Board Games
       ItemModel(
         id: 'item_jenga',
-        qrCode: 'BOARD-JENGA-001',
+        qrCode: 'RENT-007',
         name: 'Jenga',
         category: 'Board Games',
         description: 'Includes 54 precision-crafted hardwood blocks for building tower balance games suitable for all ages.',
@@ -368,7 +368,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_scrabble',
-        qrCode: 'BOARD-SCRABBLE-001',
+        qrCode: 'RENT-012',
         name: 'Scrabble',
         category: 'Board Games',
         description: 'Classic Scrabble crossword game with full letter tile set, 4 tile racks, and folding game board.',
@@ -382,7 +382,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_chess',
-        qrCode: 'BOARD-CHESS-001',
+        qrCode: 'RENT-005',
         name: 'Chess Set',
         category: 'Board Games',
         description: 'Tournament-grade weighted wooden chess set with 32 hand-carved pieces and folding wooden board.',
@@ -398,7 +398,7 @@ class ItemModel {
       // Tech Rentals
       ItemModel(
         id: 'item_ps4',
-        qrCode: 'CONSO-0001',
+        qrCode: 'RENT-010',
         name: 'PlayStation 4 Console',
         category: 'Tech Rentals',
         description: 'PS4 Slim 1TB console bundled with 2 DualShock 4 wireless controllers, HDMI cable, and pre-installed top titles.',
@@ -411,7 +411,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_switch',
-        qrCode: 'CONSO-SWITCH-001',
+        qrCode: 'RENT-008',
         name: 'Nintendo Switch',
         category: 'Tech Rentals',
         description: 'Nintendo Switch OLED console with Joy-Con controllers, dock, AC adapter, and protective carrying case.',
@@ -424,7 +424,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_ps5',
-        qrCode: 'CONSO-PS5-001',
+        qrCode: 'RENT-011',
         name: 'PlayStation 5 Console',
         category: 'Tech Rentals',
         description: 'PS5 Disc Edition console with DualSense wireless controller, ultra-high speed SSD, and 4K graphics support.',

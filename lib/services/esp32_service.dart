@@ -1,3 +1,4 @@
+import 'hardware_features.dart';
 import 'dart:async';
 import 'package:firebase_database/firebase_database.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +8,7 @@ class Esp32Service extends ChangeNotifier {
 
   // Stream terminal node "terminals/{terminalId}"
   Stream<DatabaseEvent> streamTerminalState(String terminalId) {
+    if (!HardwareFeatures.enabled) return const Stream.empty();
     try {
       return _db.ref('terminals/$terminalId').onValue;
     } catch (_) {
@@ -16,6 +18,7 @@ class Esp32Service extends ChangeNotifier {
 
   // Stream RTDB connection status
   Stream<DatabaseEvent> streamConnectionStatus() {
+    if (!HardwareFeatures.enabled) return const Stream.empty();
     try {
       return _db.ref('.info/connected').onValue;
     } catch (_) {
@@ -25,8 +28,12 @@ class Esp32Service extends ChangeNotifier {
 
   // Explicit check for active backend / RTDB connection
   Future<bool> checkConnection() async {
+    HardwareFeatures.requireEnabled();
     try {
-      final snapshot = await _db.ref('.info/connected').get().timeout(const Duration(seconds: 3));
+      final snapshot = await _db
+          .ref('.info/connected')
+          .get()
+          .timeout(const Duration(seconds: 3));
       return (snapshot.value as bool?) ?? true;
     } catch (e) {
       debugPrint('Connection check failed, defaulting to online mode: $e');
@@ -35,7 +42,9 @@ class Esp32Service extends ChangeNotifier {
   }
 
   // Initiate Rental Hardware Verification with Timeout Safety
-  Future<bool> initiateRentalHardwareVerification(String terminalId, String rentalId) async {
+  Future<bool> initiateRentalHardwareVerification(
+      String terminalId, String rentalId) async {
+    HardwareFeatures.requireEnabled();
     try {
       await _db.ref('terminals/$terminalId').set({
         'esp32State': 'RENT_READY',
@@ -51,7 +60,9 @@ class Esp32Service extends ChangeNotifier {
   }
 
   // Initiate Return Hardware Verification with Timeout Safety
-  Future<bool> initiateReturnHardwareVerification(String terminalId, String rentalId) async {
+  Future<bool> initiateReturnHardwareVerification(
+      String terminalId, String rentalId) async {
+    HardwareFeatures.requireEnabled();
     try {
       await _db.ref('terminals/$terminalId').set({
         'esp32State': 'RETURN_READY',
@@ -67,7 +78,9 @@ class Esp32Service extends ChangeNotifier {
   }
 
   // Confirm Hardware Transaction (Physical Button or Admin Overwrite)
-  Future<void> confirmHardwareTransaction(String terminalId, String rentalId) async {
+  Future<void> confirmHardwareTransaction(
+      String terminalId, String rentalId) async {
+    HardwareFeatures.requireEnabled();
     try {
       await _db.ref('terminals/$terminalId').update({
         'esp32State': 'CONFIRMED',
@@ -82,6 +95,7 @@ class Esp32Service extends ChangeNotifier {
 
   // Reset Terminal State
   Future<void> resetTerminal(String terminalId) async {
+    HardwareFeatures.requireEnabled();
     try {
       await _db.ref('terminals/$terminalId').set({
         'esp32State': 'IDLE',

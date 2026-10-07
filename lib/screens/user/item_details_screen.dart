@@ -255,7 +255,7 @@ class ItemDetailsScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Before submitting, ensure you are near the ESP32 Smart Cabinet terminal. Equipment lock will automatically release upon payment verification.',
+                      'Submit a booking and wait for admin approval. Show your transaction QR at pickup. Your rental timer starts when the admin physically releases the equipment.',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.amber.shade900,

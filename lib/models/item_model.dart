@@ -45,7 +45,8 @@ class ItemModel {
     return url;
   }
 
-  Widget buildImage({BoxFit fit = BoxFit.cover, double? width, double? height}) {
+  Widget buildImage(
+      {BoxFit fit = BoxFit.cover, double? width, double? height}) {
     final url = cleanImageUrl;
     if (url.startsWith('http://') || url.startsWith('https://')) {
       return Image.network(
@@ -73,7 +74,8 @@ class ItemModel {
           height: height,
           color: Colors.grey.shade200,
           child: const Center(
-            child: Icon(Icons.image_not_supported_outlined, color: Colors.grey, size: 36),
+            child: Icon(Icons.image_not_supported_outlined,
+                color: Colors.grey, size: 36),
           ),
         ),
       );
@@ -112,8 +114,21 @@ class ItemModel {
     };
   }
 
+  static String _catalogCategory(String value) {
+    final lower = value.toLowerCase();
+    if (lower.contains('sport')) return 'Sports';
+    if (lower.contains('board')) return 'Board Games';
+    if (lower.contains('tech') || lower.contains('gaming'))
+      return 'Tech Rentals';
+    if (lower.contains('card')) return 'Cards';
+    return value;
+  }
+
   factory ItemModel.fromMap(Map<String, dynamic> map, {String? id}) {
-    String rawImageUrl = map['imageUrl'] ?? 'assets/images/logo_rent_and_play.png';
+    String rawImageUrl = map['image_url'] ??
+        map['imageUrl'] ??
+        findByCode(map['name']?.toString() ?? '')?.imageUrl ??
+        'assets/images/logo_rent_and_play.png';
     if (rawImageUrl.startsWith('assets/assets/')) {
       rawImageUrl = rawImageUrl.replaceFirst('assets/assets/', 'assets/');
     }
@@ -121,17 +136,22 @@ class ItemModel {
     return ItemModel(
       id: id ?? map['id'] ?? '',
       name: map['name'] ?? '',
-      category: map['category'] ?? 'Sports',
-      description: map['description'] ?? 'Equipment rental for indoor or outdoor play.',
-      rateText: map['rateText'] ?? '',
-      rateHourly: (map['rateHourly'] ?? 0.0).toDouble(),
+      category: _catalogCategory(map['category']?.toString() ?? 'Sports'),
+      description:
+          map['description'] ?? 'Equipment rental for indoor or outdoor play.',
+      rateText: map['rate_text'] ?? map['rateText'] ?? '',
+      rateHourly: (map['rental_rate'] ?? map['rateHourly'] ?? 0.0).toDouble(),
       specialRate: map['specialRate'],
-      salePrice: map['salePrice'] != null ? (map['salePrice'] as num).toDouble() : null,
-      deposit: (map['deposit'] ?? 0.0).toDouble(),
-      isForSale: map['isForSale'] ?? false,
+      salePrice: (map['sale_price'] ?? map['salePrice']) is num
+          ? (map['sale_price'] ?? map['salePrice']).toDouble()
+          : null,
+      deposit: (map['deposit_amount'] ?? map['deposit'] ?? 0.0).toDouble(),
+      isForSale: map['is_for_sale'] ?? map['isForSale'] ?? false,
       imageUrl: rawImageUrl,
-      status: map['status'] ?? 'available',
-      qrCode: map['qrCode'],
+      status: map['can_rent'] == false && map['status'] == 'AVAILABLE'
+          ? 'unavailable'
+          : map['status'] ?? 'available',
+      qrCode: map['qrCode'] ?? map['item_code'] ?? map['qr_code'],
     );
   }
 
@@ -177,7 +197,8 @@ class ItemModel {
     // Direct match on ID or qrCode
     for (var item in items) {
       if (item.id.toLowerCase() == cleanCode) return item;
-      if (item.qrCode != null && item.qrCode!.toLowerCase() == cleanCode) return item;
+      if (item.qrCode != null && item.qrCode!.toLowerCase() == cleanCode)
+        return item;
     }
 
     // Exact label aliases mapping from rent-play-qr-labels
@@ -209,12 +230,14 @@ class ItemModel {
 
     if (labelAliases.containsKey(cleanCode)) {
       final targetId = labelAliases[cleanCode]!;
-      return items.firstWhere((item) => item.id == targetId, orElse: () => items.first);
+      return items.firstWhere((item) => item.id == targetId,
+          orElse: () => items.first);
     }
 
     // Keyword matching
     for (var item in items) {
-      if (item.name.toLowerCase().contains(cleanCode) || cleanCode.contains(item.name.toLowerCase())) {
+      if (item.name.toLowerCase().contains(cleanCode) ||
+          cleanCode.contains(item.name.toLowerCase())) {
         return item;
       }
     }
@@ -226,10 +249,11 @@ class ItemModel {
     return [
       ItemModel(
         id: 'item_bike',
-        qrCode: 'SPORT-BIKE-001',
+        qrCode: 'RENT-003',
         name: 'Bicycle',
         category: 'Sports',
-        description: 'Durable 21-speed mountain bike with adjustable seat, helmet, and safety reflectors suitable for all terrains.',
+        description:
+            'Durable 21-speed mountain bike with adjustable seat, helmet, and safety reflectors suitable for all terrains.',
         rateText: '₱150/30m, ₱200/hr, ₱500/3-hrs',
         rateHourly: 200.0,
         specialRate: '₱150 / 30 mins | ₱500 / 3 hours',
@@ -240,10 +264,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_pickleball',
-        qrCode: 'SPORT-PICKLEBALL-001',
+        qrCode: 'RENT-009',
         name: 'Pickleball Set',
         category: 'Sports',
-        description: 'Complete set including 4 lightweight graphite paddles, 6 outdoor pickleballs, and a portable net system.',
+        description:
+            'Complete set including 4 lightweight graphite paddles, 6 outdoor pickleballs, and a portable net system.',
         rateText: '₱120/hr',
         rateHourly: 120.0,
         deposit: 100.0,
@@ -253,10 +278,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_badminton',
-        qrCode: 'SPORT-BADMINTON-001',
+        qrCode: 'RENT-001',
         name: 'Badminton Set',
         category: 'Sports',
-        description: 'Includes 4 steel rackets, 6 durable shuttlecocks, and a quick-setup net for outdoor or indoor court play.',
+        description:
+            'Includes 4 steel rackets, 6 durable shuttlecocks, and a quick-setup net for outdoor or indoor court play.',
         rateText: '₱100/hr',
         rateHourly: 100.0,
         deposit: 100.0,
@@ -266,10 +292,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_basketball',
-        qrCode: 'SPORT-BASKETBALL-001',
+        qrCode: 'RENT-002',
         name: 'Basketball',
         category: 'Sports',
-        description: 'Official size 7 indoor/outdoor composite leather basketball with deep channels for superior grip and bounce.',
+        description:
+            'Official size 7 indoor/outdoor composite leather basketball with deep channels for superior grip and bounce.',
         rateText: '₱50/hr, ₱200/5-hrs',
         rateHourly: 50.0,
         specialRate: '₱200 / 5 hours',
@@ -280,10 +307,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_volleyball',
-        qrCode: 'SPORT-VOLLEYBALL-001',
+        qrCode: 'RENT-014',
         name: 'Volleyball',
         category: 'Sports',
-        description: 'Official regulation size 5 soft-touch leather volleyball ideal for beach or indoor court recreational play.',
+        description:
+            'Official regulation size 5 soft-touch leather volleyball ideal for beach or indoor court recreational play.',
         rateText: '₱50/hr, ₱200/5-hrs',
         rateHourly: 50.0,
         specialRate: '₱200 / 5 hours',
@@ -296,10 +324,11 @@ class ItemModel {
       // Cards
       ItemModel(
         id: 'item_cards_deck',
-        qrCode: 'CARD-DECK-001',
+        qrCode: 'RENT-006',
         name: 'Deck of Cards',
         category: 'Cards',
-        description: 'Standard 52-card poker deck made of plastic-coated cardstock for smooth shuffling and long-lasting durability.',
+        description:
+            'Standard 52-card poker deck made of plastic-coated cardstock for smooth shuffling and long-lasting durability.',
         rateText: 'Rent ₱50/5hrs | Sale ₱150',
         rateHourly: 10.0,
         specialRate: '₱50 / 5 hours',
@@ -311,10 +340,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_uno',
-        qrCode: 'CARD-UNO-001',
+        qrCode: 'RENT-013',
         name: 'Uno Cards',
         category: 'Cards',
-        description: 'Classic Uno card game featuring 112 cards including Wild, Draw Four, and custom rule action cards.',
+        description:
+            'Classic Uno card game featuring 112 cards including Wild, Draw Four, and custom rule action cards.',
         rateText: 'Rent ₱100/5hrs | Sale ₱300',
         rateHourly: 20.0,
         specialRate: '₱100 / 5 hours',
@@ -326,10 +356,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_bingo',
-        qrCode: 'CARD-BINGO-001',
+        qrCode: 'RENT-004',
         name: 'Bingo Set',
         category: 'Cards',
-        description: 'Bingo Set: Includes master board, cage, numbered balls, and reusable bingo cards for group entertainment.',
+        description:
+            'Bingo Set: Includes master board, cage, numbered balls, and reusable bingo cards for group entertainment.',
         rateText: 'Rent ₱150/5hrs | Sale ₱450',
         rateHourly: 30.0,
         specialRate: '₱150 / 5 hours',
@@ -343,13 +374,15 @@ class ItemModel {
       // Board Games
       ItemModel(
         id: 'item_jenga',
-        qrCode: 'BOARD-JENGA-001',
+        qrCode: 'RENT-007',
         name: 'Jenga',
         category: 'Board Games',
-        description: 'Includes 54 precision-crafted hardwood blocks for building tower balance games suitable for all ages.',
+        description:
+            'Includes 54 precision-crafted hardwood blocks for building tower balance games suitable for all ages.',
         rateText: 'Rent ₱150/5hrs, ₱250 Whole Stay',
         rateHourly: 30.0,
-        specialRate: '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
+        specialRate:
+            '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
         deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Jenga.png',
@@ -357,13 +390,15 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_scrabble',
-        qrCode: 'BOARD-SCRABBLE-001',
+        qrCode: 'RENT-012',
         name: 'Scrabble',
         category: 'Board Games',
-        description: 'Classic Scrabble crossword game with full letter tile set, 4 tile racks, and folding game board.',
+        description:
+            'Classic Scrabble crossword game with full letter tile set, 4 tile racks, and folding game board.',
         rateText: 'Rent ₱150/5hrs, ₱250 Whole Stay',
         rateHourly: 30.0,
-        specialRate: '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
+        specialRate:
+            '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
         deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Scrabble.png',
@@ -371,13 +406,15 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_chess',
-        qrCode: 'BOARD-CHESS-001',
+        qrCode: 'RENT-005',
         name: 'Chess Set',
         category: 'Board Games',
-        description: 'Tournament-grade weighted wooden chess set with 32 hand-carved pieces and folding wooden board.',
+        description:
+            'Tournament-grade weighted wooden chess set with 32 hand-carved pieces and folding wooden board.',
         rateText: 'Rent ₱150/5hrs, ₱250 Whole Stay',
         rateHourly: 30.0,
-        specialRate: '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
+        specialRate:
+            '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
         deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Chess.png',
@@ -387,10 +424,11 @@ class ItemModel {
       // Tech Rentals
       ItemModel(
         id: 'item_ps4',
-        qrCode: 'CONSO-0001',
+        qrCode: 'RENT-010',
         name: 'PlayStation 4 Console',
         category: 'Tech Rentals',
-        description: 'PS4 Slim 1TB console bundled with 2 DualShock 4 wireless controllers, HDMI cable, and pre-installed top titles.',
+        description:
+            'PS4 Slim 1TB console bundled with 2 DualShock 4 wireless controllers, HDMI cable, and pre-installed top titles.',
         rateText: '₱250/hr',
         rateHourly: 250.0,
         deposit: 300.0,
@@ -400,10 +438,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_switch',
-        qrCode: 'CONSO-SWITCH-001',
+        qrCode: 'RENT-008',
         name: 'Nintendo Switch',
         category: 'Tech Rentals',
-        description: 'Nintendo Switch OLED console with Joy-Con controllers, dock, AC adapter, and protective carrying case.',
+        description:
+            'Nintendo Switch OLED console with Joy-Con controllers, dock, AC adapter, and protective carrying case.',
         rateText: '₱200/hr',
         rateHourly: 200.0,
         deposit: 300.0,
@@ -413,10 +452,11 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_ps5',
-        qrCode: 'CONSO-PS5-001',
+        qrCode: 'RENT-011',
         name: 'PlayStation 5 Console',
         category: 'Tech Rentals',
-        description: 'PS5 Disc Edition console with DualSense wireless controller, ultra-high speed SSD, and 4K graphics support.',
+        description:
+            'PS5 Disc Edition console with DualSense wireless controller, ultra-high speed SSD, and 4K graphics support.',
         rateText: '₱120/day',
         rateHourly: 120.0,
         specialRate: '₱120 / day (₱500 deposit)',

@@ -5,7 +5,7 @@ class UserModel {
   final String name;
   final String email;
   final String phone;
-  final String role; // "user" or "admin"
+  final String role; // USER customer, ADMIN operator, or OWNER super admin
   final String? validIdUrl;
   final bool hasAcceptedTerms;
   final DateTime? createdAt;

@@ -1,21 +1,44 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_core_platform_interface/test.dart';
+import 'package:firebase_auth_platform_interface/firebase_auth_platform_interface.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:rent_and_play_app/main.dart';
 
-void main() {
-  testWidgets('Rent and Play app smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const RentAndPlayApp());
+class SignedOutAuth extends FirebaseAuthPlatform {
+  @override
+  FirebaseAuthPlatform delegateFor({required FirebaseApp app}) => this;
 
-    // Verify that the app builds without crashing.
+  @override
+  FirebaseAuthPlatform setInitialValues({
+    PigeonUserDetails? currentUser,
+    String? languageCode,
+  }) =>
+      this;
+
+  @override
+  UserPlatform? get currentUser => null;
+
+  @override
+  Stream<UserPlatform?> authStateChanges() => Stream.value(null);
+}
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  setupFirebaseCoreMocks();
+  setUpAll(() async {
+    await Firebase.initializeApp();
+    FirebaseAuthPlatform.instance = SignedOutAuth();
+  });
+
+  testWidgets('Rent and Play app smoke test', (WidgetTester tester) async {
+    await tester.pumpWidget(const RentAndPlayApp());
+    await tester.pumpAndSettle();
+
     expect(find.byType(MaterialApp), findsOneWidget);
+    expect(find.text('Login'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 }
