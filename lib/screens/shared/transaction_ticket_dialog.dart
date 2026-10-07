@@ -39,6 +39,8 @@ class _BookingTicketState extends State<BookingTicket> {
   @override
   Widget build(BuildContext context) => AlertDialog(
         insetPadding: const EdgeInsets.all(16),
+        constraints: BoxConstraints(
+            maxWidth: 420, maxHeight: MediaQuery.sizeOf(context).height * .84),
         title: const Text('Your rental handoff QR'),
         content: SizedBox(
             width: 340,
@@ -115,13 +117,13 @@ class _BookingTicketState extends State<BookingTicket> {
                   RentalNotice(
                       title: expired
                           ? 'This hold has ended'
-                          : 'Show this to the operator',
+                          : 'Show this at pickup',
                       isError: expired,
                       message: expired
                           ? 'Close this ticket and refresh My Rentals to check your rental request.'
                           : status == 'PENDING_ADMIN_APPROVAL'
-                              ? 'The owner will review your rental request first. The rental clock starts at the physical handoff.'
-                              : 'Bring one valid ID. At your selected location, the operator will scan this QR and confirm that the prepared item reached you.'),
+                              ? 'Your request is awaiting review. The rental timer starts at physical handoff.'
+                              : 'Bring a valid ID. The operator will scan this QR when your item is handed over.'),
                 ]));
               },
             )),

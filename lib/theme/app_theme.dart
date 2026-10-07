@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 class AppTheme {
   // Brand Colors
-  static const Color brandOrange = Color(0xFFDF762D); // Warm brand orange matching website
+  static const Color brandOrange =
+      Color(0xFFDF762D); // Warm brand orange matching website
   static const Color brandOrangeLight = Color(0xFFF57C00);
   static const Color brandNavy = Color(0xFF0F172A);
 
@@ -16,7 +17,8 @@ class AppTheme {
   // Dark Mode Colors (Matching Rent & Play Web Dashboard screenshots)
   static const Color darkBg = Color(0xFF0B1320); // Deep Dark Slate Navy
   static const Color darkSurface = Color(0xFF131D2D); // Dark Card Surface
-  static const Color darkSurfaceVariant = Color(0xFF1A2638); // Highlighted Container
+  static const Color darkSurfaceVariant =
+      Color(0xFF1A2638); // Highlighted Container
   static const Color darkBorder = Color(0xFF1E2C42); // Subtle Dark Border
   static const Color darkTextPrimary = Color(0xFFF8FAFC); // Crisp Bright White
   static const Color darkTextSecondary = Color(0xFF94A3B8); // Soft Slate Grey
@@ -55,6 +57,15 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: lightBorder),
         ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: brandNavy,
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        actionTextColor: const Color(0xFFF0AD7C),
+        elevation: 8,
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: lightSurface,
@@ -109,8 +120,10 @@ class AppTheme {
         bodyLarge: TextStyle(color: lightTextPrimary),
         bodyMedium: TextStyle(color: lightTextPrimary),
         bodySmall: TextStyle(color: lightTextSecondary),
-        titleLarge: TextStyle(color: lightTextPrimary, fontWeight: FontWeight.bold),
-        titleMedium: TextStyle(color: lightTextPrimary, fontWeight: FontWeight.bold),
+        titleLarge:
+            TextStyle(color: lightTextPrimary, fontWeight: FontWeight.bold),
+        titleMedium:
+            TextStyle(color: lightTextPrimary, fontWeight: FontWeight.bold),
         titleSmall: TextStyle(color: lightTextSecondary),
       ),
     );
@@ -150,6 +163,15 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           side: const BorderSide(color: darkBorder),
         ),
+      ),
+      snackBarTheme: SnackBarThemeData(
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: brandNavy,
+        contentTextStyle: const TextStyle(color: Colors.white, fontSize: 14),
+        actionTextColor: const Color(0xFFF0AD7C),
+        elevation: 8,
+        insetPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: darkSurface,
@@ -211,8 +233,10 @@ class AppTheme {
         bodyLarge: TextStyle(color: darkTextPrimary),
         bodyMedium: TextStyle(color: darkTextPrimary),
         bodySmall: TextStyle(color: darkTextSecondary),
-        titleLarge: TextStyle(color: darkTextPrimary, fontWeight: FontWeight.bold),
-        titleMedium: TextStyle(color: darkTextPrimary, fontWeight: FontWeight.bold),
+        titleLarge:
+            TextStyle(color: darkTextPrimary, fontWeight: FontWeight.bold),
+        titleMedium:
+            TextStyle(color: darkTextPrimary, fontWeight: FontWeight.bold),
         titleSmall: TextStyle(color: darkTextSecondary),
       ),
     );

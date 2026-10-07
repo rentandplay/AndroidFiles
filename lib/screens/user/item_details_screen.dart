@@ -4,17 +4,15 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../widgets/rental_ui.dart';
 import '../../widgets/sign_in_prompt.dart';
 import '../auth/id_verification_screen.dart';
 import 'checkout_screen.dart';
 
 class ItemDetailsScreen extends StatelessWidget {
-  final ItemModel item;
+  const ItemDetailsScreen({super.key, required this.item});
 
-  const ItemDetailsScreen({
-    super.key,
-    required this.item,
-  });
+  final ItemModel item;
 
   Future<void> _continueToRental(BuildContext context) async {
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -23,29 +21,24 @@ class ItemDetailsScreen extends StatelessWidget {
       return;
     }
 
-    final messenger = ScaffoldMessenger.of(context);
     UserModel? userModel;
     try {
       userModel = await authService.getCurrentUserModel();
-    } catch (error) {
+    } catch (_) {
       if (context.mounted) {
-        messenger.showSnackBar(SnackBar(content: Text('$error')));
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content:
+              Text('Could not check your renter profile. Please try again.'),
+        ));
       }
       return;
     }
     if (!context.mounted) return;
 
     if (userModel == null ||
-        userModel.validIdUrl?.isNotEmpty != true ||
+        userModel.validIdUrl?.trim().isNotEmpty != true ||
         !userModel.hasAcceptedTerms) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please review rental policies and complete your profile before renting.',
-          ),
-        ),
-      );
-      Navigator.push(
+      await Navigator.push(
         context,
         MaterialPageRoute(
           builder: (_) => IdVerificationScreen(userModel: userModel),
@@ -54,327 +47,272 @@ class ItemDetailsScreen extends StatelessWidget {
       return;
     }
 
-    Navigator.push(
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => CheckoutScreen(item: item)),
     );
   }
 
+  String get _availabilityLabel => switch (item.status.toUpperCase()) {
+        'AVAILABLE' => 'Available now',
+        'RESERVED_PENDING' => 'Temporarily on hold',
+        'RENTED' => 'Currently rented',
+        _ => 'Unavailable right now',
+      };
+
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final isAvailable = item.status.toLowerCase() == 'available';
+    final statusColor = isAvailable
+        ? Theme.of(context).brightness == Brightness.dark
+            ? const Color(0xFF86EFAC)
+            : const Color(0xFF166534)
+        : scheme.onSurfaceVariant;
+    final rate = item.rateText.trim().isEmpty
+        ? 'See rental price in the next step'
+        : item.rateText.trim();
 
     return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: const Text(
-          'Equipment Details',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        centerTitle: true,
+      appBar: AppBar(title: const Text('Equipment details')),
+      bottomNavigationBar: RentalActionBar(
+        label: isAvailable ? 'Choose rental options' : 'Unavailable right now',
+        onPressed: isAvailable ? () => _continueToRental(context) : null,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Main Equipment Card
-            Card(
-              elevation: 3,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Item Image using buildImage() fallback loader
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Container(
-                        height: 180,
-                        width: double.infinity,
-                        color: Colors.grey.shade100,
-                        child: item.buildImage(fit: BoxFit.contain, height: 180),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Title & Category
-                    Text(
-                      item.name,
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      item.category,
-                      style: TextStyle(
-                        fontSize: 14,
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-
-                    // Status Pill & Terminal ID
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: isAvailable ? Colors.green.shade100 : Colors.orange.shade100,
-                            borderRadius: BorderRadius.circular(20),
+        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 680),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                RentalSection(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          height: 220,
+                          width: double.infinity,
+                          color: scheme.surfaceContainerHighest,
+                          child: item.buildImage(
+                            fit: BoxFit.contain,
+                            height: 220,
                           ),
-                          child: Text(
-                            item.status.toUpperCase(),
-                            style: TextStyle(
-                              color: isAvailable ? Colors.green.shade800 : Colors.orange.shade800,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      Text(
+                        item.category,
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        item.name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineSmall
+                            ?.copyWith(fontWeight: FontWeight.w800),
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 11, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: .10),
+                          border: Border.all(
+                              color: statusColor.withValues(alpha: .25)),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isAvailable
+                                  ? Icons.check_circle_rounded
+                                  : Icons.schedule_rounded,
+                              size: 17,
+                              color: statusColor,
                             ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: Colors.blue.shade200),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.qr_code, size: 14, color: Colors.blue),
-                              const SizedBox(width: 4),
-                              Text(
-                                item.qrCode != null ? 'QR: ${item.qrCode}' : 'ID: ${item.id.toUpperCase()}',
-                                style: const TextStyle(
-                                  color: Colors.blue,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
+                            const SizedBox(width: 6),
+                            Text(
+                              _availabilityLabel,
+                              style: TextStyle(
+                                color: statusColor,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
                               ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Description Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline, color: Theme.of(context).primaryColor),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Equipment Description',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 20),
-                    Text(
-                      item.description,
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: Colors.black87,
+                if (!isAvailable) ...[
+                  RentalNotice(
+                    title: _availabilityLabel,
+                    message:
+                        'You can still browse this item, but a rental request is not available right now.',
+                    icon: Icons.inventory_2_outlined,
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                if (item.description.trim().isNotEmpty)
+                  RentalSection(
+                    title: 'About this equipment',
+                    icon: Icons.info_outline_rounded,
+                    child: Text(
+                      item.description.trim(),
+                      style: TextStyle(
+                        color: scheme.onSurface,
                         height: 1.5,
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Rental Terms Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.receipt_long, color: Theme.of(context).primaryColor),
-                        const SizedBox(width: 8),
-                        const Text(
-                          'Rental Rates & Terms',
+                  ),
+                RentalSection(
+                  title: 'Rental price and terms',
+                  icon: Icons.receipt_long_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      RentalValueRow('Rental rate', rate),
+                      RentalValueRow('Refundable security deposit',
+                          rentalMoney(item.deposit)),
+                      RentalValueRow(
+                        'Late return fee',
+                        '${rentalMoney(item.latePenalty)} per hour overdue',
+                      ),
+                      if (item.category == 'Board Games' ||
+                          item.category == 'Cards')
+                        const RentalValueRow(
+                            'Missing piece fee', '₱50 per lost piece'),
+                      if (item.isForSale && item.salePrice != null)
+                        RentalValueRow('Also available to buy',
+                            rentalMoney(item.salePrice)),
+                      const Divider(height: 24),
+                      Text(
+                        'The exact rental fee and deposit will be confirmed before you send your request.',
+                        style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 13,
+                          height: 1.4,
+                        ),
+                      ),
+                      if (item.isForSale && item.salePrice != null) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          'This flow is for rentals. Ask the operator about buying this item.',
                           style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 13,
+                            height: 1.4,
                           ),
                         ),
                       ],
-                    ),
-                    const Divider(height: 24),
-                    _buildDetailRow('Standard Package Rate', item.rateText),
-                    if (item.specialRate != null)
-                      _buildDetailRow('Special Package Rate', item.specialRate!),
-                    if (item.isForSale && item.salePrice != null)
-                      _buildDetailRow('Option to Buy', '₱${item.salePrice!.toStringAsFixed(0)}'),
-                    _buildDetailRow(
-                      'Required Security Deposit',
-                      '₱${item.deposit.toStringAsFixed(0)}',
-                      highlight: item.deposit >= 300,
-                    ),
-                    _buildDetailRow(
-                      'Late Return Penalty',
-                      '₱${item.latePenalty.toStringAsFixed(0)} / hour overdue',
-                    ),
-                    if (item.category == 'Board Games' || item.category == 'Cards')
-                      _buildDetailRow(
-                        'Missing Parts Penalty',
-                        '₱50 / lost piece',
+                    ],
+                  ),
+                ),
+                RentalSection(
+                  title: 'How renting works',
+                  subtitle: 'Your rental time starts at handoff.',
+                  icon: Icons.route_outlined,
+                  child: Column(
+                    children: const [
+                      _RentalStep(
+                        number: '1',
+                        title: 'Choose your rental options',
+                        message:
+                            'Select the duration, location, and payment method.',
                       ),
-                  ],
+                      _RentalStep(
+                        number: '2',
+                        title: 'Send your request',
+                        message:
+                            'Staff reviews it. If you choose QR payment, they also check your receipt.',
+                      ),
+                      _RentalStep(
+                        number: '3',
+                        title: 'Show your QR and valid ID',
+                        message:
+                            'The rental timer starts after the operator confirms the handoff.',
+                      ),
+                    ],
+                  ),
+                ),
+                const RentalNotice(
+                  title: 'Bring a physical valid ID',
+                  message:
+                      'The operator will check your ID when the equipment is handed over.',
+                  icon: Icons.badge_outlined,
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _RentalStep extends StatelessWidget {
+  const _RentalStep({
+    required this.number,
+    required this.title,
+    required this.message,
+  });
+
+  final String number;
+  final String title;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            CircleAvatar(
+              radius: 14,
+              backgroundColor:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+              child: Text(
+                number,
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
             ),
-
-            const SizedBox(height: 16),
-
-            // Physical Valid ID Notice Banner (Rule 1)
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.blue.shade300),
-              ),
-              child: Row(
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.badge_outlined, color: Colors.blue.shade800, size: 24),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Valid ID required: show one physical ID to the operator when the rented item is handed over at your selected location.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.blue.shade900,
-                        height: 1.4,
-                        fontWeight: FontWeight.w600,
-                      ),
+                  Text(title,
+                      style: const TextStyle(fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(
+                    message,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 13,
+                      height: 1.4,
                     ),
                   ),
                 ],
-              ),
-            ),
-
-            const SizedBox(height: 16),
-
-            // Notice Box
-            Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.amber.shade50,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.amber.shade300),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, color: Colors.amber.shade900, size: 22),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Send a rental request and wait for payment review and approval. The operator prepares the item at the shop, then scans your rental QR when the item reaches your selected location. Your rental timer starts at that handoff.',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.amber.shade900,
-                        height: 1.4,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Orange Primary Button
-            SizedBox(
-              width: double.infinity,
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF57C00), // Primary Orange
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 2,
-                ),
-                onPressed:
-                    isAvailable ? () => _continueToRental(context) : null,
-                child: const Text(
-                  'Continue to Rental',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildDetailRow(String title, String value, {bool highlight = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 6.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontSize: 13, color: Colors.black87),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(
-              value,
-              textAlign: TextAlign.end,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: highlight ? Colors.red.shade700 : Colors.black,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+      );
 }

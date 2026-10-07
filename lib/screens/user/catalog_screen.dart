@@ -6,9 +6,7 @@ import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/rent_play_wordmark.dart';
-import '../../widgets/sign_in_prompt.dart';
 import '../auth/login_screen.dart';
-import '../auth/id_verification_screen.dart';
 import 'item_details_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../../widgets/notification_widgets.dart';
@@ -123,45 +121,10 @@ class _CatalogScreenState extends State<CatalogScreen> {
     });
   }
 
-  void _handleRentalClick(ItemModel item) async {
-    final authService = Provider.of<AuthService>(context, listen: false);
-
-    if (authService.currentUser == null) {
-      await showSignInPrompt(context);
-      return;
-    }
-
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-
-    UserModel? userModel;
-    try {
-      userModel = await authService.getCurrentUserModel();
-    } catch (error) {
-      if (mounted) messenger.showSnackBar(SnackBar(content: Text('$error')));
-      return;
-    }
-    if (!mounted) return;
-
-    if (userModel == null || !userModel.hasAcceptedTerms) {
-      messenger.showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Please review rental policies and accept terms before renting.'),
-        ),
-      );
-      navigator.push(
-        MaterialPageRoute(
-          builder: (_) => IdVerificationScreen(userModel: userModel),
-        ),
-      );
-      return;
-    }
-
-    navigator.push(
-      MaterialPageRoute(
-        builder: (_) => ItemDetailsScreen(item: item),
-      ),
+  void _openItemDetails(ItemModel item) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: item)),
     );
   }
 
@@ -170,8 +133,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAdmin = ['ADMIN', 'OWNER']
-        .contains(_currentUserModel?.role.toUpperCase());
+    final isAdmin =
+        ['ADMIN', 'OWNER'].contains(_currentUserModel?.role.toUpperCase());
 
     return Scaffold(
       appBar: AppBar(
@@ -398,7 +361,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
                     const SizedBox(width: 8),
                     FilterChip(
                       selected: _savedOnly,
-                      avatar: const Icon(Icons.favorite_border_rounded, size: 17),
+                      avatar:
+                          const Icon(Icons.favorite_border_rounded, size: 17),
                       label: Text('Saved (${_savedItemIds.length})'),
                       onSelected: (selected) =>
                           setState(() => _savedOnly = selected),
@@ -419,8 +383,9 @@ class _CatalogScreenState extends State<CatalogScreen> {
                             Icon(
                               Icons.toys_outlined,
                               size: 42,
-                              color:
-                                  Theme.of(context).colorScheme.onSurfaceVariant,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                             ),
                             const SizedBox(height: 10),
                             Text(
@@ -436,7 +401,20 @@ class _CatalogScreenState extends State<CatalogScreen> {
                                   .titleSmall
                                   ?.copyWith(fontWeight: FontWeight.w600),
                             ),
-                            if (!_catalogLoading &&
+                            if (_catalogError.isNotEmpty &&
+                                !_catalogLoading) ...[
+                              const SizedBox(height: 6),
+                              const Text(
+                                'We could not load equipment right now. Please try again later.',
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              FilledButton.icon(
+                                onPressed: _loadCatalog,
+                                icon: const Icon(Icons.refresh_rounded),
+                                label: const Text('Try again'),
+                              ),
+                            ] else if (!_catalogLoading &&
                                 (_searchQuery.isNotEmpty ||
                                     selectedCategory != 'All' ||
                                     _availableOnly ||
@@ -481,7 +459,6 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   Widget _buildItemCard(ItemModel item) {
-    final isAvailable = item.status.toLowerCase() == 'available';
     final isSaved = _savedItemIds.contains(item.id);
 
     final statusKey = item.status.toUpperCase();
@@ -511,140 +488,138 @@ class _CatalogScreenState extends State<CatalogScreen> {
         ),
       ),
       child: InkWell(
-        onTap: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: item)),
-        ),
+        onTap: () => _openItemDetails(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-          Stack(
-            children: [
-              Container(
-                height: 120,
-                width: double.infinity,
-                color: isDark ? AppTheme.darkSurfaceVariant : const Color(0xFFF3F5F7),
-                child: item.buildImage(fit: BoxFit.contain, height: 120),
-              ),
-              Positioned(
-                top: 10,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: .92),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .2,
-                    ),
-                  ),
+            Stack(
+              children: [
+                Container(
+                  height: 120,
+                  width: double.infinity,
+                  color: isDark
+                      ? AppTheme.darkSurfaceVariant
+                      : const Color(0xFFF3F5F7),
+                  child: item.buildImage(fit: BoxFit.contain, height: 120),
                 ),
-              ),
-              Positioned(
-                top: 4,
-                left: 4,
-                child: Material(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .surface
-                      .withValues(alpha: .94),
-                  shape: const CircleBorder(),
-                  child: IconButton(
-                    tooltip: isSaved ? 'Remove from saved' : 'Save item',
-                    visualDensity: VisualDensity.compact,
-                    onPressed: () => setState(() {
-                      if (isSaved) {
-                        _savedItemIds.remove(item.id);
-                      } else {
-                        _savedItemIds.add(item.id);
-                      }
-                    }),
-                    icon: Icon(
-                      isSaved
-                          ? Icons.favorite_rounded
-                          : Icons.favorite_border_rounded,
-                      color: isSaved
-                          ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context).colorScheme.onSurfaceVariant,
-                      size: 20,
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: statusColor.withValues(alpha: .92),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    item.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                      height: 1.15,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    item.category,
-                    style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const Spacer(),
-                  Tooltip(
-                    message: item.rateText,
                     child: Text(
-                      item.rateText,
+                      statusLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .2,
+                      ),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 4,
+                  left: 4,
+                  child: Material(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surface
+                        .withValues(alpha: .94),
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      tooltip: isSaved ? 'Remove from saved' : 'Save item',
+                      visualDensity: VisualDensity.compact,
+                      onPressed: () => setState(() {
+                        if (isSaved) {
+                          _savedItemIds.remove(item.id);
+                        } else {
+                          _savedItemIds.add(item.id);
+                        }
+                      }),
+                      icon: Icon(
+                        isSaved
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        color: isSaved
+                            ? Theme.of(context).colorScheme.primary
+                            : Theme.of(context).colorScheme.onSurfaceVariant,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.name,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.primary,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
                         height: 1.15,
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 40,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isAvailable
-                            ? AppTheme.brandOrangeLight
-                            : Theme.of(context).disabledColor,
-                        foregroundColor: Colors.white,
-                        padding: EdgeInsets.zero,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                      onPressed:
-                          isAvailable ? () => _handleRentalClick(item) : null,
-                      child: Text(
-                        item.isForSale ? 'Rent / Buy' : 'Rent Now',
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                    const SizedBox(height: 5),
+                    Text(
+                      item.category,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 12,
                       ),
                     ),
-                  ),
-                ],
+                    const Spacer(),
+                    Tooltip(
+                      message: item.rateText,
+                      child: Text(
+                        item.rateText,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          height: 1.15,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 40,
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.brandOrangeLight,
+                          foregroundColor: Colors.white,
+                          padding: EdgeInsets.zero,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        onPressed: () => _openItemDetails(item),
+                        child: Text(
+                          'View details',
+                          style: const TextStyle(
+                              fontSize: 13, fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           ],
         ),
       ),

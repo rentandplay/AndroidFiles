@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import '../../models/item_model.dart';
 import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
@@ -23,7 +24,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
   List<RentalModel>? _rentals;
   Timer? _poll;
   bool _refreshing = false;
-  String _error = '', _filter = 'All';
+  String _error = '';
   final _cancelling = <String>{};
   final _uploadingProof = <String>{};
   @override
@@ -56,25 +57,6 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
       _refreshing = false;
     }
   }
-
-  bool _matches(RentalModel rental) => switch (_filter) {
-        'Review' => rental.isPendingAdminReview,
-        'Pickup' => rental.isAwaitingPickup,
-        'In use' => rental.isActive,
-        'Inspection' => rental.isAwaitingInspection,
-        _ => true,
-      };
-
-  int _countForFilter(String filter, List<RentalModel> rentals) =>
-      filter == 'All' ? rentals.length : rentals.where((rental) {
-        return switch (filter) {
-          'Review' => rental.isPendingAdminReview,
-          'Pickup' => rental.isAwaitingPickup,
-          'In use' => rental.isActive,
-          'Inspection' => rental.isAwaitingInspection,
-          _ => false,
-        };
-      }).length;
 
   void _openBrowse() {
     widget.onBrowse?.call();
@@ -156,7 +138,6 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
     final user = context.watch<AuthService>().currentUser;
     final open = (_rentals ?? []).where((rental) => rental.isOpen).toList()
       ..sort((a, b) => b.startDate.compareTo(a.startDate));
-    final visible = open.where(_matches).toList();
     return Scaffold(
       appBar: AppBar(title: const Text('My Rentals'), actions: [
         IconButton(
@@ -201,58 +182,23 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
                           const SizedBox(height: 16),
                         ],
                         if (open.isNotEmpty) ...[
-                          Text(
-                              '${open.length} open rental${open.length == 1 ? '' : 's'}',
-                              style: const TextStyle(
-                                  fontSize: 20, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          Text(
-                              'Follow payment review, delivery and return in one place.',
-                              style: TextStyle(
-                                  color: Theme.of(context)
-                                      .colorScheme
-                                      .onSurfaceVariant)),
-                          const SizedBox(height: 14),
-                          Wrap(spacing: 6, runSpacing: 6, children: [
-                            for (final label in [
-                              'All',
-                              'Review',
-                              'Pickup',
-                              'In use',
-                              'Inspection'
-                            ])
-                              ChoiceChip(
-                                  label: Text(
-                                      '$label (${_countForFilter(label, open)})'),
-                                  selected: label == _filter,
-                                  onSelected: (_) =>
-                                      setState(() => _filter = label)),
-                          ]),
-                          const SizedBox(height: 16),
+                          _RentalListHeader(count: open.length),
+                          const SizedBox(height: 8),
                         ],
-                        if (visible.isEmpty && _rentals != null)
+                        if (open.isEmpty && _rentals != null)
                           RentalEmptyState(
-                            title: open.isEmpty
-                                ? 'No open rentals yet'
-                                : 'Nothing in this stage',
-                            message: open.isEmpty
-                                ? 'Choose equipment from the catalog to send a rental request.'
-                                : 'Try another filter to see your other rentals.',
-                            action: open.isNotEmpty
-                                ? TextButton(
-                                    onPressed: () =>
-                                        setState(() => _filter = 'All'),
-                                    child: const Text('Show all rentals'))
-                                : widget.onBrowse == null
-                                    ? null
-                                    : FilledButton.icon(
-                                        onPressed: _openBrowse,
-                                        icon: const Icon(
-                                            Icons.storefront_outlined),
-                                        label: const Text('Browse equipment'),
-                                      ),
+                            title: 'No rentals in progress',
+                            message:
+                                'Your rental requests and equipment in use will appear here.',
+                            action: widget.onBrowse == null
+                                ? null
+                                : FilledButton.icon(
+                                    onPressed: _openBrowse,
+                                    icon: const Icon(Icons.storefront_outlined),
+                                    label: const Text('Browse equipment'),
+                                  ),
                           ),
-                        for (final rental in visible)
+                        for (final rental in open)
                           RentalBookingCard(
                             rental: rental,
                             onTicket: () =>
@@ -290,10 +236,24 @@ class RentalBookingCard extends StatelessWidget {
       this.onUploadPaymentProof,
       this.onRefresh});
   final RentalModel rental;
-  final VoidCallback? onTicket, onCancel, onReturn, onRefresh,
+  final VoidCallback? onTicket,
+      onCancel,
+      onReturn,
+      onRefresh,
       onUploadPaymentProof;
   String _date(DateTime value) =>
       DateFormat('MMM d · h:mm a').format(value.toLocal());
+
+  int _progressStep() {
+    if (rental.isAwaitingInspection) return 3;
+    if (rental.isActive || rental.hasPendingReturnRequest) return 2;
+    if (rental.isPendingVerification) {
+      return rental.normalizedStatus.contains('RETURN') ? 2 : 1;
+    }
+    if (rental.isAwaitingPickup) return 1;
+    return 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
@@ -307,132 +267,525 @@ class RentalBookingCard extends StatelessWidget {
     final time = minutes >= 60
         ? '${minutes ~/ 60}h ${minutes % 60}m'
         : '${minutes < 1 ? 1 : minutes}m';
-    final (heading, message) = holdEnded
+    final paymentRejected = rental.paymentMethod.toUpperCase() == 'QR' &&
+        rental.paymentProofStatus == 'REJECTED';
+    final paymentUnderReview = rental.paymentMethod.toUpperCase() == 'QR' &&
+        rental.paymentProofStatus == 'PENDING_REVIEW';
+    final (heading, message) = paymentRejected
         ? (
-            'Hold ended',
-            'Refresh to check the latest status before sending another rental request.'
+            'Payment needs an update',
+            rental.paymentProofNote.isEmpty
+                ? 'The owner could not verify this screenshot. Upload a clear screenshot of the successful transfer.'
+                : rental.paymentProofNote
           )
-        : rental.isPendingAdminReview
+        : holdEnded
             ? (
-                'Waiting for admin approval',
-                'Your rental request is being reviewed. The rental clock has not started.'
+                'Hold ended',
+                'Refresh to check the latest status of this request.'
               )
-            : rental.isAwaitingPickup
+            : rental.isPendingAdminReview
                 ? (
-                    rental.deliveryStatus == 'PREPARED'
-                        ? 'Ready for delivery'
-                        : 'Rental request approved',
-                    rental.deliveryStatus == 'PREPARED'
-                        ? 'The operator is preparing delivery to ${rental.deliveryLocation}. Show your rental QR and valid ID at handoff.'
-                        : 'The operator is checking the assigned unit before delivery to ${rental.deliveryLocation}. The rental clock has not started.'
+                    'Waiting for owner review',
+                    paymentUnderReview
+                        ? 'Your payment screenshot is being checked. We’ll update this tracker when the review is complete.'
+                        : 'Your request is being reviewed. The rental timer starts at handoff.'
                   )
-                : rental.isAwaitingInspection
+                : rental.isAwaitingPickup
                     ? (
-                        'Equipment received',
-                        'Your rental clock has stopped. The admin is checking condition and final charges.'
+                        rental.deliveryStatus == 'PREPARED'
+                            ? 'Ready for handoff'
+                            : 'Approved · preparing handoff',
+                        rental.deliveryStatus == 'PREPARED'
+                            ? 'Go to ${rental.deliveryLocation} and show your rental QR and a valid ID.'
+                            : 'The operator is preparing your item for ${rental.deliveryLocation}. Your rental timer has not started.'
                       )
-                    : rental.hasPendingReturnRequest
+                    : rental.isActive && rental.hasPendingReturnRequest
                         ? (
-                            'Bring the item back to the admin',
-                            'Your return request is sent. The clock stops when the admin records physical receipt.'
+                            overdue
+                                ? 'Return request sent · overdue'
+                                : 'Return request sent',
+                            'Bring the equipment to the admin. Your rental timer stops when they receive it.'
                           )
-                        : rental.isActive
-                            ? (
-                                overdue
-                                    ? 'Overdue by $time'
-                                    : hasDueDate
-                                        ? '$time remaining'
-                                        : 'Return time not recorded',
-                                'Return the equipment to the admin before your due time.'
-                              )
-                            : (
-                                'Awaiting confirmation',
-                                'Ask the admin to confirm the current status of this rental.'
-                              );
+                        : rental.isPendingVerification
+                            ? rental.normalizedStatus.contains('RETURN')
+                                ? (
+                                    'Return awaiting confirmation',
+                                    'Bring the equipment to the admin. The timer stops when they record receipt.'
+                                  )
+                                : (
+                                    'Handoff awaiting confirmation',
+                                    'The rental timer starts after the operator confirms the handoff.'
+                                  )
+                            : rental.isAwaitingInspection
+                                ? (
+                                    'Returned · inspection in progress',
+                                    'The admin is checking the equipment and final charges. No action is needed right now.'
+                                  )
+                                : rental.isActive
+                                    ? (
+                                        overdue
+                                            ? 'Overdue by $time'
+                                            : hasDueDate
+                                                ? '$time remaining'
+                                                : 'Return time not recorded',
+                                        'Return the equipment to the admin before your due time.'
+                                      )
+                                    : (
+                                        'Waiting for an update',
+                                        'Pull down to refresh if you are waiting at the pickup location.'
+                                      );
+    final nextIcon = holdEnded || overdue
+        ? Icons.schedule_rounded
+        : rental.isPendingAdminReview || paymentRejected
+            ? Icons.hourglass_top_rounded
+            : rental.isAwaitingPickup
+                ? Icons.qr_code_rounded
+                : rental.isAwaitingInspection
+                    ? Icons.fact_check_outlined
+                    : rental.isActive
+                        ? Icons.assignment_return_outlined
+                        : Icons.sync_rounded;
+    final alertColor = holdEnded || overdue || paymentRejected
+        ? Theme.of(context).colorScheme.error
+        : Theme.of(context).colorScheme.primary;
     return RentalSection(
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      Text(rental.itemName,
-          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 5),
-      Text(rental.rentalCode.isEmpty ? rental.rentalId : rental.rentalCode,
-          style: TextStyle(
-              fontSize: 12,
-              color: Theme.of(context).colorScheme.onSurfaceVariant)),
-      const SizedBox(height: 10),
-      Align(
-          alignment: Alignment.centerLeft,
-          child: RentalStatusBadge(status: rental.normalizedStatus)),
-      const SizedBox(height: 14),
-      RentalNotice(
-          title: heading,
-          message: message,
-          isError: holdEnded || overdue,
-          icon: overdue
-              ? Icons.schedule
-              : rental.isAwaitingInspection
-                  ? Icons.task_alt
-                  : Icons.info_outline),
-      const SizedBox(height: 12),
-      RentalValueRow('Pickup / resort', rental.deliveryLocation),
-      if (rental.paymentMethod.toUpperCase() == 'QR' &&
-          rental.paymentProofStatus == 'PENDING_REVIEW')
-        const RentalNotice(
-            title: 'Payment screenshot under review',
-            message:
-                'The owner will verify the InstaPay transfer before approving your rental request.'),
-      if (rental.paymentMethod.toUpperCase() == 'QR' &&
-          rental.paymentProofStatus == 'REJECTED')
-        RentalNotice(
-            title: 'Upload a corrected payment screenshot',
-            message: rental.paymentProofNote.isEmpty
-                ? 'The owner could not verify the transfer. Upload a clear screenshot of the successful payment.'
-                : rental.paymentProofNote,
-            isError: true),
-      if (rental.holdExpiresAt != null && rental.canCancel)
-        RentalValueRow(
-            rental.isPendingAdminReview ? 'Review hold ends' : 'Handoff before',
-            _date(rental.holdExpiresAt!)),
-      if (rental.isActive)
-        RentalValueRow(
-            'Return by', hasDueDate ? _date(rental.dueDate) : 'Ask the admin'),
-      if (rental.receivedAt != null)
-        RentalValueRow('Received', _date(rental.receivedAt!)),
-      RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
-      RentalValueRow('Security deposit', rentalMoney(rental.deposit)),
-      if (rental.balanceDue > 0 && !rental.canCancel)
-        RentalValueRow('Balance due', rentalMoney(rental.balanceDue)),
-      if (rental.refundDue > 0)
-        RentalValueRow('Refund due', rentalMoney(rental.refundDue)),
-      if (rental.isAwaitingPickup) ...[
-        const SizedBox(height: 14),
-        FilledButton.icon(
-            onPressed: onTicket,
-            icon: const Icon(Icons.qr_code),
-            label: const Text('Show rental handoff QR')),
-      ],
-      if (rental.paymentMethod.toUpperCase() == 'QR' &&
-          rental.paymentProofStatus == 'REJECTED')
-        OutlinedButton.icon(
-            onPressed: onUploadPaymentProof,
-            icon: const Icon(Icons.upload_file),
-            label: const Text('Upload new payment screenshot')),
-      if (rental.canCancel) ...[
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _RentalItemThumbnail(rental: rental),
+        const SizedBox(width: 12),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(rental.itemName,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 4),
+            Text(
+                rental.rentalCode.isEmpty ? rental.rentalId : rental.rentalCode,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant)),
+            const SizedBox(height: 8),
+            RentalStatusBadge(
+                status: rental.hasPendingReturnRequest
+                    ? 'RETURN_REQUESTED'
+                    : rental.normalizedStatus),
+          ]),
+        ),
+      ]),
+      const SizedBox(height: 18),
+      _RentalProgressTracker(step: _progressStep()),
+      const SizedBox(height: 18),
+      _RentalNextStep(
+          title: heading, message: message, icon: nextIcon, color: alertColor),
+      if (holdEnded ||
+          paymentRejected ||
+          rental.isAwaitingPickup ||
+          (rental.isActive && !rental.hasPendingReturnRequest)) ...[
         const SizedBox(height: 14),
         if (holdEnded)
           OutlinedButton.icon(
               onPressed: onRefresh,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Refresh rental request')),
-        TextButton(onPressed: onCancel, child: const Text('Cancel request')),
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text('Refresh status'))
+        else if (paymentRejected)
+          FilledButton.icon(
+              onPressed: onUploadPaymentProof,
+              icon: const Icon(Icons.upload_file_rounded),
+              label: const Text('Upload receipt'))
+        else if (rental.isAwaitingPickup)
+          FilledButton.icon(
+              onPressed: onTicket,
+              icon: const Icon(Icons.qr_code_rounded),
+              label: const Text('Show handoff QR'))
+        else
+          FilledButton.icon(
+              onPressed: onReturn,
+              icon: const Icon(Icons.assignment_return_rounded),
+              label: const Text('Start return')),
       ],
-      if (rental.isActive && !rental.hasPendingReturnRequest) ...[
-        const SizedBox(height: 14),
-        OutlinedButton.icon(
-            onPressed: onReturn,
-            icon: const Icon(Icons.assignment_return_outlined),
-            label: const Text('Request return')),
-      ],
+      if (rental.canCancel)
+        Align(
+            alignment: Alignment.center,
+            child: TextButton(
+                onPressed: onCancel, child: const Text('Cancel request'))),
+      const SizedBox(height: 8),
+      if (rental.isAwaitingPickup || rental.isPendingAdminReview)
+        _RentalDetailLine(
+            icon: Icons.place_outlined,
+            label: 'Pickup location',
+            value: rental.deliveryLocation),
+      if (rental.holdExpiresAt != null && rental.canCancel)
+        _RentalDetailLine(
+            icon: Icons.schedule_outlined,
+            label: rental.isPendingAdminReview
+                ? 'Review hold ends'
+                : 'Handoff before',
+            value: _date(rental.holdExpiresAt!)),
+      if (rental.isActive)
+        _RentalDetailLine(
+            icon: Icons.schedule_outlined,
+            label: 'Return by',
+            value: hasDueDate ? _date(rental.dueDate) : 'Ask the admin',
+            isUrgent: overdue),
+      if (rental.receivedAt != null)
+        _RentalDetailLine(
+            icon: Icons.check_circle_outline_rounded,
+            label: 'Received',
+            value: _date(rental.receivedAt!)),
+      const SizedBox(height: 8),
+      _RentalPriceSummary(rental: rental),
     ]));
   }
+}
+
+class _RentalItemThumbnail extends StatelessWidget {
+  const _RentalItemThumbnail({required this.rental});
+  final RentalModel rental;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final localItem = ItemModel.findByCode(rental.itemId) ??
+        ItemModel.findByCode(rental.itemName);
+
+    Widget fallback() =>
+        localItem?.buildImage(
+          fit: BoxFit.cover,
+          width: 72,
+          height: 72,
+        ) ??
+        Container(
+          width: 72,
+          height: 72,
+          color: scheme.surfaceContainerHighest,
+          child: Icon(Icons.sports_volleyball_outlined,
+              color: scheme.onSurfaceVariant, size: 30),
+        );
+
+    final url = rental.itemImageUrl?.trim() ?? '';
+    Widget image = fallback();
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      image = Image.network(
+        url,
+        width: 72,
+        height: 72,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, progress) =>
+            progress == null ? child : fallback(),
+        errorBuilder: (context, error, stackTrace) => fallback(),
+      );
+    } else if (url.startsWith('assets/')) {
+      image = Image.asset(
+        url,
+        width: 72,
+        height: 72,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => fallback(),
+      );
+    }
+
+    return Semantics(
+      image: true,
+      label: rental.itemName,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: SizedBox(width: 72, height: 72, child: image),
+      ),
+    );
+  }
+}
+
+class _RentalDetailLine extends StatelessWidget {
+  const _RentalDetailLine({
+    required this.icon,
+    required this.label,
+    required this.value,
+    this.isUrgent = false,
+  });
+  final IconData icon;
+  final String label, value;
+  final bool isUrgent;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final color = isUrgent ? scheme.error : scheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 9),
+        Expanded(
+          child: Text(label,
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+        ),
+        const SizedBox(width: 12),
+        Flexible(
+          child: Text(value,
+              textAlign: TextAlign.end,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: isUrgent ? scheme.error : scheme.onSurface)),
+        ),
+      ]),
+    );
+  }
+}
+
+class _RentalPriceSummary extends StatelessWidget {
+  const _RentalPriceSummary({required this.rental});
+  final RentalModel rental;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget amount(String label, String value) => Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 11, color: scheme.onSurfaceVariant)),
+            const SizedBox(height: 2),
+            Text(value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style:
+                    const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+          ]),
+        );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest.withValues(alpha: .45),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(children: [
+        Row(children: [
+          amount('Rental fee', rentalMoney(rental.rateFee)),
+          const SizedBox(width: 12),
+          amount('Security deposit', rentalMoney(rental.deposit)),
+        ]),
+        if (rental.balanceDue > 0 && !rental.canCancel) ...[
+          const SizedBox(height: 10),
+          _RentalDetailLine(
+              icon: Icons.payments_outlined,
+              label: 'Balance due',
+              value: rentalMoney(rental.balanceDue)),
+        ],
+        if (rental.refundDue > 0) ...[
+          const SizedBox(height: 10),
+          _RentalDetailLine(
+              icon: Icons.account_balance_wallet_outlined,
+              label: 'Refund due',
+              value: rentalMoney(rental.refundDue)),
+        ],
+      ]),
+    );
+  }
+}
+
+class _RentalListHeader extends StatelessWidget {
+  const _RentalListHeader({required this.count});
+  final int count;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(children: [
+        Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: scheme.primary.withValues(alpha: .1),
+            borderRadius: BorderRadius.circular(14),
+          ),
+          child: Icon(Icons.local_activity_outlined, color: scheme.primary),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('$count rental${count == 1 ? '' : 's'} in progress',
+                style:
+                    const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 2),
+            Text('Track each rental from request to return',
+                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _RentalNextStep extends StatelessWidget {
+  const _RentalNextStep({
+    required this.title,
+    required this.message,
+    required this.icon,
+    required this.color,
+  });
+  final String title, message;
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .07),
+        border: Border.all(color: color.withValues(alpha: .2)),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: color, size: 21),
+        const SizedBox(width: 10),
+        Expanded(
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('UP NEXT',
+                style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    letterSpacing: .7,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 3),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 15, fontWeight: FontWeight.w700, height: 1.25)),
+            const SizedBox(height: 3),
+            Text(message,
+                style: TextStyle(
+                    color: scheme.onSurface, fontSize: 13, height: 1.4)),
+          ]),
+        ),
+      ]),
+    );
+  }
+}
+
+class _RentalProgressTracker extends StatelessWidget {
+  const _RentalProgressTracker({required this.step});
+  final int step;
+  static const _labels = ['Request', 'Handoff', 'In use', 'Return'];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final active = scheme.primary;
+    final track = scheme.outline.withValues(alpha: .45);
+    return Semantics(
+      label: 'Rental progress: ${_labels[step]} stage',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        SizedBox(
+          height: 18,
+          child: CustomPaint(
+            painter: _RentalProgressPainter(
+                step: step,
+                active: active,
+                track: track,
+                surface: scheme.surface),
+          ),
+        ),
+        const SizedBox(height: 5),
+        Row(children: [
+          for (var index = 0; index < _labels.length; index++)
+            Expanded(
+              child: Text(_labels[index],
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  style: TextStyle(
+                    color: index <= step ? active : scheme.onSurfaceVariant,
+                    fontSize: 11,
+                    fontWeight:
+                        index == step ? FontWeight.w800 : FontWeight.w500,
+                  )),
+            ),
+        ]),
+      ]),
+    );
+  }
+}
+
+class _RentalProgressPainter extends CustomPainter {
+  const _RentalProgressPainter(
+      {required this.step,
+      required this.active,
+      required this.track,
+      required this.surface});
+  final int step;
+  final Color active, track, surface;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const radius = 5.5;
+    final centerY = size.height / 2;
+    final startX = radius;
+    final endX = size.width - radius;
+    final spacing = (endX - startX) / 3;
+    final basePaint = Paint()
+      ..color = track
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    final activePaint = Paint()
+      ..color = active
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(Offset(startX, centerY), Offset(endX, centerY), basePaint);
+    if (step > 0) {
+      canvas.drawLine(Offset(startX, centerY),
+          Offset(startX + spacing * step, centerY), activePaint);
+    }
+    for (var index = 0; index < 4; index++) {
+      final center = Offset(startX + spacing * index, centerY);
+      if (index == step) {
+        canvas.drawCircle(
+            center,
+            8,
+            Paint()
+              ..color = active.withValues(alpha: .16)
+              ..style = PaintingStyle.fill);
+        canvas.drawCircle(
+            center,
+            radius,
+            Paint()
+              ..color = active
+              ..style = PaintingStyle.fill);
+      } else {
+        canvas.drawCircle(
+            center,
+            radius,
+            Paint()
+              ..color = index < step ? active : surface
+              ..style = PaintingStyle.fill);
+        canvas.drawCircle(
+            center,
+            radius,
+            Paint()
+              ..color = index < step ? active : track
+              ..strokeWidth = 2
+              ..style = PaintingStyle.stroke);
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RentalProgressPainter oldDelegate) =>
+      oldDelegate.step != step ||
+      oldDelegate.active != active ||
+      oldDelegate.track != track ||
+      oldDelegate.surface != surface;
 }

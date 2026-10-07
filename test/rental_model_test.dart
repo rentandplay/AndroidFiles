@@ -6,12 +6,14 @@ void main() {
   test('approved booking is cancellable and awaits pickup', () {
     final rental = RentalModel.fromMap({
       'id': 'booking', 'status': 'APPROVED', 'rental_code': 'R-1',
+      'item_image_url': 'https://example.test/volleyball.png',
       'created_at': '2026-10-06T02:00:00Z',
       'hold_expires_at': '2026-10-06T02:30:00Z',
     });
     expect(rental.isAwaitingPickup, isTrue);
     expect(rental.canCancel, isTrue);
     expect(rental.isActive, isFalse);
+    expect(rental.itemImageUrl, 'https://example.test/volleyball.png');
     expect(rental.holdExpiresAt!.toUtc(), DateTime.utc(2026, 10, 6, 2, 30));
   });
   test('physical receipt and legacy Manila timestamps survive model copies and storage', () {

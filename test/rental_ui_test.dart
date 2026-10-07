@@ -114,7 +114,8 @@ class UiApi extends MobileApiService {
     return {
       'rental': {'id': 'r1'},
       'booking_verified': true,
-      'inventory_verified': body?['inventoryCode'] != null,
+      'inventory_verified': true,
+      'delivery_prepared': true,
       'item': {'name': 'Jenga', 'item_code': 'RENT-001'}
     };
   }
@@ -220,14 +221,14 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Send booking request'))
+                find.widgetWithText(FilledButton, 'Send rental request'))
             .onPressed,
         isNull);
     expect(find.text('₱0.00'), findsNothing);
     api.pendingQuote!.complete(
         {'rental_fee': 150, 'deposit_amount': 100, 'billed_minutes': 300});
     await tester.pumpAndSettle();
-    final button = find.widgetWithText(FilledButton, 'Send booking request');
+    final button = find.widgetWithText(FilledButton, 'Send rental request');
     expect(tester.getBottomRight(button).dy, lessThanOrEqualTo(780));
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
     await save(tester, capture, 'android-checkout');
@@ -238,7 +239,7 @@ void main() {
   });
 
   testWidgets(
-      'release verifies the booking before equipment and refuses a mismatched unit',
+      'release verifies the prepared rental before confirming handoff',
       (tester) async {
     final api = UiApi(), capture = GlobalKey();
     await render(
@@ -263,31 +264,22 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Equipment inventory QR'), findsNothing);
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Customer transaction QR'),
+        find.widgetWithText(TextFormField, 'Customer rental QR'),
         'wrong-booking');
-    await tester.tap(find.widgetWithText(FilledButton, 'Verify booking'));
+    await tester.tap(
+        find.widgetWithText(FilledButton, 'Verify customer rental'));
     await tester.pumpAndSettle();
     expect(find.text('This QR belongs to another booking.'), findsOneWidget);
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Customer transaction QR'),
+        find.widgetWithText(TextFormField, 'Customer rental QR'),
         'booking-qr');
-    await tester.tap(find.widgetWithText(FilledButton, 'Verify booking'));
+    await tester.tap(
+        find.widgetWithText(FilledButton, 'Verify customer rental'));
     await tester.pumpAndSettle();
-    expect(find.text('Equipment inventory QR'), findsOneWidget);
-    expect(find.text('Rental payment received and verified'), findsNothing);
-    await save(tester, capture, 'android-admin-scan');
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Equipment inventory QR'),
-        'wrong-unit');
-    await tester.tap(find.widgetWithText(FilledButton, 'Verify equipment'));
-    await tester.pumpAndSettle();
-    expect(find.text('Scan the assigned unit RENT-001.'), findsOneWidget);
-    await tester.enterText(
-        find.widgetWithText(TextFormField, 'Equipment inventory QR'),
-        'unit-qr');
-    await tester.tap(find.widgetWithText(FilledButton, 'Verify equipment'));
-    await tester.pumpAndSettle();
+    expect(find.text('Rental and prepared unit verified'), findsOneWidget);
     expect(find.text('Confirm the handoff'), findsOneWidget);
+    expect(find.text('Rental payment received and verified'), findsOneWidget);
+    await save(tester, capture, 'android-admin-scan');
     expect(
         api.requests.every((request) =>
             request['path'].toString().endsWith('/release-verification')),
@@ -346,7 +338,7 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Send booking request'))
+                find.widgetWithText(FilledButton, 'Send rental request'))
             .onPressed,
         isNull);
     expect(find.text('₱0.00'), findsNothing);
@@ -357,7 +349,7 @@ void main() {
     expect(
         tester
             .widget<FilledButton>(
-                find.widgetWithText(FilledButton, 'Send booking request'))
+                find.widgetWithText(FilledButton, 'Send rental request'))
             .onPressed,
         isNotNull);
     expect(tester.takeException(), isNull);
@@ -433,7 +425,7 @@ void main() {
     expect(inbox.unreadCount, 0);
     await tester.tap(find.text('Booking rejected'));
     await tester.pumpAndSettle();
-    expect(find.text('Booking details'), findsOneWidget);
+    expect(find.text('Rental details'), findsOneWidget);
     expect(find.text('ASRI Hotspring Resort'), findsOneWidget);
     expect(api.requests.where((row) => row['rental_id'] == 'r-rejected').length,
         1);

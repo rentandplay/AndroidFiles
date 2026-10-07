@@ -180,37 +180,6 @@ class HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(18, 0, 18, 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: widget.onBrowse,
-                            icon: const Icon(Icons.storefront_outlined),
-                            label: const Text('Browse gear'),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: widget.onViewRentals,
-                            icon: const Icon(Icons.shopping_bag_outlined),
-                            label: const Text('My rentals'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (user != null &&
-                      _rentalError.isEmpty &&
-                      activeRentals.isNotEmpty)
-                    _buildRentalListSection(
-                      context,
-                      title: 'Active rentals',
-                      subtitle: 'Equipment currently in your care.',
-                      rentals: activeRentals,
-                    ),
                   _buildCarousel(context),
                   if (_featuredItems.length > 1) ...[
                     const SizedBox(height: 12),
@@ -233,6 +202,16 @@ class HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  if (user != null &&
+                      _rentalError.isEmpty &&
+                      activeRentals.isNotEmpty)
+                    _buildRentalListSection(
+                      context,
+                      title: 'Active rentals',
+                      subtitle: 'Equipment currently in your care.',
+                      rentals: activeRentals,
+                    ),
                   if (user == null)
                     _buildSignInCard(context)
                   else if (_rentalError.isNotEmpty)

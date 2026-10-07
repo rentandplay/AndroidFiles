@@ -52,11 +52,28 @@ class _RentalNotificationHostState extends State<RentalNotificationHost>
     _opens?.cancel();
     _service = service;
     _arrivals = service.arrivals.listen((row) {
-      rentalMessengerKey.currentState?.showSnackBar(SnackBar(
-          content: Text('${row.title}\n${row.message}'),
-          duration: const Duration(seconds: 6),
-          action:
-              SnackBarAction(label: 'View', onPressed: () => _open(row.id))));
+      final messenger = rentalMessengerKey.currentState;
+      if (messenger == null) return;
+      messenger
+        ..removeCurrentSnackBar()
+        ..clearSnackBars()
+        ..showSnackBar(SnackBar(
+          content: Row(children: [
+            const Icon(Icons.notifications_active_outlined,
+                color: Color(0xFFF0AD7C), size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                  row.title.trim().isEmpty ? 'Rental update' : row.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ]),
+          duration: const Duration(seconds: 4),
+          behavior: SnackBarBehavior.floating,
+          dismissDirection: DismissDirection.horizontal,
+          action: SnackBarAction(label: 'View', onPressed: () => _open(row.id)),
+        ));
     });
     _opens = service.opens.listen(_open);
   }

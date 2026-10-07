@@ -4,13 +4,15 @@ import 'package:flutter/material.dart';
 
 import '../../services/admin_firestore_service.dart';
 import '../../widgets/notification_widgets.dart';
+import 'equipment_list_screen.dart';
 import 'rental_admin_view.dart';
 
 /// Lightweight staff counter for the Android app.
 ///
-/// Detailed inventory, customer, rate, report, and account administration
-/// lives in the web workspace. This screen keeps the mobile tools needed at
-/// the counter: review rentals, scan QR codes, hand off equipment, and process
+/// Inventory browsing and label printing are available on mobile. Detailed
+/// inventory editing, customer, rate, report, and account administration lives
+/// in the web workspace. This screen keeps the mobile tools needed at the
+/// counter: review rentals, scan QR codes, hand off equipment, and process
 /// returns.
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({
@@ -234,6 +236,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
     if (_selectedIndex == 1) return _buildTransactionPage(returns: false);
     if (_selectedIndex == 3) return _buildTransactionPage(returns: true);
+    if (_selectedIndex == 4) {
+      return EquipmentListScreen(
+        items: _rows(_workspace['items']),
+        onRefresh: _refresh,
+      );
+    }
     return _buildHomePage(user, isDark);
   }
 
@@ -431,7 +439,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           ),
           const SizedBox(height: 12),
           Text(
-            'For inventory setup, reports, rates, and staff settings, use the web admin workspace.',
+            'Browse equipment and print labels here. For inventory setup, reports, rates, and staff settings, use the web admin workspace.',
             style: TextStyle(
               color: _AdminColors.getMuted(isDark),
               fontSize: 12,
@@ -449,6 +457,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final title = switch (_selectedIndex) {
       1 => 'Rentals',
       3 => 'Returns',
+      4 => 'Equipment',
       _ => 'Staff counter',
     };
     final scheme = Theme.of(context).colorScheme;
@@ -564,6 +573,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               icon: Icon(Icons.assignment_return_outlined),
               selectedIcon: Icon(Icons.assignment_return_rounded),
               label: 'Returns',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.inventory_2_outlined),
+              selectedIcon: Icon(Icons.inventory_2_rounded),
+              label: 'Equipment',
             ),
           ],
         ),
@@ -765,8 +779,7 @@ class _AdminColors {
       isDark ? const Color(0xFF0B1320) : canvas;
   static Color getCardBg(bool isDark) =>
       isDark ? const Color(0xFF131D2D) : Colors.white;
-  static Color getLine(bool isDark) =>
-      isDark ? const Color(0xFF1E2C42) : line;
+  static Color getLine(bool isDark) => isDark ? const Color(0xFF1E2C42) : line;
 }
 
 Map<String, dynamic> _map(dynamic value) {

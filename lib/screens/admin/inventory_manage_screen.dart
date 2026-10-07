@@ -96,8 +96,8 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
               InputDecorator(
                 decoration: const InputDecoration(labelText: 'Equipment item code', border: OutlineInputBorder()),
                 child: Text(isEditing
-                    ? (item?.qrCode ?? 'Assigned in the equipment inventory')
-                    : 'Generated automatically as RENT-001, RENT-002, and so on'),
+                    ? (item.qrCode ?? 'Assigned in the equipment inventory')
+                    : 'Generated automatically as EQUIP-001, EQUIP-002, and so on'),
               ),
               const SizedBox(height: 10),
               DropdownButtonFormField<String>(
@@ -139,7 +139,7 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
                   final itemRef = FirebaseFirestore.instance.collection('items').doc(newItemId);
                   if (isEditing) {
                     final itemData = newItem.toMap();
-                    if (item?.qrCode != null) itemData['item_code'] = item!.qrCode;
+                    if (item.qrCode != null) itemData['item_code'] = item.qrCode;
                     await itemRef.set(itemData, SetOptions(merge: true));
                   } else {
                     final counterRef = FirebaseFirestore.instance.collection('counters').doc('item_codes_RENT');

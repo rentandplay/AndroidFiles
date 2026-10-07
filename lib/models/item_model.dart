@@ -265,7 +265,7 @@ class ItemModel {
     return [
       ItemModel(
         id: 'item_bike',
-        qrCode: 'RENT-003',
+        qrCode: 'EQUIP-002',
         name: 'Bicycle',
         category: 'Sports',
         description:
@@ -303,7 +303,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_pickleball',
-        qrCode: 'RENT-009',
+        qrCode: 'EQUIP-009',
         name: 'Pickleball Set',
         category: 'Sports',
         description:
@@ -317,7 +317,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_badminton',
-        qrCode: 'RENT-001',
+        qrCode: 'EQUIP-001',
         name: 'Badminton Set',
         category: 'Sports',
         description:
@@ -331,7 +331,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_basketball',
-        qrCode: 'RENT-002',
+        qrCode: 'EQUIP-003',
         name: 'Basketball',
         category: 'Sports',
         description:
@@ -346,7 +346,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_volleyball',
-        qrCode: 'RENT-014',
+        qrCode: 'EQUIP-014',
         name: 'Volleyball',
         category: 'Sports',
         description:
@@ -363,7 +363,7 @@ class ItemModel {
       // Cards
       ItemModel(
         id: 'item_cards_deck',
-        qrCode: 'RENT-006',
+        qrCode: 'EQUIP-006',
         name: 'Deck of Cards',
         category: 'Cards',
         description:
@@ -379,7 +379,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_uno',
-        qrCode: 'RENT-013',
+        qrCode: 'EQUIP-013',
         name: 'Uno Cards',
         category: 'Cards',
         description:
@@ -395,7 +395,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_bingo',
-        qrCode: 'RENT-004',
+        qrCode: 'EQUIP-004',
         name: 'Bingo Set',
         category: 'Cards',
         description:
@@ -413,7 +413,7 @@ class ItemModel {
       // Board Games
       ItemModel(
         id: 'item_jenga',
-        qrCode: 'RENT-007',
+        qrCode: 'EQUIP-007',
         name: 'Jenga',
         category: 'Board Games',
         description:
@@ -429,7 +429,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_scrabble',
-        qrCode: 'RENT-012',
+        qrCode: 'EQUIP-012',
         name: 'Scrabble',
         category: 'Board Games',
         description:
@@ -445,7 +445,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_chess',
-        qrCode: 'RENT-005',
+        qrCode: 'EQUIP-005',
         name: 'Chess Set',
         category: 'Board Games',
         description:
@@ -463,7 +463,7 @@ class ItemModel {
       // Tech Rentals
       ItemModel(
         id: 'item_ps4',
-        qrCode: 'RENT-010',
+        qrCode: 'EQUIP-010',
         name: 'PlayStation 4 Console',
         category: 'Tech Rentals',
         description:
@@ -477,7 +477,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_switch',
-        qrCode: 'RENT-008',
+        qrCode: 'EQUIP-008',
         name: 'Nintendo Switch',
         category: 'Tech Rentals',
         description:
@@ -491,7 +491,7 @@ class ItemModel {
       ),
       ItemModel(
         id: 'item_ps5',
-        qrCode: 'RENT-011',
+        qrCode: 'EQUIP-011',
         name: 'PlayStation 5 Console',
         category: 'Tech Rentals',
         description:

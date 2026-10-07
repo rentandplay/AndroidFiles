@@ -7,13 +7,29 @@ import 'package:http/http.dart' as http;
 import '../models/rental_model.dart';
 
 class MobileApiException implements Exception {
-  const MobileApiException(this.message, {this.statusCode});
+  const MobileApiException(this.message, {this.statusCode, this.code});
 
   final String message;
   final int? statusCode;
+  final String? code;
+
+  String get userMessage {
+    final diagnostic = '${code ?? ''} $message'.toLowerCase();
+    final isFirebaseServiceFailure = (code ?? '').toUpperCase().startsWith(
+              'FIREBASE_',
+            ) ||
+        diagnostic.contains('firestore_quota_exceeded') ||
+        diagnostic.contains('resource_exhausted') ||
+        diagnostic.contains('quota exceeded') ||
+        diagnostic.contains('usage limit') ||
+        diagnostic.contains('firebase usage');
+    return isFirebaseServiceFailure
+        ? 'The rental service is temporarily unavailable. Please try again later.'
+        : message;
+  }
 
   @override
-  String toString() => message;
+  String toString() => userMessage;
 }
 
 class MobileApiService {
@@ -87,7 +103,8 @@ class MobileApiService {
     for (final row in rentals) {
       if (row.rentalId == id) return row.toMap();
     }
-    throw const MobileApiException('Rental request not found.', statusCode: 404);
+    throw const MobileApiException('Rental request not found.',
+        statusCode: 404);
   }
 
   Future<Map<String, dynamic>> quoteRental(String itemId, int minutes) async {
@@ -199,6 +216,7 @@ class MobileApiService {
             ? message
             : 'The rental service could not complete the request. Please try again.',
         statusCode: response.statusCode,
+        code: result['code']?.toString(),
       );
     }
     return result;

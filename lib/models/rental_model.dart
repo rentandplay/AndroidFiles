@@ -4,6 +4,7 @@ class RentalModel {
   final String rentalId;
   final String itemId;
   final String itemName;
+  final String? itemImageUrl;
   final String customerId;
   final String customerName;
   final String terminalId;
@@ -84,6 +85,7 @@ class RentalModel {
     required this.rentalId,
     required this.itemId,
     required this.itemName,
+    this.itemImageUrl,
     required this.customerId,
     required this.customerName,
     required this.terminalId,
@@ -117,6 +119,7 @@ class RentalModel {
       'rentalId': rentalId,
       'itemId': itemId,
       'itemName': itemName,
+      'item_image_url': itemImageUrl,
       'customerId': customerId,
       'customerName': customerName,
       'terminalId': terminalId,
@@ -165,6 +168,11 @@ class RentalModel {
         : double.tryParse(value?.toString() ?? '') ?? 0;
     String text(dynamic value, [String fallback = '']) =>
         value?.toString() ?? fallback;
+    String? optionalText(dynamic value) {
+      final result = value?.toString().trim() ?? '';
+      return result.isEmpty ? null : result;
+    }
+
     final release = map['release_condition'];
     final returned = map['return_condition'];
     final fee =
@@ -173,6 +181,8 @@ class RentalModel {
       rentalId: id ?? text(map['id'] ?? map['rentalId']),
       itemId: text(map['item_id'] ?? map['itemId']),
       itemName: text(map['item_name'] ?? map['itemName'], 'Equipment'),
+      itemImageUrl: optionalText(
+          map['item_image_url'] ?? map['image_url'] ?? map['imageUrl']),
       customerId: text(map['customer_id'] ?? map['customerId']),
       customerName:
           text(map['customer_name'] ?? map['customerName'], 'Customer'),
@@ -230,6 +240,7 @@ class RentalModel {
     String? rentalId,
     String? itemId,
     String? itemName,
+    String? itemImageUrl,
     String? customerId,
     String? customerName,
     String? terminalId,
@@ -255,6 +266,7 @@ class RentalModel {
       rentalId: rentalId ?? this.rentalId,
       itemId: itemId ?? this.itemId,
       itemName: itemName ?? this.itemName,
+      itemImageUrl: itemImageUrl ?? this.itemImageUrl,
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
       terminalId: terminalId ?? this.terminalId,
@@ -280,7 +292,8 @@ class RentalModel {
       refundDue: this.refundDue,
       paymentStatus: this.paymentStatus,
       paymentProofStatus: paymentProofStatus ?? this.paymentProofStatus,
-      paymentProofReference: paymentProofReference ?? this.paymentProofReference,
+      paymentProofReference:
+          paymentProofReference ?? this.paymentProofReference,
       paymentProofNote: paymentProofNote ?? this.paymentProofNote,
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
     );

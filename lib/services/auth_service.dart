@@ -97,6 +97,26 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<UserModel> updateCustomerProfile({
+    required String name,
+    required String phone,
+  }) async {
+    final user = currentUser;
+    if (user == null) {
+      throw const MobileApiException('Sign in again to update your profile.',
+          statusCode: 401);
+    }
+    final result = await _api.profile(method: 'PATCH', body: {
+      'name': name.trim(),
+      'phone': phone.trim(),
+    });
+    await user.reload();
+    notifyListeners();
+    return UserModel.fromMap(
+        Map<String, dynamic>.from(result['user'] as Map),
+        uid: user.uid);
+  }
+
   @override
   void dispose() {
     _subscription.cancel();

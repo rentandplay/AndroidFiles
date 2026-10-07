@@ -135,13 +135,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = authService.currentUser;
       if (user == null) return;
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'name': name,
-        'phone': _phoneController.text.trim(),
-      });
+      await authService.updateCustomerProfile(
+        name: name,
+        phone: _phoneController.text,
+      );
 
       if (!mounted) return;
       setState(() {

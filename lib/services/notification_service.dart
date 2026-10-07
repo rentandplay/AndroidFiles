@@ -105,7 +105,7 @@ class RentalNotificationService extends ChangeNotifier {
     Future.microtask(() async {
       if (_disposed || version != _generation) return;
       _notify();
-      await NotificationDevices.rotateForAccount(_api);
+      if (pushEnabled) await NotificationDevices.rotateForAccount(_api);
       if (_disposed || version != _generation) return;
       if (uid == null) return;
       await refresh();
