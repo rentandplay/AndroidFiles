@@ -6,6 +6,7 @@ class UserModel {
   final String email;
   final String phone;
   final String role; // USER customer, ADMIN operator, or OWNER super admin
+  final String? profileImageUrl;
   final String? validIdUrl;
   final bool hasAcceptedTerms;
   final DateTime? createdAt;
@@ -16,6 +17,7 @@ class UserModel {
     required this.email,
     required this.phone,
     this.role = 'user',
+    this.profileImageUrl,
     this.validIdUrl,
     this.hasAcceptedTerms = false,
     this.createdAt,
@@ -28,6 +30,7 @@ class UserModel {
       'email': email,
       'phone': phone,
       'role': role,
+      'profileImageUrl': profileImageUrl,
       'validIdUrl': validIdUrl,
       'hasAcceptedTerms': hasAcceptedTerms,
       'createdAt': createdAt != null
@@ -50,6 +53,7 @@ class UserModel {
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
       role: map['role'] ?? 'user',
+      profileImageUrl: map['profileImageUrl'] ?? map['profile_image_url'],
       validIdUrl: map['validIdUrl'] ?? map['valid_id_url'],
       hasAcceptedTerms: map['hasAcceptedTerms'] ?? false,
       createdAt: parsedDate,
@@ -62,6 +66,7 @@ class UserModel {
     String? email,
     String? phone,
     String? role,
+    String? profileImageUrl,
     String? validIdUrl,
     bool? hasAcceptedTerms,
     DateTime? createdAt,
@@ -72,6 +77,7 @@ class UserModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       role: role ?? this.role,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       validIdUrl: validIdUrl ?? this.validIdUrl,
       hasAcceptedTerms: hasAcceptedTerms ?? this.hasAcceptedTerms,
       createdAt: createdAt ?? this.createdAt,

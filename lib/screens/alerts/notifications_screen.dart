@@ -82,7 +82,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ? const RentalEmptyState(
                 title: 'Sign in to view notifications',
                 message:
-                    'Booking decisions and return updates will appear here.')
+                    'Rental request decisions and return updates will appear here.')
             : service.loading
                 ? const Center(child: CircularProgressIndicator())
                 : RefreshIndicator(
@@ -105,7 +105,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                                   .titleMedium),
                                           const SizedBox(height: 6),
                                           const Text(
-                                              'Receive booking and return updates when the app is in the background.'),
+                                              'Receive rental request and return updates when the app is in the background.'),
                                           const SizedBox(height: 12),
                                           OutlinedButton.icon(
                                               onPressed: service
@@ -147,7 +147,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                             const RentalEmptyState(
                                 title: 'No updates yet',
                                 message:
-                                    'You will see new requests, booking decisions and return updates here.'),
+                                    'You will see rental requests, decisions and return updates here.'),
                           for (final row in service.items)
                             Card(
                                 color: row.isRead

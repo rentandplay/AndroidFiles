@@ -1,5 +1,9 @@
 # Rent & Play Android
 
+## Mobile staff counter
+
+The Android app uses the same login page for customers, operators, and owners. An active `ADMIN` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, and return inspection. Detailed inventory management, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out of the staff counter returns to the shared login page.
+
 ## Test customer rentals without the ESP32
 
 Customer checkout saves an authoritative quote and holds the physical unit while the request waits for admin review. The customer gets a transaction QR. In web or Android admin, approve the request: it becomes **Awaiting pickup**, and the timer has not started. Scan the customer's transaction QR and the assigned equipment sticker, verify the customer and actual fee/deposit collection, check condition/accessories, then confirm release. This starts the timer and marks the equipment rented.

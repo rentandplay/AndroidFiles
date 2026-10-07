@@ -8,7 +8,7 @@ String rentalMoney(num? value) => value == null
 
 String rentalStatusLabel(String status) => switch (status.toUpperCase()) {
       'PENDING_ADMIN_APPROVAL' || 'PENDING_ESP32_RENT' => 'Awaiting review',
-      'APPROVED' => 'Ready for pickup',
+      'APPROVED' => 'Approved · awaiting handoff',
       'ACTIVE' || 'RENTED' => 'In use',
       'RETURN_PENDING_INSPECTION' => 'Inspection pending',
       'COMPLETED' => 'Returned',
@@ -232,7 +232,7 @@ class RentalSteps extends StatelessWidget {
   const RentalSteps(
       {super.key,
       required this.step,
-      this.labels = const ['Booking', 'Equipment', 'Handoff']});
+      this.labels = const ['Rental QR', 'Handoff']});
   final int step;
   final List<String> labels;
   @override

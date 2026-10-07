@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -33,10 +34,16 @@ class RentalAdminView extends StatefulWidget {
       {super.key,
       required this.page,
       required this.workspace,
-      required this.onChanged});
+      required this.onChanged,
+      this.initialScanKind,
+      this.scanRequestId = 0,
+      this.onScanConsumed});
   final String page;
   final Map<String, dynamic> workspace;
   final Future<void> Function() onChanged;
+  final String? initialScanKind;
+  final int scanRequestId;
+  final VoidCallback? onScanConsumed;
   @override
   State<RentalAdminView> createState() => _RentalAdminViewState();
 }
@@ -44,6 +51,31 @@ class RentalAdminView extends StatefulWidget {
 class _RentalAdminViewState extends State<RentalAdminView> {
   String _query = '', _stage = 'All';
   final _api = MobileApiService.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _scheduleRequestedScan();
+  }
+
+  @override
+  void didUpdateWidget(covariant RentalAdminView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.scanRequestId != oldWidget.scanRequestId) {
+      _scheduleRequestedScan();
+    }
+  }
+
+  void _scheduleRequestedScan() {
+    final kind = widget.initialScanKind;
+    if (kind == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.onScanConsumed?.call();
+      unawaited(_lookup(kind));
+    });
+  }
+
   Future<void> _action(Map<String, dynamic> row, String action,
       {String? code}) async {
     await Navigator.push<bool>(
@@ -63,7 +95,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
         MaterialPageRoute(
             builder: (_) => QrCaptureScreen(
                 title: kind == 'BOOKING'
-                    ? 'Scan transaction QR'
+                    ? 'Scan rental QR'
                     : 'Scan inventory QR')));
     if (code == null || !mounted) return;
     try {
@@ -72,13 +104,18 @@ class _RentalAdminViewState extends State<RentalAdminView> {
       if (!mounted) return;
       final row = _map(result['rental']);
       if (kind == 'INVENTORY') {
-        await _action(
-            row,
-            row['status'] == 'RETURN_PENDING_INSPECTION'
-                ? 'complete-return'
-                : 'receipt',
-            code: code);
-      } else if (row['status'] == 'APPROVED') {
+        if (row['status'] == 'RETURN_PENDING_INSPECTION') {
+          await _action(row, 'complete-return', code: code);
+        } else if (row['status'] == 'ACTIVE') {
+          await _action(row, 'receipt', code: code);
+        } else if (row['status'] == 'APPROVED' &&
+            row['delivery_status'] != 'PREPARED') {
+          await _action(row, 'prepare-delivery', code: code);
+        } else {
+          _details(row);
+        }
+      } else if (row['status'] == 'APPROVED' &&
+          row['delivery_status'] == 'PREPARED') {
         await _action(row, 'release', code: code);
       } else {
         _details(row, code: code);
@@ -95,13 +132,13 @@ class _RentalAdminViewState extends State<RentalAdminView> {
     final code = await showDialog<String>(
         context: context,
         builder: (c) => AlertDialog(
-                title: const Text('Find booking or returned item'),
+                title: const Text('Find rental or returned item'),
                 content: TextField(
                     controller: controller,
                     decoration: InputDecoration(
                         labelText: widget.page == 'Returns'
                             ? 'Inventory code'
-                            : 'Booking code')),
+                            : 'Rental code')),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(c),
@@ -131,7 +168,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
     final fee = _map(row['fee_breakdown']);
     void open(String action) {
       Navigator.pop(context);
-      _action(row, action, code: code);
+      _action(row, action, code: action == 'release' ? code : null);
     }
 
     showDialog<void>(
@@ -210,13 +247,26 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                   TextButton(
                       onPressed: () => Navigator.pop(c),
                       child: const Text('Close')),
-                  if (row['status'] == 'PENDING_ADMIN_APPROVAL') ...[
+                          if (row['status'] == 'PENDING_ADMIN_APPROVAL') ...[
                     TextButton(
                         onPressed: () => open('reject'),
-                        child: const Text('Reject')),
-                    FilledButton(
-                        onPressed: () => open('approve'),
-                        child: const Text('Approve booking'))
+                                child: const Text('Reject request')),
+                            if (row['payment_method'] != 'QR')
+                              FilledButton(
+                                  onPressed: () => open('approve'),
+                                  child: const Text('Approve rental request'))
+                            else if (row['payment_proof_status'] ==
+                                'PENDING_REVIEW') ...[
+                              TextButton(
+                                  onPressed: () => open('payment-reject'),
+                                  child: const Text('Reject payment proof')),
+                              FilledButton(
+                                  onPressed: () => open('payment-review'),
+                                  child: const Text('Review payment screenshot'))
+                            ] else
+                              const Padding(
+                                  padding: EdgeInsets.all(8),
+                                  child: Text('Waiting for payment screenshot')),
                   ],
                   if (row['status'] == 'APPROVED') ...[
                     TextButton(
@@ -224,10 +274,15 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                         child: const Text('Change unit')),
                     TextButton(
                         onPressed: () => open('reject'),
-                        child: const Text('Cancel booking')),
+                                child: const Text('Cancel request')),
                     FilledButton(
-                        onPressed: () => open('release'),
-                        child: const Text('Verify & Release'))
+                                onPressed: () => open(
+                                    row['delivery_status'] == 'PREPARED'
+                                        ? 'release'
+                                        : 'prepare-delivery'),
+                                child: Text(row['delivery_status'] == 'PREPARED'
+                                    ? 'Confirm resort handoff'
+                                    : 'Prepare for delivery'))
                   ],
                   if (row['status'] == 'ACTIVE')
                     FilledButton(
@@ -247,17 +302,25 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   }
 
   String? _nextAction(Map<String, dynamic> row) => switch (row['status']) {
-        'PENDING_ADMIN_APPROVAL' => 'approve',
-        'APPROVED' => 'release',
+        'PENDING_ADMIN_APPROVAL' => row['payment_method'] == 'QR'
+            ? (row['payment_proof_status'] == 'PENDING_REVIEW'
+                ? 'payment-review'
+                : null)
+            : 'approve',
+        'APPROVED' => row['delivery_status'] == 'PREPARED'
+            ? 'release'
+            : 'prepare-delivery',
         'ACTIVE' => 'receipt',
         'RETURN_PENDING_INSPECTION' => 'complete-return',
         _ => null,
       };
-  String _nextLabel(Map<String, dynamic> row) => switch (row['status']) {
-        'PENDING_ADMIN_APPROVAL' => 'Review & approve',
-        'APPROVED' => 'Verify & release',
-        'ACTIVE' => 'Receive equipment',
-        'RETURN_PENDING_INSPECTION' => 'Complete inspection',
+  String _nextLabel(Map<String, dynamic> row) => switch (_nextAction(row)) {
+        'payment-review' => 'Review payment screenshot',
+        'approve' => 'Approve rental request',
+        'prepare-delivery' => 'Prepare for delivery',
+        'release' => 'Confirm resort handoff',
+        'receipt' => 'Receive equipment',
+        'complete-return' => 'Complete inspection',
         _ => 'View details',
       };
 
@@ -321,22 +384,22 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               const SizedBox(height: 8),
               const RentalNotice(
                   message:
-                      'Approve the booking, verify both QR codes, then hand over the equipment. Record physical receipt before completing the return inspection.'),
+                      'Review the payment, scan the equipment QR at the shop to prepare it, then scan the customer rental QR at the resort when the item is handed over. The rental timer starts at handoff.'),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 if (widget.page == 'Rentals')
                   FilledButton.icon(
                       onPressed: () => _action({}, 'booking'),
                       icon: const Icon(Icons.add),
-                      label: const Text('Prepare booking')),
+                      label: const Text('Create counter rental')),
                 if (widget.page != 'Transaction History')
                   OutlinedButton.icon(
                       onPressed: () => _lookup(
                           widget.page == 'Returns' ? 'INVENTORY' : 'BOOKING'),
                       icon: const Icon(Icons.qr_code_scanner),
                       label: Text(widget.page == 'Returns'
-                          ? 'Scan returned item'
-                          : 'Scan transaction QR')),
+                          ? 'Scan equipment QR'
+                          : 'Scan rental QR')),
                 OutlinedButton(
                     onPressed: _manualLookup,
                     child: const Text('Find by code')),
@@ -345,7 +408,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               TextField(
                   onChanged: (value) => setState(() => _query = value),
                   decoration: const InputDecoration(
-                      labelText: 'Search equipment, customer or booking',
+                      labelText: 'Search equipment, customer or rental',
                       prefixIcon: Icon(Icons.search))),
               const SizedBox(height: 12),
               Wrap(spacing: 6, runSpacing: 6, children: [
@@ -365,7 +428,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                 const RentalEmptyState(
                     title: 'No matching rentals',
                     message:
-                        'Try another stage or search by booking, customer or equipment.'),
+                        'Try another stage or search by rental, customer or equipment.'),
               for (final row in filtered)
                 RentalSection(
                     child: Column(
@@ -465,6 +528,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _error = '';
   String? _itemId, _customerId;
   Map<String, dynamic>? _quote;
+  Map<String, dynamic>? _paymentProof;
+  bool _paymentProofLoading = false;
   bool _manual = false,
       _customerVerified = false,
       _paymentVerified = false,
@@ -510,11 +575,27 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
     });
     if (_action == 'release') _transaction.text = widget.scannedCode ?? '';
     if (_action == 'receipt') _inventory.text = widget.scannedCode ?? '';
+    if (_action == 'prepare-delivery')
+      _inventory.text = widget.scannedCode ?? '';
+    if (_action == 'payment-review') _loadPaymentProof();
     _paymentVerified =
         _number(_row['rental_paid_amount']) >= _number(_row['rental_fee']) &&
             _row.containsKey('rental_paid_amount');
     _depositReceived = _number(_row['deposit_collected_amount']) >=
         _number(_row['deposit_amount']);
+  }
+
+  Future<void> _loadPaymentProof() async {
+    setState(() => _paymentProofLoading = true);
+    try {
+      final result = await _api.adminRequest(
+          '/rentals/${Uri.encodeComponent(_text(_row['id']))}/payment-proof');
+      if (mounted) setState(() => _paymentProof = _map(result['proof']));
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _paymentProofLoading = false);
+    }
   }
 
   @override
@@ -612,49 +693,34 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         ],
       ]);
   List<Widget> _releaseFields() => [
-        RentalSteps(step: _verification.step),
+        RentalSteps(
+            step: _verification.step == 2 ? 1 : 0,
+            labels: const ['Customer rental QR', 'Physical handoff']),
         if (_verification.step == 0)
           RentalSection(
-              title: 'Verify the customer booking',
+              title: 'Verify the customer rental',
               icon: Icons.qr_code,
               subtitle:
-                  'Scan the QR displayed in the customer app. The equipment check opens after a match.',
+                  'At the delivery location, scan the rental QR shown in My Rentals. Equipment was already checked at the shop.',
               child: Column(children: [
                 _qr(
                     _transaction,
                     _manual
-                        ? 'Printed booking code'
-                        : 'Customer transaction QR'),
+                        ? 'Printed rental code'
+                        : 'Customer rental QR'),
                 _manualControl()
               ])),
-        if (_verification.step == 1) ...[
-          const RentalNotice(
-              title: 'Booking verified',
-              icon: Icons.check_circle_outline,
-              message: 'Scan the sticker on the assigned physical unit.'),
-          const SizedBox(height: 16),
-          RentalSection(
-              title: 'Verify the equipment',
-              icon: Icons.inventory_2_outlined,
-              subtitle:
-                  'Required unit: ${_row['item_code'] ?? _row['item_id']}',
-              child: _qr(
-                  _inventory,
-                  _manual
-                      ? 'Printed equipment code'
-                      : 'Equipment inventory QR')),
-        ],
         if (_verification.step == 2) ...[
           const RentalNotice(
-              title: 'Booking and equipment match',
+              title: 'Rental and prepared unit verified',
               icon: Icons.check_circle_outline,
               message:
-                  'Check the customer, payment and equipment before handing over the item.'),
+                  'The operator prepared this unit at the shop. At the selected location, confirm the customer, payment and physical handoff.'),
           const SizedBox(height: 16),
           RentalSection(
               title: 'Confirm the handoff',
               child: Column(children: [
-                _check('The collector matches the booking customer.',
+                _check('The receiver matches the rental customer.',
                     _customerVerified, (value) => _customerVerified = value),
                 const Divider(height: 20),
                 RentalValueRow('Rental fee', _money(_row['rental_fee'])),
@@ -789,14 +855,28 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       return;
     }
     if (_action == 'release' &&
-        (!_verification.bookingVerified ||
-            !_verification.inventoryVerified ||
-            _verification.step != 2)) {
-      setState(() => _error = 'Verify both QR codes before the handoff.');
+        (!_verification.bookingVerified || _verification.step != 2)) {
+      setState(() => _error = 'Verify the customer rental QR before handoff.');
       return;
     }
     if (_action == 'release' && !_customerVerified) {
-      setState(() => _error = 'Verify the customer collecting the booking.');
+      setState(() => _error = 'Verify the customer receiving the equipment.');
+      return;
+    }
+    if (_action == 'prepare-delivery' &&
+        (_inventory.text.trim().isEmpty || _manual && _reason.text.trim().isEmpty)) {
+      setState(() => _error = _manual
+          ? 'Enter the equipment code and reason for manual verification.'
+          : 'Scan the assigned equipment QR at the shop.');
+      return;
+    }
+    if (_action == 'payment-review' && !_paymentVerified) {
+      setState(() => _error =
+          'Confirm that the screenshot shows a successful transfer for the exact total.');
+      return;
+    }
+    if (_action == 'payment-reject' && _reason.text.trim().isEmpty) {
+      setState(() => _error = 'Enter why the payment screenshot is being rejected.');
       return;
     }
     if (_action == 'receipt' && !_receipt) {
@@ -815,10 +895,16 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                 content: Text(_action == 'receipt'
                     ? 'Record the time you physically received the item? Inspection can be completed afterward.'
                     : _action == 'release'
-                        ? 'Confirm payment, condition and the physical handoff? The rental timer starts now.'
-                        : _action == 'approve'
-                            ? 'Approve this reservation? It will wait for physical release.'
-                            : 'Save the reviewed details?'),
+                        ? 'Confirm the customer received the prepared equipment? The rental timer starts now.'
+                        : _action == 'prepare-delivery'
+                            ? 'Mark this exact unit ready for delivery? The rental timer will remain stopped.'
+                            : _action == 'payment-review'
+                                ? 'Confirm the screenshot shows a successful transfer for the rental fee and refundable deposit, then approve the request?'
+                                : _action == 'payment-reject'
+                                    ? 'Reject this payment screenshot? The customer can upload a corrected one.'
+                                    : _action == 'approve'
+                                        ? 'Approve this rental request? It will wait for equipment preparation and handoff.'
+                                        : 'Save the reviewed details?'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(c, false),
@@ -855,6 +941,25 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             'paymentVerified': _paymentVerified,
             'depositReceived': _depositReceived,
             'notes': _notes.text
+          });
+          break;
+        case 'payment-review':
+        case 'payment-reject':
+          path = '/rentals/$id/payment-review';
+          payload.addAll(_action == 'payment-review'
+              ? {
+                  'action': 'VERIFY',
+                  'notes': _notes.text,
+                }
+              : {
+                  'action': 'REJECT',
+                  'reason': _reason.text.trim(),
+                });
+          break;
+        case 'prepare-delivery':
+          payload.addAll({
+            'inventoryCode': _inventory.text.trim(),
+            if (_manual) 'manualReason': _reason.text.trim(),
           });
           break;
         case 'reject':
@@ -929,10 +1034,13 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   }
 
   String get _title => switch (_action) {
-        'booking' => 'Prepare booking',
-        'approve' => 'Approve booking',
-        'reject' => 'Reject / cancel booking',
-        'release' => 'Confirm Release',
+        'booking' => 'Create counter rental',
+        'approve' => 'Approve rental request',
+        'payment-review' => 'Verify QR payment',
+        'payment-reject' => 'Reject QR payment proof',
+        'prepare-delivery' => 'Prepare for delivery',
+        'reject' => 'Reject / cancel rental request',
+        'release' => 'Confirm resort handoff',
         'receipt' => 'Record physical receipt',
         'complete-return' => 'Confirm Return',
         'assignment' => 'Change assigned unit',
@@ -961,9 +1069,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                     icon: const Icon(Icons.arrow_back))),
             bottomNavigationBar: RentalActionBar(
               label: _action == 'release' && _verification.step < 2
-                  ? (_verification.step == 0
-                      ? 'Verify booking'
-                      : 'Verify equipment')
+                  ? 'Verify customer rental'
                   : _action == 'booking' && _quote == null
                       ? 'Preview price'
                       : _title,
@@ -1061,16 +1167,16 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                         setState(() => _customerId = value)),
                             _field(_minutes, 'Duration in minutes',
                                 numeric: true),
-                            _field(_location, 'Pickup / delivery location'),
+                            _field(_location, 'Delivery location'),
                             DropdownButtonFormField<String>(
                                 initialValue: _method,
                                 decoration: const InputDecoration(
-                                    labelText: 'Payment preference'),
+                                    labelText: 'Payment method'),
                                 items: const [
                                   DropdownMenuItem(
                                       value: 'CASH', child: Text('Cash')),
                                   DropdownMenuItem(
-                                      value: 'QR', child: Text('QR payment'))
+                                      value: 'QR', child: Text('InstaPay QR'))
                                 ],
                                 onChanged: _busy || _previewing
                                     ? null
@@ -1091,9 +1197,65 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                 message:
                                     'Choosing a payment method does not confirm payment. Record only money actually received.'),
                           ],
+                          if (_action == 'payment-review') ...[
+                            RentalSection(
+                                title: 'Customer InstaPay screenshot',
+                                child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.stretch,
+                                    children: [
+                                      Text('Expected total: ${_money(_number(_row['rental_fee']) + _number(_row['deposit_amount']))}'),
+                                      if (_paymentProofLoading)
+                                        const Padding(
+                                            padding: EdgeInsets.all(24),
+                                            child: Center(
+                                                child:
+                                                    CircularProgressIndicator())),
+                                      if (!_paymentProofLoading &&
+                                          _paymentProof == null)
+                                        Text(_error.isEmpty
+                                            ? 'No payment proof found.'
+                                            : _error),
+                                      if ((_paymentProof?['reference'] ?? '')
+                                          .toString()
+                                          .isNotEmpty)
+                                        Text('Transfer reference: ${_paymentProof!['reference']}'),
+                                      if ((_paymentProof?['image_data_url'] ?? '')
+                                          .toString()
+                                          .startsWith('data:image/'))
+                                        Padding(
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 12),
+                                            child: Image.memory(
+                                                base64Decode(_text(
+                                                        _paymentProof![
+                                                            'image_data_url'])
+                                                    .split(',')
+                                                    .last),
+                                                fit: BoxFit.contain,
+                                                height: 300)),
+                                      _check(
+                                          'Screenshot shows a successful transfer for the exact rental total',
+                                          _paymentVerified,
+                                          (value) => _paymentVerified = value),
+                                      _field(_notes, 'Review note',
+                                          required: false),
+                                    ])),
+                          ],
+                          if (_action == 'payment-reject')
+                            _field(_reason, 'Why this proof is invalid'),
+                          if (_action == 'prepare-delivery') ...[
+                            RentalNotice(
+                                title: 'Shop preparation',
+                                icon: Icons.inventory_2_outlined,
+                                message:
+                                    'Scan the QR sticker on the exact assigned unit before loading it for ${_text(_row['delivery_location']).isEmpty ? 'delivery' : _text(_row['delivery_location'])}. This does not start the rental timer.'),
+                            _qr(_inventory, 'Assigned equipment QR at the shop'),
+                            _manualControl(),
+                          ],
                           if (_action == 'approve') ...[
                             const Text(
-                                'Approval holds this unit for pickup. Leave payments unchecked if they will be collected at handoff.'),
+                                'Approval holds the assigned unit. Any cash payment and deposit are collected at handoff.'),
                             RentalValueRow(
                                 'Rental fee', _money(_row['rental_fee'])),
                             RentalValueRow('Refundable deposit',

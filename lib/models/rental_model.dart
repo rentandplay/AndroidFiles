@@ -27,6 +27,10 @@ class RentalModel {
   final double balanceDue;
   final double refundDue;
   final String paymentStatus;
+  final String paymentProofStatus;
+  final String paymentProofReference;
+  final String paymentProofNote;
+  final String deliveryStatus;
   bool get isAwaitingPickup => normalizedStatus == 'APPROVED';
   bool get isAwaitingInspection =>
       normalizedStatus == 'RETURN_PENDING_INSPECTION';
@@ -56,7 +60,7 @@ class RentalModel {
     if (isActive && hasPendingReturnRequest) return 'Return pending receipt';
     switch (normalizedStatus) {
       case 'APPROVED':
-        return 'Approved · awaiting pickup';
+        return 'Approved · preparing delivery';
       case 'RETURN_PENDING_INSPECTION':
         return 'Received · inspection pending';
       case 'ACTIVE':
@@ -102,6 +106,10 @@ class RentalModel {
     this.balanceDue = 0,
     this.refundDue = 0,
     this.paymentStatus = '',
+    this.paymentProofStatus = '',
+    this.paymentProofReference = '',
+    this.paymentProofNote = '',
+    this.deliveryStatus = '',
   });
 
   Map<String, dynamic> toMap() {
@@ -134,6 +142,10 @@ class RentalModel {
       'balance_due': balanceDue,
       'refund_due': refundDue,
       'payment_status': paymentStatus,
+      'payment_proof_status': paymentProofStatus,
+      'payment_proof_reference': paymentProofReference,
+      'payment_proof_note': paymentProofNote,
+      'delivery_status': deliveryStatus,
     };
   }
 
@@ -207,6 +219,10 @@ class RentalModel {
       balanceDue: amount(map['balance_due']),
       refundDue: amount(map['refund_due']),
       paymentStatus: text(map['payment_status']),
+      paymentProofStatus: text(map['payment_proof_status']),
+      paymentProofReference: text(map['payment_proof_reference']),
+      paymentProofNote: text(map['payment_proof_note']),
+      deliveryStatus: text(map['delivery_status']),
     );
   }
 
@@ -230,6 +246,10 @@ class RentalModel {
     String? returnCondition,
     String? conditionNotes,
     String? latestReturnRequestStatus,
+    String? paymentProofStatus,
+    String? paymentProofReference,
+    String? paymentProofNote,
+    String? deliveryStatus,
   }) {
     return RentalModel(
       rentalId: rentalId ?? this.rentalId,
@@ -259,6 +279,10 @@ class RentalModel {
       balanceDue: this.balanceDue,
       refundDue: this.refundDue,
       paymentStatus: this.paymentStatus,
+      paymentProofStatus: paymentProofStatus ?? this.paymentProofStatus,
+      paymentProofReference: paymentProofReference ?? this.paymentProofReference,
+      paymentProofNote: paymentProofNote ?? this.paymentProofNote,
+      deliveryStatus: deliveryStatus ?? this.deliveryStatus,
     );
   }
 }

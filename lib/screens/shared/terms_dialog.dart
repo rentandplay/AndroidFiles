@@ -43,8 +43,8 @@ class TermsDialog extends StatelessWidget {
               const SizedBox(height: 12),
               _buildSectionTitle('1. Operating Hours'),
               _buildSectionText(
-                '• Confirm pickup and return arrangements with the admin.\n'
-                '• The rental timer starts at physical release. Return the item by the due time shown in your active rental.',
+                '• Confirm the delivery location and return arrangements with the operator.\n'
+                '• The rental timer starts when the operator hands over the item. Return it by the due time shown in My Rentals.',
               ),
               const SizedBox(height: 10),
               _buildSectionTitle('2. ID Verification & Security Deposit'),
@@ -60,10 +60,10 @@ class TermsDialog extends StatelessWidget {
                 '• Late fees use the saved rental rate. Damage or missing-part charges are recorded with a reason after inspection.',
               ),
               const SizedBox(height: 10),
-              _buildSectionTitle('4. Pickup & Return Verification'),
+              _buildSectionTitle('4. Delivery & Return Verification'),
               _buildSectionText(
-                '• Show your transaction QR to the admin at pickup.\n'
-                '• The admin scans the physical equipment QR and confirms the handoff.\n'
+                '• Show your rental handoff QR to the operator when the item is delivered.\n'
+                '• The operator scans the equipment QR at the shop before delivery, then scans your rental QR at the resort to start the timer.\n'
                 '• On return, the admin records physical receipt to stop the timer, then completes inspection.',
               ),
             ],

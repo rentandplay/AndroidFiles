@@ -6,10 +6,12 @@ class ItemModel {
   final String category;
   final String description;
   final String rateText;
+  final List<Map<String, dynamic>> rateOptions;
   final double rateHourly;
   final String? specialRate;
   final double? salePrice;
   final double deposit;
+  final double latePenalty;
   final bool isForSale;
   final String imageUrl;
   final String status;
@@ -21,10 +23,12 @@ class ItemModel {
     required this.category,
     required this.description,
     required this.rateText,
+    this.rateOptions = const [],
     required this.rateHourly,
     this.specialRate,
     this.salePrice,
     required this.deposit,
+    this.latePenalty = 50.0,
     this.isForSale = false,
     required this.imageUrl,
     this.status = 'available',
@@ -103,10 +107,12 @@ class ItemModel {
       'category': category,
       'description': description,
       'rateText': rateText,
+      'rateOptions': rateOptions,
       'rateHourly': rateHourly,
       'specialRate': specialRate,
       'salePrice': salePrice,
       'deposit': deposit,
+      'latePenalty': latePenalty,
       'isForSale': isForSale,
       'imageUrl': cleanImageUrl,
       'status': status,
@@ -140,12 +146,18 @@ class ItemModel {
       description:
           map['description'] ?? 'Equipment rental for indoor or outdoor play.',
       rateText: map['rate_text'] ?? map['rateText'] ?? '',
+      rateOptions: ((map['rate_options'] ?? map['rateOptions']) as List? ??
+              const [])
+          .whereType<Map>()
+          .map((option) => Map<String, dynamic>.from(option))
+          .toList(growable: false),
       rateHourly: (map['rental_rate'] ?? map['rateHourly'] ?? 0.0).toDouble(),
       specialRate: map['specialRate'],
       salePrice: (map['sale_price'] ?? map['salePrice']) is num
           ? (map['sale_price'] ?? map['salePrice']).toDouble()
           : null,
       deposit: (map['deposit_amount'] ?? map['deposit'] ?? 0.0).toDouble(),
+      latePenalty: (map['late_penalty_rate'] ?? map['latePenalty'] ?? 50.0).toDouble(),
       isForSale: map['is_for_sale'] ?? map['isForSale'] ?? false,
       imageUrl: rawImageUrl,
       status: map['can_rent'] == false && map['status'] == 'AVAILABLE'
@@ -161,10 +173,12 @@ class ItemModel {
     String? category,
     String? description,
     String? rateText,
+    List<Map<String, dynamic>>? rateOptions,
     double? rateHourly,
     String? specialRate,
     double? salePrice,
     double? deposit,
+    double? latePenalty,
     bool? isForSale,
     String? imageUrl,
     String? status,
@@ -176,10 +190,12 @@ class ItemModel {
       category: category ?? this.category,
       description: description ?? this.description,
       rateText: rateText ?? this.rateText,
+      rateOptions: rateOptions ?? this.rateOptions,
       rateHourly: rateHourly ?? this.rateHourly,
       specialRate: specialRate ?? this.specialRate,
       salePrice: salePrice ?? this.salePrice,
       deposit: deposit ?? this.deposit,
+      latePenalty: latePenalty ?? this.latePenalty,
       isForSale: isForSale ?? this.isForSale,
       imageUrl: imageUrl ?? this.imageUrl,
       status: status ?? this.status,
@@ -255,6 +271,29 @@ class ItemModel {
         description:
             'Durable 21-speed mountain bike with adjustable seat, helmet, and safety reflectors suitable for all terrains.',
         rateText: '₱150/30m, ₱200/hr, ₱500/3-hrs',
+        rateOptions: const [
+          {
+            'id': 'half-hour',
+            'label': '30 minutes',
+            'kind': 'SHORT',
+            'duration_minutes': 30,
+            'amount': 150,
+          },
+          {
+            'id': 'hour',
+            'label': 'Per hour',
+            'kind': 'HOURLY',
+            'duration_minutes': 60,
+            'amount': 200,
+          },
+          {
+            'id': 'three-hour-special',
+            'label': '3-hour special',
+            'kind': 'PACKAGE',
+            'duration_minutes': 180,
+            'amount': 500,
+          },
+        ],
         rateHourly: 200.0,
         specialRate: '₱150 / 30 mins | ₱500 / 3 hours',
         deposit: 200.0,

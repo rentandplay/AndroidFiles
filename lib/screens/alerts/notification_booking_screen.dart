@@ -46,9 +46,9 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
         _workspace = await _api.adminRequest('/workspace');
         final matches = (_workspace['transactions'] as List? ?? [])
             .whereType<Map>()
-            .where((row) => row['id'] == widget.notification.rentalId);
+            .where((row) => row['id']?.toString() == widget.notification.rentalId);
         if (matches.isEmpty) {
-          throw const MobileApiException('This booking is unavailable.');
+          throw const MobileApiException('This rental request is unavailable.');
         }
         row = Map<String, dynamic>.from(matches.first);
       } else {
@@ -84,7 +84,7 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
   String _date(dynamic value) {
     final parsed = DateTime.tryParse(value?.toString() ?? '');
     return parsed == null
-        ? 'At physical release'
+        ? 'At handoff'
         : DateFormat('MMM d, yyyy h:mm a')
             .format(parsed.toUtc().add(const Duration(hours: 8)));
   }
@@ -93,11 +93,11 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
   Widget build(BuildContext context) {
     final row = _row, status = row?['status']?.toString() ?? '';
     return Scaffold(
-        appBar: AppBar(title: const Text('Booking details'), actions: [
+        appBar: AppBar(title: const Text('Rental details'), actions: [
           IconButton(
               onPressed: _load,
               icon: const Icon(Icons.refresh),
-              tooltip: 'Refresh booking')
+              tooltip: 'Refresh rental')
         ]),
         body: _loading
             ? const Center(child: CircularProgressIndicator())
@@ -156,17 +156,32 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                         if (_admin &&
                             ['PENDING_ADMIN_APPROVAL', 'PENDING_ESP32_RENT']
                                 .contains(status)) ...[
-                          FilledButton(
-                              onPressed: () => _adminAction('approve'),
-                              child: const Text('Review & approve')),
+                          if (row['payment_method'] != 'QR')
+                            FilledButton(
+                                onPressed: () => _adminAction('approve'),
+                                child: const Text('Approve rental request'))
+                          else if (row['payment_proof_status'] ==
+                              'PENDING_REVIEW')
+                            FilledButton(
+                                onPressed: () => _adminAction('payment-review'),
+                                child: const Text('Review payment screenshot'))
+                          else
+                            const Padding(
+                                padding: EdgeInsets.all(8),
+                                child: Text('Waiting for a corrected payment screenshot')),
                           OutlinedButton(
                               onPressed: () => _adminAction('reject'),
-                              child: const Text('Reject booking')),
+                              child: const Text('Reject rental request')),
                         ],
                         if (_admin && status == 'APPROVED')
                           FilledButton(
-                              onPressed: () => _adminAction('release'),
-                              child: const Text('Verify & release')),
+                              onPressed: () => _adminAction(
+                                  row['delivery_status'] == 'PREPARED'
+                                      ? 'release'
+                                      : 'prepare-delivery'),
+                              child: Text(row['delivery_status'] == 'PREPARED'
+                                  ? 'Confirm resort handoff'
+                                  : 'Prepare for delivery')),
                         if (_admin && status == 'ACTIVE')
                           FilledButton(
                               onPressed: () => _adminAction('receipt'),
@@ -182,7 +197,7 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                               onPressed: () => TransactionTicketDialog.show(
                                   context, RentalModel.fromMap(row)),
                               icon: const Icon(Icons.qr_code),
-                              label: const Text('Show transaction QR')),
+                              label: const Text('Show rental handoff QR')),
                         if (!_admin &&
                             status == 'ACTIVE' &&
                             row['latest_return_request_status'] !=

@@ -1,4 +1,4 @@
-rimport 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +7,7 @@ import 'services/auth_service.dart';
 import 'services/esp32_service.dart';
 import 'services/rental_service.dart';
 import 'providers/theme_provider.dart';
-import 'screens/user/catalog_screen.dart';
+import 'screens/user/customer_home_screen.dart';
 import 'services/notification_service.dart';
 import 'widgets/notification_widgets.dart';
 
@@ -54,7 +54,7 @@ class RentAndPlayApp extends StatelessWidget {
             theme: themeProvider.lightTheme,
             darkTheme: themeProvider.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: const CatalogScreen(),
+            home: const CustomerHomeScreen(),
           );
         },
       ),

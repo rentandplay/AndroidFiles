@@ -65,10 +65,10 @@ class _AlertsScreenState extends State<AlertsScreen> {
           '${overdue ? 'Overdue by' : 'Time remaining'} $time. Return the equipment to the admin.';
     } else if (rental.isAwaitingPickup) {
       message =
-          'Approved. Show your transaction QR at pickup. The timer starts at physical release.';
+          'Approved. Show your rental QR when the operator delivers the item to your selected location. The timer starts at handoff.';
     } else if (rental.isPendingAdminReview) {
       message =
-          'Waiting for admin approval. Your booking hold has a limited duration.';
+          'Waiting for admin approval. Your rental request hold has a limited duration.';
     } else if (rental.isAwaitingInspection) {
       message =
           'The admin received your equipment. The rental timer has stopped; inspection is pending.';

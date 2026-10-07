@@ -4,14 +4,14 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
+import '../../theme/app_theme.dart';
+import '../../widgets/rent_play_wordmark.dart';
+import '../../widgets/sign_in_prompt.dart';
 import '../auth/login_screen.dart';
 import '../auth/id_verification_screen.dart';
 import 'item_details_screen.dart';
-import 'active_rentals_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../../widgets/notification_widgets.dart';
-import '../rental/rental_history_screen.dart';
-import '../profile/profile_screen.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key});
@@ -23,23 +23,33 @@ class CatalogScreen extends StatefulWidget {
 class _CatalogScreenState extends State<CatalogScreen> {
   String selectedCategory = 'All';
   UserModel? _currentUserModel;
-  final List<String> categories = [
-    'All',
-    'Sports',
-    'Cards',
-    'Board Games',
-    'Tech Rentals',
-  ];
-
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  bool _availableOnly = false;
+  bool _savedOnly = false;
+  bool _availableFirst = true;
+  final Set<String> _savedItemIds = {};
   List<ItemModel> catalogItems = [];
   bool _catalogLoading = true;
   String _catalogError = "";
+
+  List<String> get categories {
+    final values = catalogItems.map((item) => item.category).toSet().toList()
+      ..sort();
+    return ['All', ...values];
+  }
 
   @override
   void initState() {
     super.initState();
     _loadCatalog();
     _loadCurrentUserModel();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadCurrentUserModel() async {
@@ -78,28 +88,46 @@ class _CatalogScreenState extends State<CatalogScreen> {
   }
 
   List<ItemModel> get filteredItems {
-    final items = (selectedCategory == 'All'
-            ? catalogItems
-            : catalogItems.where((item) => item.category == selectedCategory))
-        .toList()
-      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    final query = _searchQuery.trim().toLowerCase();
+    final items = catalogItems.where((item) {
+      if (selectedCategory != 'All' && item.category != selectedCategory) {
+        return false;
+      }
+      if (_availableOnly && item.status.toLowerCase() != 'available') {
+        return false;
+      }
+      if (_savedOnly && !_savedItemIds.contains(item.id)) return false;
+      if (query.isEmpty) return true;
+      return '${item.name} ${item.category} ${item.description} ${item.rateText}'
+          .toLowerCase()
+          .contains(query);
+    }).toList();
+    items.sort((a, b) {
+      if (_availableFirst) {
+        final availability = (b.status.toLowerCase() == 'available' ? 1 : 0)
+            .compareTo(a.status.toLowerCase() == 'available' ? 1 : 0);
+        if (availability != 0) return availability;
+      }
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
     return items;
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      selectedCategory = 'All';
+      _availableOnly = false;
+      _savedOnly = false;
+    });
   }
 
   void _handleRentalClick(ItemModel item) async {
     final authService = Provider.of<AuthService>(context, listen: false);
 
     if (authService.currentUser == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please log in to rent or purchase items.'),
-          duration: Duration(seconds: 2),
-        ),
-      );
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-      );
+      await showSignInPrompt(context);
       return;
     }
 
@@ -141,45 +169,18 @@ class _CatalogScreenState extends State<CatalogScreen> {
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isAdmin = ['ADMIN', 'OWNER']
+        .contains(_currentUserModel?.role.toUpperCase());
 
     return Scaffold(
       appBar: AppBar(
-        titleSpacing: 12,
-        title: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Clean Unclipped Brand Logo in Header
-            SizedBox(
-              height: 32,
-              child: Image.asset(
-                'assets/images/logo_rent_and_play.png',
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => Image.asset(
-                  'assets/images/logo.png',
-                  fit: BoxFit.contain,
-                  errorBuilder: (_, __, ___) => Icon(
-                    Icons.sports_esports,
-                    color: Theme.of(context).primaryColor,
-                    size: 26,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            const Flexible(
-              child: Text(
-                'Rent & Play',
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ),
-          ],
-        ),
+        centerTitle: true,
+        backgroundColor: isDark ? const Color(0xFF192536) : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        title: const RentPlayWordmark(),
         actions: [
-          IconButton(
-              onPressed: _catalogLoading ? null : _loadCatalog,
-              tooltip: 'Refresh equipment',
-              icon: const Icon(Icons.refresh)),
           if (user == null)
             TextButton.icon(
               onPressed: () {
@@ -192,76 +193,38 @@ class _CatalogScreenState extends State<CatalogScreen> {
               label: const Text('Login'),
             )
           else ...[
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              icon: const Icon(Icons.shopping_bag_outlined, size: 22),
-              tooltip: 'My Active Rentals',
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      builder: (_) => const ActiveRentalsScreen()),
-                );
-              },
-            ),
             const RentalNotificationBell(),
-            PopupMenuButton<String>(
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.more_vert, size: 22),
-              tooltip: 'More Options',
-              onSelected: (value) async {
-                if (value == 'profile') {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProfileScreen()),
-                  );
-                } else if (value == 'history') {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const RentalHistoryScreen()),
-                  );
-                } else if (value == 'admin' &&
-                    ['ADMIN', 'OWNER'].contains(
-                        _currentUserModel?.role.toUpperCase())) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const AdminDashboardScreen()),
-                  );
-                } else if (value == 'logout') {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Logged out successfully.')),
-                  );
-                  await authService.logout();
-                  if (mounted) setState(() => _currentUserModel = null);
-                }
-              },
-              itemBuilder: (context) => [
-                const PopupMenuItem(
-                  value: 'profile',
-                  child: Row(
-                    children: [
-                      Icon(Icons.person_outline,
-                          size: 20, color: Colors.black87),
-                      SizedBox(width: 10),
-                      Text('Profile & Settings'),
-                    ],
-                  ),
-                ),
-                const PopupMenuItem(
-                  value: 'history',
-                  child: Row(
-                    children: [
-                      Icon(Icons.history, size: 20, color: Colors.black87),
-                      SizedBox(width: 10),
-                      Text('Rental History'),
-                    ],
-                  ),
-                ),
-                if (['ADMIN', 'OWNER']
-                    .contains(_currentUserModel?.role.toUpperCase()))
+            if (isAdmin)
+              PopupMenuButton<String>(
+                padding: EdgeInsets.zero,
+                icon: const Icon(Icons.more_vert, size: 22),
+                tooltip: 'More Options',
+                onSelected: (value) async {
+                  if (value == 'admin') {
+                    final navigator = Navigator.of(context);
+                    navigator.push(
+                      MaterialPageRoute(
+                        builder: (_) => AdminDashboardScreen(
+                          onSignedOut: () {
+                            navigator.pushAndRemoveUntil(
+                              MaterialPageRoute(
+                                builder: (_) => const LoginScreen(),
+                              ),
+                              (route) => false,
+                            );
+                          },
+                        ),
+                      ),
+                    );
+                  } else if (value == 'logout') {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Logged out successfully.')),
+                    );
+                    await authService.logout();
+                    if (mounted) setState(() => _currentUserModel = null);
+                  }
+                },
+                itemBuilder: (context) => [
                   const PopupMenuItem(
                     value: 'admin',
                     child: Row(
@@ -273,152 +236,343 @@ class _CatalogScreenState extends State<CatalogScreen> {
                       ],
                     ),
                   ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'logout',
-                  child: Row(
-                    children: [
-                      Icon(Icons.logout, size: 20, color: Colors.red),
-                      SizedBox(width: 10),
-                      Text('Logout',
-                          style: TextStyle(
-                              color: Colors.red, fontWeight: FontWeight.bold)),
-                    ],
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, size: 20, color: Colors.red),
+                        SizedBox(width: 10),
+                        Text('Logout',
+                            style: TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.bold)),
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            ),
+                ],
+              ),
           ],
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(
-        children: [
-          if (_catalogLoading) const LinearProgressIndicator(),
-          if (_catalogError.isNotEmpty)
-            Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(children: [
-                  Text(_catalogError),
-                  TextButton(
-                      onPressed: _loadCatalog,
-                      child: const Text('Retry catalog'))
-                ])),
-          // Category Selector Bar
-          Container(
-            height: 54,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: categories.length,
-              itemBuilder: (context, index) {
-                final category = categories[index];
-                final isSelected = selectedCategory == category;
-                final isDark = Theme.of(context).brightness == Brightness.dark;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(category),
-                    selected: isSelected,
-                    selectedColor: Theme.of(context).primaryColor,
-                    backgroundColor:
-                        isDark ? const Color(0xFF131D2D) : Colors.white,
-                    side: BorderSide(
-                        color: isDark
-                            ? const Color(0xFF1E2C42)
-                            : Colors.grey.shade300),
-                    labelStyle: TextStyle(
-                      color: isSelected
-                          ? Colors.white
-                          : (isDark ? const Color(0xFFF8FAFC) : Colors.black87),
-                      fontWeight:
-                          isSelected ? FontWeight.bold : FontWeight.normal,
-                    ),
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(() {
-                          selectedCategory = category;
-                        });
-                      }
-                    },
+      body: RefreshIndicator(
+        onRefresh: _loadCatalog,
+        child: CustomScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            if (_catalogLoading)
+              const SliverToBoxAdapter(child: LinearProgressIndicator()),
+            if (_catalogError.isNotEmpty)
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    children: [
+                      Text(_catalogError),
+                      TextButton(
+                        onPressed: _loadCatalog,
+                        child: const Text('Retry catalog'),
+                      ),
+                    ],
                   ),
-                );
-              },
+                ),
+              ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: (value) => setState(() => _searchQuery = value),
+                  textInputAction: TextInputAction.search,
+                  decoration: InputDecoration(
+                    hintText: 'Search equipment or category',
+                    prefixIcon: const Icon(Icons.search_rounded),
+                    suffixIcon: _searchQuery.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                            icon: const Icon(Icons.close_rounded),
+                          ),
+                  ),
+                ),
+              ),
             ),
-          ),
-
-          // Item Catalog Grid
-          Expanded(
-            child: filteredItems.isEmpty
-                ? const Center(child: Text('No items found in this category.'))
-                : GridView.builder(
-                    padding: const EdgeInsets.all(16),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      childAspectRatio: 0.64,
-                      crossAxisSpacing: 12,
-                      mainAxisSpacing: 12,
+            SliverToBoxAdapter(
+              child: Container(
+                height: 56,
+                padding: const EdgeInsets.symmetric(vertical: 7),
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 18),
+                  itemCount: categories.length,
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    final isSelected = selectedCategory == category;
+                    final isDark =
+                        Theme.of(context).brightness == Brightness.dark;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 9),
+                      child: ChoiceChip(
+                        label: Text(category),
+                        avatar: isSelected
+                            ? const Icon(Icons.check_rounded, size: 17)
+                            : null,
+                        selected: isSelected,
+                        selectedColor: AppTheme.brandOrange,
+                        backgroundColor:
+                            isDark ? AppTheme.darkSurface : Colors.white,
+                        side: BorderSide(
+                          color: isDark
+                              ? AppTheme.darkBorder
+                              : const Color(0xFFE2E8F0),
+                        ),
+                        showCheckmark: false,
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        labelStyle: TextStyle(
+                          color: isSelected
+                              ? Colors.white
+                              : (isDark
+                                  ? AppTheme.darkTextPrimary
+                                  : AppTheme.lightTextPrimary),
+                          fontWeight:
+                              isSelected ? FontWeight.w700 : FontWeight.w500,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() => selectedCategory = category);
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 12, 2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${filteredItems.length} item${filteredItems.length == 1 ? '' : 's'}',
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    itemCount: filteredItems.length,
-                    itemBuilder: (context, index) {
-                      final item = filteredItems[index];
-                      return _buildItemCard(item);
-                    },
+                    TextButton.icon(
+                      onPressed: () =>
+                          setState(() => _availableFirst = !_availableFirst),
+                      icon: const Icon(Icons.sort_rounded, size: 18),
+                      label: Text(
+                          _availableFirst ? 'Available first' : 'Name A–Z'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            SliverToBoxAdapter(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                child: Row(
+                  children: [
+                    FilterChip(
+                      selected: _availableOnly,
+                      avatar: const Icon(Icons.check_circle_outline, size: 17),
+                      label: const Text('Available only'),
+                      onSelected: (selected) =>
+                          setState(() => _availableOnly = selected),
+                    ),
+                    const SizedBox(width: 8),
+                    FilterChip(
+                      selected: _savedOnly,
+                      avatar: const Icon(Icons.favorite_border_rounded, size: 17),
+                      label: Text('Saved (${_savedItemIds.length})'),
+                      onSelected: (selected) =>
+                          setState(() => _savedOnly = selected),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (filteredItems.isEmpty)
+              SliverFillRemaining(
+                hasScrollBody: false,
+                child: Center(
+                  child: _catalogLoading
+                      ? const CircularProgressIndicator()
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.toys_outlined,
+                              size: 42,
+                              color:
+                                  Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _catalogError.isNotEmpty
+                                  ? 'Catalog unavailable'
+                                  : _searchQuery.isNotEmpty ||
+                                          _availableOnly ||
+                                          _savedOnly
+                                      ? 'No matching equipment'
+                                      : 'No items in this category yet',
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .titleSmall
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                            if (!_catalogLoading &&
+                                (_searchQuery.isNotEmpty ||
+                                    selectedCategory != 'All' ||
+                                    _availableOnly ||
+                                    _savedOnly)) ...[
+                              const SizedBox(height: 6),
+                              TextButton(
+                                onPressed: _clearFilters,
+                                child: const Text('Clear search and filters'),
+                              ),
+                            ],
+                          ],
+                        ),
+                ),
+              )
+            else
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                sliver: SliverGrid(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount:
+                        MediaQuery.sizeOf(context).width >= 760 ? 3 : 2,
+                    childAspectRatio: MediaQuery.sizeOf(context).width < 350
+                        ? 0.50
+                        : MediaQuery.sizeOf(context).width < 420
+                            ? 0.54
+                            : MediaQuery.sizeOf(context).width >= 760
+                                ? 0.74
+                                : 0.64,
+                    crossAxisSpacing: 14,
+                    mainAxisSpacing: 14,
                   ),
-          ),
-        ],
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) => _buildItemCard(filteredItems[index]),
+                    childCount: filteredItems.length,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildItemCard(ItemModel item) {
     final isAvailable = item.status.toLowerCase() == 'available';
+    final isSaved = _savedItemIds.contains(item.id);
 
-    Color statusColor;
-    if (item.status.toLowerCase() == 'available') {
-      statusColor = Colors.green;
-    } else if (item.status.toLowerCase() == 'rented') {
-      statusColor = Colors.orange;
-    } else {
-      statusColor = Colors.red;
-    }
+    final statusKey = item.status.toUpperCase();
+    final statusColor = switch (statusKey) {
+      'AVAILABLE' => Colors.green,
+      'RENTED' || 'RESERVED_PENDING' => Colors.orange,
+      _ => Colors.red,
+    };
+    final statusLabel = switch (statusKey) {
+      'AVAILABLE' => 'AVAILABLE',
+      'RESERVED_PENDING' => 'ON HOLD',
+      'RENTED' => 'RENTED',
+      'UNAVAILABLE' || '' => 'UNAVAILABLE',
+      _ => statusKey.replaceAll('_', ' '),
+    };
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+      clipBehavior: Clip.antiAlias,
+      elevation: isDark ? 0 : 2,
+      shadowColor: const Color(0x1A0F172A),
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(
+          color: isDark ? AppTheme.darkBorder : const Color(0xFFE8ECF1),
+        ),
+      ),
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => ItemDetailsScreen(item: item)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
           Stack(
             children: [
-              ClipRRect(
-                borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(12)),
-                child: Container(
-                  height: 110,
-                  width: double.infinity,
-                  color: Colors.grey.shade100,
-                  child: item.buildImage(fit: BoxFit.cover, height: 110),
-                ),
+              Container(
+                height: 120,
+                width: double.infinity,
+                color: isDark ? AppTheme.darkSurfaceVariant : const Color(0xFFF3F5F7),
+                child: item.buildImage(fit: BoxFit.contain, height: 120),
               ),
               Positioned(
-                top: 8,
-                right: 8,
+                top: 10,
+                right: 10,
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
-                    color: statusColor.withValues(alpha: 0.9),
-                    borderRadius: BorderRadius.circular(12),
+                    color: statusColor.withValues(alpha: .92),
+                    borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    item.status.toUpperCase(),
+                    statusLabel,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 10,
-                      fontWeight: FontWeight.bold,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .2,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                top: 4,
+                left: 4,
+                child: Material(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .surface
+                      .withValues(alpha: .94),
+                  shape: const CircleBorder(),
+                  child: IconButton(
+                    tooltip: isSaved ? 'Remove from saved' : 'Save item',
+                    visualDensity: VisualDensity.compact,
+                    onPressed: () => setState(() {
+                      if (isSaved) {
+                        _savedItemIds.remove(item.id);
+                      } else {
+                        _savedItemIds.add(item.id);
+                      }
+                    }),
+                    icon: Icon(
+                      isSaved
+                          ? Icons.favorite_rounded
+                          : Icons.favorite_border_rounded,
+                      color: isSaved
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(context).colorScheme.onSurfaceVariant,
+                      size: 20,
                     ),
                   ),
                 ),
@@ -427,58 +581,63 @@ class _CatalogScreenState extends State<CatalogScreen> {
           ),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(10.0),
+              padding: const EdgeInsets.fromLTRB(12, 11, 12, 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     item.name,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15,
+                      height: 1.15,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 5),
                   Text(
                     item.category,
                     style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 11,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    item.rateText,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Theme.of(context).primaryColor,
-                      fontWeight: FontWeight.w600,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
                       fontSize: 12,
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const Spacer(),
+                  Tooltip(
+                    message: item.rateText,
+                    child: Text(
+                      item.rateText,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                        height: 1.15,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
-                    height: 34,
+                    height: 40,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor:
-                            isAvailable ? const Color(0xFFF57C00) : Colors.grey,
+                        backgroundColor: isAvailable
+                            ? AppTheme.brandOrangeLight
+                            : Theme.of(context).disabledColor,
                         foregroundColor: Colors.white,
                         padding: EdgeInsets.zero,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: BorderRadius.circular(12),
                         ),
                       ),
                       onPressed:
                           isAvailable ? () => _handleRentalClick(item) : null,
                       child: Text(
                         item.isForSale ? 'Rent / Buy' : 'Rent Now',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                       ),
                     ),
                   ),
@@ -486,7 +645,8 @@ class _CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }

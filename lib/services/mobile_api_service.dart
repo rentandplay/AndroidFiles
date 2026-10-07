@@ -65,10 +65,29 @@ class MobileApiService {
   }
 
   Future<Map<String, dynamic>> rentalRecord(String id) async {
-    final result = await _request('/mobile/rentals/${Uri.encodeComponent(id)}');
-    final records = result['rentals'] as List? ?? [];
-    if (records.isEmpty) throw const MobileApiException('Booking not found.');
-    return Map<String, dynamic>.from(records.first as Map);
+    Map<String, dynamic>? result;
+    try {
+      result = await _request('/mobile/rentals/${Uri.encodeComponent(id)}');
+    } on MobileApiException catch (error) {
+      if (error.statusCode != 404) rethrow;
+    }
+    final rental = result?['rental'];
+    if (rental is Map) return Map<String, dynamic>.from(rental);
+    final records = result?['rentals'] as List? ?? const [];
+    for (final row in records.whereType<Map>()) {
+      if ((row['id'] ?? row['rentalId']).toString() == id) {
+        return Map<String, dynamic>.from(row);
+      }
+    }
+
+    // Older API deployments returned an empty list for the detail route. Fall
+    // back to the authenticated customer list so existing notifications still
+    // open their matching rental instead of showing a false "not found" error.
+    final rentals = await listRentals();
+    for (final row in rentals) {
+      if (row.rentalId == id) return row.toMap();
+    }
+    throw const MobileApiException('Rental request not found.', statusCode: 404);
   }
 
   Future<Map<String, dynamic>> quoteRental(String itemId, int minutes) async {
@@ -81,6 +100,25 @@ class MobileApiService {
     final result =
         await _request('/mobile/rentals/${Uri.encodeComponent(id)}/ticket');
     return Map<String, dynamic>.from(result['ticket'] as Map);
+  }
+
+  Future<Map<String, dynamic>> paymentInstructions() async =>
+      _request('/mobile/payment-instructions');
+
+  Future<void> submitPaymentProof({
+    required String rentalId,
+    required String imageDataUrl,
+    String? reference,
+  }) async {
+    await _request(
+      '/mobile/rentals/${Uri.encodeComponent(rentalId)}/payment-proof',
+      method: 'POST',
+      body: {
+        'imageDataUrl': imageDataUrl,
+        if (reference != null && reference.trim().isNotEmpty)
+          'reference': reference.trim(),
+      },
+    );
   }
 
   Future<void> cancelRental(String id) async {
@@ -191,6 +229,8 @@ class MobileApiService {
     required String paymentMethod,
     required String requestKey,
     required Map<String, dynamic> expectedQuote,
+    String? paymentProofImageDataUrl,
+    String? paymentReference,
   }) async {
     await _ensureCustomerProfile();
     final result = await _request(
@@ -203,6 +243,13 @@ class MobileApiService {
         'paymentMethod': paymentMethod.toUpperCase(),
         'requestKey': requestKey,
         'expectedQuote': expectedQuote,
+        if (paymentMethod.toUpperCase() == 'QR' &&
+            paymentProofImageDataUrl != null)
+          'paymentProof': {
+            'imageDataUrl': paymentProofImageDataUrl,
+            if (paymentReference != null && paymentReference.trim().isNotEmpty)
+              'reference': paymentReference.trim(),
+          },
       },
     );
     final rental = result['rental'];

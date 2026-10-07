@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
@@ -11,7 +12,9 @@ import '../auth/login_screen.dart';
 import '../../widgets/notification_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
+  const ProfileScreen({super.key, this.showBackButton = true});
+
+  final bool showBackButton;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -58,9 +61,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _nameController.text = userModel.name;
         _phoneController.text = userModel.phone;
-        _profileImageUrl = userModel.validIdUrl != null &&
-                userModel.validIdUrl!.startsWith('http')
-            ? userModel.validIdUrl
+        _profileImageUrl = userModel.profileImageUrl != null &&
+                userModel.profileImageUrl!.startsWith('http')
+            ? userModel.profileImageUrl
             : null;
       });
     }
@@ -79,7 +82,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       final authService = Provider.of<AuthService>(context, listen: false);
       final user = authService.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
       setState(() => _isLoading = true);
 
@@ -116,6 +122,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
+    final name = _nameController.text.trim();
+    if (name.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a name with at least 2 letters.')),
+      );
+      return;
+    }
     setState(() => _isLoading = true);
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
@@ -126,7 +139,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .collection('users')
           .doc(user.uid)
           .update({
-        'name': _nameController.text.trim(),
+        'name': name,
         'phone': _phoneController.text.trim(),
       });
 
@@ -146,6 +159,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
         SnackBar(content: Text('Failed to update profile: $e')),
       );
     }
+  }
+
+  Future<void> _confirmSignOut(AuthService authService) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sign out?'),
+        content: const Text('You can sign back in anytime to track rentals.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Stay signed in'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Sign out'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await authService.logout();
+    if (!mounted) return;
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
   }
 
   @override
@@ -172,12 +213,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         backgroundColor: cardBg,
         elevation: 0.5,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: widget.showBackButton,
+        leading: widget.showBackButton
+            ? IconButton(
+                icon: Icon(Icons.arrow_back, color: textPrimary),
+                onPressed: () => Navigator.pop(context),
+              )
+            : null,
         title: Text(
-          'Settings',
+          'Profile & settings',
           style: TextStyle(
             color: textPrimary,
             fontWeight: FontWeight.bold,
@@ -185,27 +229,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: Icon(Icons.refresh, color: textSecondary, size: 22),
-            tooltip: 'Refresh',
-            onPressed: () => setState(() {}),
-          ),
-          RentalNotificationBell(color: textSecondary),
-          const Padding(
-            padding: EdgeInsets.only(right: 14.0),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: Color(0xFFFED7AA),
-              child: Text(
-                'RP',
-                style: TextStyle(
-                  color: Color(0xFFC2410C),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-          ),
+          if (user != null) RentalNotificationBell(color: textSecondary),
+          const SizedBox(width: 8),
         ],
       ),
       body: FutureBuilder<UserModel?>(
@@ -257,38 +282,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 else if (isAdmin && selectedTab == 'Preferences')
                   _buildPreferencesTabCard(
                       isDark, cardBg, cardBorder, textPrimary, textSecondary)
+                else if (!isAdmin && user == null)
+                  _buildGuestProfileCard(cardBg, cardBorder, textPrimary,
+                      textSecondary)
+                else if (!isAdmin)
+                  _buildCustomerProfileCard(
+                      userModel, user, isDark, cardBg, cardBorder,
+                      textPrimary, textSecondary)
                 else
                   _buildUsersAccountTabCard(userModel, user, role, isDark,
                       cardBg, cardBorder, textPrimary, textSecondary, inputFill),
 
-                const SizedBox(height: 30),
-
-                // 3. Log Out Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 48,
-                  child: OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                if (user != null) ...[
+                  const SizedBox(height: 30),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: _isLoading
+                          ? null
+                          : () => _confirmSignOut(authService),
+                      icon: const Icon(Icons.logout, size: 20),
+                      label: const Text('Sign out',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15)),
                     ),
-                    onPressed: () async {
-                      await authService.logout();
-                      if (!context.mounted) return;
-                      Navigator.pushAndRemoveUntil(
-                        context,
-                        MaterialPageRoute(builder: (_) => const LoginScreen()),
-                        (route) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.logout, size: 20),
-                    label: const Text('Log Out',
-                        style: TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 15)),
                   ),
-                ),
+                ],
               ],
             ),
           );
@@ -689,13 +715,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(
                 fontSize: 20, fontWeight: FontWeight.bold, color: textPrimary),
           ),
+          const SizedBox(height: 5),
+          Text(
+            'Choose a theme that feels comfortable in your surroundings. Your choice updates the app right away.',
+            style: TextStyle(color: textSecondary, height: 1.4, fontSize: 13),
+          ),
           const SizedBox(height: 16),
           SwitchListTile(
             secondary: Icon(
               themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
               color: const Color(0xFFF57C00),
             ),
-            title: Text('Dark Mode',
+            title: Text('Use dark appearance',
                 style: TextStyle(
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
@@ -755,6 +786,314 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+  Widget _buildGuestProfileCard(Color cardBg, Color cardBorder,
+          Color textPrimary, Color textSecondary) =>
+      Container(
+        width: double.infinity,
+        padding: const EdgeInsets.fromLTRB(22, 28, 22, 24),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: cardBorder),
+        ),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 34,
+              backgroundColor: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: .1),
+              child: Icon(Icons.person_outline_rounded,
+                  size: 34, color: Theme.of(context).colorScheme.primary),
+            ),
+            const SizedBox(height: 14),
+            Text('Make rentals yours',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                    color: textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800)),
+            const SizedBox(height: 7),
+            Text(
+              'Sign in to manage your profile, track requests, and keep your rental history in one place.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: textSecondary, height: 1.45),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const LoginScreen()),
+              ),
+              icon: const Icon(Icons.login_rounded),
+              label: const Text('Sign in'),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildCustomerProfileCard(
+    UserModel? userModel,
+    dynamic user,
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
+    final name = userModel?.name.trim().isNotEmpty == true
+        ? userModel!.name.trim()
+        : (user?.displayName?.toString().trim().isNotEmpty == true
+            ? user.displayName.toString().trim()
+            : 'Customer');
+    final email = userModel?.email.trim().isNotEmpty == true
+        ? userModel!.email.trim()
+        : user?.email?.toString() ?? '';
+    final avatarImage = _imageBytes != null
+        ? MemoryImage(_imageBytes!) as ImageProvider
+        : _profileImageUrl != null
+            ? NetworkImage(_profileImageUrl!) as ImageProvider
+            : null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cardBorder),
+          ),
+          child: Column(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  CircleAvatar(
+                    radius: 44,
+                    backgroundColor: isDark
+                        ? const Color(0xFF1E2C42)
+                        : const Color(0xFFF1F5F9),
+                    backgroundImage: avatarImage,
+                    child: avatarImage == null
+                        ? Icon(Icons.person_rounded,
+                            size: 48, color: textSecondary)
+                        : null,
+                  ),
+                  Positioned(
+                    right: -3,
+                    bottom: -3,
+                    child: Material(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: const CircleBorder(),
+                      child: IconButton(
+                        tooltip: 'Change profile photo',
+                        onPressed: _isLoading ? null : _pickAndUploadImage,
+                        icon: _isLoading
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.camera_alt_outlined,
+                                color: Colors.white, size: 18),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      color: textPrimary,
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800)),
+              if (email.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text(email,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: textSecondary, fontSize: 13)),
+              ],
+              const SizedBox(height: 10),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  'CUSTOMER ACCOUNT',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: .5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: cardBorder),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Personal details',
+                            style: TextStyle(
+                                color: textPrimary,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 3),
+                        Text('Keep your contact information up to date.',
+                            style: TextStyle(
+                                color: textSecondary, fontSize: 12)),
+                      ],
+                    ),
+                  ),
+                  if (!_isEditing)
+                    IconButton.filledTonal(
+                      tooltip: 'Edit personal details',
+                      onPressed: () => setState(() => _isEditing = true),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (_isEditing) ...[
+                TextField(
+                  controller: _nameController,
+                  enabled: !_isLoading,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    labelText: 'Full name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _phoneController,
+                  enabled: !_isLoading,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
+                  maxLength: 40,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number (optional)',
+                    hintText: 'e.g. 0917 123 4567',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isLoading
+                            ? null
+                            : () => setState(() {
+                                  _nameController.text = userModel?.name ??
+                                      user?.displayName?.toString() ??
+                                      '';
+                                  _phoneController.text =
+                                      userModel?.phone ?? '';
+                                  _isEditing = false;
+                                }),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        onPressed: _isLoading ? null : _saveProfile,
+                        icon: _isLoading
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2, color: Colors.white),
+                              )
+                            : const Icon(Icons.check_rounded),
+                        label: const Text('Save changes'),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                _customerDetailRow(Icons.person_outline, 'Full name', name,
+                    textPrimary, textSecondary),
+                const SizedBox(height: 12),
+                _customerDetailRow(
+                    Icons.phone_outlined,
+                    'Phone number',
+                    userModel?.phone.trim().isNotEmpty == true
+                        ? userModel!.phone.trim()
+                        : 'Add a number for handoff updates',
+                    textPrimary,
+                    textSecondary),
+                if (userModel?.createdAt != null) ...[
+                  const SizedBox(height: 12),
+                  _customerDetailRow(
+                      Icons.calendar_month_outlined,
+                      'Member since',
+                      DateFormat('MMMM yyyy').format(userModel!.createdAt!),
+                      textPrimary,
+                      textSecondary),
+                ],
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _customerDetailRow(IconData icon, String label, String value,
+      Color textPrimary, Color textSecondary) =>
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 20, color: textSecondary),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: TextStyle(color: textSecondary, fontSize: 12)),
+                const SizedBox(height: 2),
+                Text(value,
+                    style: TextStyle(
+                        color: textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ),
+        ],
+      );
 
   // --- USERS & ACCOUNT TAB CARD ---
   Widget _buildUsersAccountTabCard(

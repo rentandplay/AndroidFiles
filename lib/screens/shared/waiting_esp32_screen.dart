@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import '../../models/rental_model.dart';
 import '../../services/rental_service.dart';
 import '../../services/esp32_service.dart';
-import '../user/catalog_screen.dart';
+import '../user/customer_home_screen.dart';
 import 'connection_error_screen.dart';
 
 class WaitingEsp32Screen extends StatefulWidget {
@@ -92,7 +92,7 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
               Navigator.of(ctx).pop();
               Navigator.pushAndRemoveUntil(
                 context,
-                MaterialPageRoute(builder: (_) => const CatalogScreen()),
+                MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
                 (route) => false,
               );
             },
@@ -129,7 +129,7 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
           onBack: () {
             Navigator.pushAndRemoveUntil(
               context,
-              MaterialPageRoute(builder: (_) => const CatalogScreen()),
+              MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
               (route) => false,
             );
           },
@@ -214,7 +214,7 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
                 Navigator.of(ctx).pop();
                 Navigator.pushAndRemoveUntil(
                   context,
-                  MaterialPageRoute(builder: (_) => const CatalogScreen()),
+                  MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
                   (route) => false,
                 );
               },

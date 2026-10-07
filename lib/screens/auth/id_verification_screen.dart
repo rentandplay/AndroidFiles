@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
 import '../shared/terms_dialog.dart';
-import '../user/catalog_screen.dart';
+import '../user/customer_home_screen.dart';
 
 class IdVerificationScreen extends StatefulWidget {
   final UserModel? userModel;
@@ -65,7 +65,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
 
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (_) => const CatalogScreen()),
+        MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
         (route) => false,
       );
     } catch (e) {
@@ -136,7 +136,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Renter must present 1 physical valid ID (Government or Student ID) to the operator at the terminal upon pickup.',
+                          'Show one physical Government or Student ID to the operator when the item is handed over at your selected location.',
                           style: TextStyle(
                             fontSize: 13,
                             color: Colors.blue.shade800,

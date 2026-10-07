@@ -40,11 +40,18 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<UserModel?> signInWithGoogle() async {
-    final googleUser = await GoogleSignIn().signIn();
-    if (googleUser == null) return null;
-    final googleAuth = await googleUser.authentication;
-    await _auth.signInWithCredential(GoogleAuthProvider.credential(
-        accessToken: googleAuth.accessToken, idToken: googleAuth.idToken));
+    if (kIsWeb) {
+      // Firebase Auth owns the browser OAuth flow and reads the Google provider
+      // configuration from the Firebase project. google_sign_in's web plugin
+      // needs a separate clientId, which is not configured for this app.
+      await _auth.signInWithPopup(GoogleAuthProvider());
+    } else {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return null;
+      final googleAuth = await googleUser.authentication;
+      await _auth.signInWithCredential(GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken, idToken: googleAuth.idToken));
+    }
     await _api.profile(method: 'POST', body: {});
     notifyListeners();
     return getCurrentUserModel();

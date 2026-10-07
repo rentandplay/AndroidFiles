@@ -5,7 +5,7 @@ import '../../models/item_model.dart';
 
 import '../../services/mobile_api_service.dart';
 import '../user/item_details_screen.dart';
-import '../user/catalog_screen.dart';
+import '../user/customer_home_screen.dart';
 import '../user/active_rentals_screen.dart';
 import '../rental/rental_history_screen.dart';
 import '../profile/profile_screen.dart';
@@ -46,7 +46,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     Widget target;
     switch (index) {
       case 0:
-        target = const CatalogScreen();
+        target = const CustomerHomeScreen();
         break;
       case 1:
         return;

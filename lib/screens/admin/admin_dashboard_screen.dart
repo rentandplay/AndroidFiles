@@ -3,148 +3,87 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../services/admin_firestore_service.dart';
-import 'admin_module_view.dart';
 import '../../widgets/notification_widgets.dart';
+import 'rental_admin_view.dart';
 
+/// Lightweight staff counter for the Android app.
+///
+/// Detailed inventory, customer, rate, report, and account administration
+/// lives in the web workspace. This screen keeps the mobile tools needed at
+/// the counter: review rentals, scan QR codes, hand off equipment, and process
+/// returns.
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({
     super.key,
-    this.initialAdminEmail,
+    required this.onSignedOut,
   });
 
-  final String? initialAdminEmail;
+  final VoidCallback onSignedOut;
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  static const _dashboardItem = _AdminNavItem(
-    'Dashboard',
-    Icons.space_dashboard_outlined,
-  );
-  static const _reportsItem =
-      _AdminNavItem('Reports', Icons.bar_chart_outlined);
-  static const _settingsItem =
-      _AdminNavItem('Settings', Icons.settings_outlined);
-  static const _navGroups = <_AdminNavGroup>[
-    _AdminNavGroup('Management', Icons.inventory_2_outlined, [
-      _AdminNavItem('Equipment', Icons.inventory_2_outlined),
-      _AdminNavItem('Customers', Icons.people_outline),
-      _AdminNavItem('Rates & Fees', Icons.payments_outlined),
-    ]),
-    _AdminNavGroup('Transactions', Icons.sync_alt_rounded, [
-      _AdminNavItem('Rentals', Icons.schedule_outlined),
-      _AdminNavItem('Returns', Icons.assignment_return_outlined),
-      _AdminNavItem('Transaction History', Icons.receipt_long_outlined),
-    ]),
-    _AdminNavGroup('Operations', Icons.build_outlined, [
-      _AdminNavItem('Maintenance', Icons.build_outlined),
-      _AdminNavItem('ESP32 / Verification', Icons.memory_outlined),
-    ]),
-  ];
-
   final _api = AdminFirestoreService.instance;
-  final _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
-  final _expandedNavGroups = <String, bool>{
-    'Management': true,
-    'Transactions': true,
-    'Operations': true,
-  };
   Timer? _refreshTimer;
-  String _page = 'Dashboard';
-  String _loginError = '';
-  String _connectionError = '';
-  bool _needsLogin = false;
   bool _loading = true;
-  bool _submittingLogin = false;
   bool _refreshing = false;
+  bool _leaving = false;
+  String _connectionError = '';
   Map<String, dynamic> _dashboard = {};
   Map<String, dynamic> _workspace = {};
-  Map<String, dynamic> _inventory = {};
+  int _selectedIndex = 0;
+  String? _requestedScanKind;
+  int _scanRequestId = 0;
 
   @override
   void initState() {
     super.initState();
-    _emailController.text = widget.initialAdminEmail ?? '';
-    _loginError = '';
     _bootstrap();
   }
 
   @override
   void dispose() {
     _refreshTimer?.cancel();
-    _emailController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _bootstrap() async {
     if (!_api.hasSession) {
-      if (mounted) {
-        setState(() {
-          _needsLogin = true;
-          _loading = false;
-        });
-      }
+      _returnToLogin();
       return;
     }
     try {
       await _api.restoreAdminSession();
-      await _loadWorkspace(withInventory: _page == 'Equipment');
-      _startAutoRefresh();
+      await _loadWorkspace();
+      if (mounted && !_leaving) _startAutoRefresh();
     } on AdminApiException catch (error) {
+      if (_isAuthFailure(error)) {
+        await _logout();
+        return;
+      }
       if (!mounted) return;
       setState(() {
-        _needsLogin = _isAuthFailure(error);
-        _loginError = _needsLogin ? error.message : '';
-        _connectionError = _needsLogin ? '' : error.message;
         _loading = false;
+        _connectionError = error.message;
       });
-    }
-  }
-
-  Future<void> _signIn() async {
-    if (_emailController.text.trim().isEmpty ||
-        _passwordController.text.isEmpty) {
-      setState(() => _loginError = 'Enter your staff email and password.');
-      return;
-    }
-    setState(() {
-      _submittingLogin = true;
-      _loginError = '';
-    });
-    try {
-      await _api.signIn(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-      _passwordController.clear();
-      await _loadWorkspace(withInventory: _page == 'Equipment');
-      _startAutoRefresh();
-    } on AdminApiException catch (error) {
-      if (mounted) setState(() => _loginError = error.message);
-    } finally {
-      if (mounted) setState(() => _submittingLogin = false);
     }
   }
 
   void _startAutoRefresh() {
     _refreshTimer?.cancel();
     _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
-      if (mounted && !_needsLogin && _page != 'Settings') {
-        _loadWorkspace(withInventory: _page == 'Equipment', quiet: true);
-      }
+      if (mounted && !_leaving) unawaited(_loadWorkspace(quiet: true));
     });
   }
 
-  Future<void> _loadWorkspace({
-    bool withInventory = false,
-    bool quiet = false,
-  }) async {
-    if (_refreshing || !_api.hasSession) return;
+  Future<void> _loadWorkspace({bool quiet = false}) async {
+    if (_refreshing || _leaving) return;
+    if (!_api.hasSession) {
+      _returnToLogin();
+      return;
+    }
     _refreshing = true;
     if (!quiet && mounted) {
       setState(() {
@@ -154,53 +93,53 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
     try {
       final workspace = await _api.loadWorkspace();
-      final dashboard = _api.dashboardFromWorkspace(workspace);
       if (!mounted) return;
       setState(() {
-        _dashboard = dashboard;
         _workspace = workspace;
-        if (withInventory) _inventory = _api.inventoryFromWorkspace(workspace);
+        _dashboard = _api.dashboardFromWorkspace(workspace);
         _loading = false;
         _connectionError = '';
-        _needsLogin = false;
       });
     } on AdminApiException catch (error) {
+      if (_isAuthFailure(error)) {
+        await _logout();
+        return;
+      }
       if (!mounted) return;
       setState(() {
         _loading = false;
-        if (_isAuthFailure(error)) {
-          _needsLogin = true;
-          _loginError = error.message;
-        } else {
-          _connectionError = error.message;
-        }
+        _connectionError = error.message;
       });
     } finally {
       _refreshing = false;
     }
   }
 
-  Future<void> _refresh({bool withInventory = false}) =>
-      _loadWorkspace(withInventory: withInventory || _page == 'Equipment');
-
-  Future<void> _selectPage(String next) async {
-    if (mounted) setState(() => _page = next);
-    if (next == 'Equipment' && _inventory.isEmpty) {
-      await _loadWorkspace(withInventory: true);
-    }
-  }
+  Future<void> _refresh() => _loadWorkspace();
 
   Future<void> _logout() async {
-    await _api.signOut();
+    if (_leaving) return;
+    _leaving = true;
+    try {
+      await _api.signOut();
+    } catch (error) {
+      _leaving = false;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not sign out: $error')),
+        );
+      }
+      return;
+    }
     if (!mounted) return;
-    setState(() {
-      _needsLogin = true;
-      _loading = false;
-      _dashboard = {};
-      _workspace = {};
-      _inventory = {};
-      _loginError = 'You have signed out of the admin workspace.';
-      _connectionError = '';
+    widget.onSignedOut();
+  }
+
+  void _returnToLogin() {
+    if (_leaving) return;
+    _leaving = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) widget.onSignedOut();
     });
   }
 
@@ -209,59 +148,329 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       (error.statusCode == 403 &&
           !error.message.startsWith('Firebase denied access.'));
 
-  @override
-  Widget build(BuildContext context) {
-    if (_needsLogin) return _buildSignInPage();
-    if (_loading && _dashboard.isEmpty) {
-      return const Scaffold(
-        body: Center(
-            child: CircularProgressIndicator(color: _AdminColors.orange)),
+  List<Map<String, dynamic>> get _rentals {
+    final workspaceRows = _rows(_workspace['rentals']);
+    return workspaceRows.isNotEmpty
+        ? workspaceRows
+        : _rows(_dashboard['rentals']);
+  }
+
+  int _countStatus(String status) =>
+      _rentals.where((row) => row['status'] == status).length;
+
+  void _selectTab(int index) {
+    if (index == 2) {
+      unawaited(_showScanOptions());
+      return;
+    }
+    setState(() {
+      _selectedIndex = index;
+      _requestedScanKind = null;
+    });
+  }
+
+  void _requestScan(String kind) {
+    setState(() {
+      _selectedIndex = kind == 'INVENTORY' ? 3 : 1;
+      _requestedScanKind = kind;
+      _scanRequestId++;
+    });
+  }
+
+  void _consumeScanRequest() {
+    if (!mounted || _requestedScanKind == null) return;
+    setState(() => _requestedScanKind = null);
+  }
+
+  Future<void> _showScanOptions() async {
+    final kind = await showModalBottomSheet<String>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'Choose what to scan',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.qr_code_2_rounded),
+                ),
+                title: const Text('Customer rental QR'),
+                subtitle: const Text(
+                  'Review a request or confirm a customer handoff.',
+                ),
+                onTap: () => Navigator.pop(sheetContext, 'BOOKING'),
+              ),
+              ListTile(
+                leading: const CircleAvatar(
+                  child: Icon(Icons.inventory_2_outlined),
+                ),
+                title: const Text('Equipment QR'),
+                subtitle: const Text(
+                  'Prepare a unit, receive a return, or inspect it.',
+                ),
+                onTap: () => Navigator.pop(sheetContext, 'INVENTORY'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (kind != null && mounted) _requestScan(kind);
+  }
+
+  Widget _buildCurrentPage(Map<String, dynamic> user, bool isDark) {
+    if (_loading && _workspace.isEmpty) {
+      return const Center(
+        child: CircularProgressIndicator(color: _AdminColors.orange),
       );
     }
+    if (_selectedIndex == 1) return _buildTransactionPage(returns: false);
+    if (_selectedIndex == 3) return _buildTransactionPage(returns: true);
+    return _buildHomePage(user, isDark);
+  }
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final width = MediaQuery.sizeOf(context).width;
-    final isWide = width >= 920;
-    final user = _map(_api.currentUser);
-    final title = _page;
-    return Scaffold(
-      key: _scaffoldKey,
-      backgroundColor: _AdminColors.getCanvas(isDark),
-      drawer: isWide
-          ? null
-          : Drawer(
-              backgroundColor: _AdminColors.getCardBg(isDark),
-              child: _navigation(user, isDark, _closeDrawer),
+  Widget _buildTransactionPage({required bool returns}) {
+    return RentalAdminView(
+      key: ValueKey(returns ? 'staff-returns' : 'staff-rentals'),
+      page: returns ? 'Returns' : 'Rentals',
+      workspace: _workspace,
+      onChanged: _refresh,
+      initialScanKind: _requestedScanKind,
+      scanRequestId: _scanRequestId,
+      onScanConsumed: _consumeScanRequest,
+    );
+  }
+
+  Widget _buildHomePage(Map<String, dynamic> user, bool isDark) {
+    final name = user['name']?.toString().trim() ?? '';
+    final stats = _map(_dashboard['stats']);
+    final pending = _countStatus('PENDING_ADMIN_APPROVAL');
+    final approved = _countStatus('APPROVED');
+    final active = _countStatus('ACTIVE');
+    final inspections = _countStatus('RETURN_PENDING_INSPECTION');
+
+    return RefreshIndicator(
+      color: _AdminColors.orange,
+      onRefresh: _refresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
+        children: [
+          Text(
+            name.isEmpty ? 'Staff counter' : 'Hi, $name',
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: _AdminColors.getInk(isDark),
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Handle rental handoffs and returns from your phone.',
+            style: TextStyle(color: _AdminColors.getMuted(isDark)),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF33271F) : const Color(0xFFFFF2E7),
+              borderRadius: BorderRadius.circular(20),
             ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _AdminColors.orange.withValues(alpha: .14),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: _AdminColors.orangeDark,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      'COUNTER WORKFLOW',
+                      style: TextStyle(
+                        color: isDark
+                            ? const Color(0xFFFFC79B)
+                            : _AdminColors.orangeDark,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: .8,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Scan, verify, hand off.',
+                  style: TextStyle(
+                    color: _AdminColors.getInk(isDark),
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  'Use the phone camera for rental and equipment QR codes.',
+                  style: TextStyle(color: _AdminColors.getMuted(isDark)),
+                ),
+                const SizedBox(height: 14),
+                FilledButton.icon(
+                  onPressed: _showScanOptions,
+                  icon: const Icon(Icons.qr_code_scanner_rounded),
+                  label: const Text('Scan QR'),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: _AdminColors.orange,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Rental activity',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = (constraints.maxWidth - 10) / 2;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: _CounterMetric(
+                      label: 'Needs review',
+                      value: '$pending',
+                      icon: Icons.pending_actions_outlined,
+                      tone: const Color(0xFFB56B1C),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _CounterMetric(
+                      label: 'Awaiting handoff',
+                      value: '$approved',
+                      icon: Icons.outbound_outlined,
+                      tone: const Color(0xFF477DA6),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _CounterMetric(
+                      label: 'Currently rented',
+                      value: '$active',
+                      icon: Icons.sports_basketball_outlined,
+                      tone: const Color(0xFF3B8C6E),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _CounterMetric(
+                      label: 'Returns to inspect',
+                      value: '$inspections',
+                      icon: Icons.fact_check_outlined,
+                      tone: const Color(0xFF7766A5),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          if (stats['available'] != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              '${stats['available']} items are currently available.',
+              style: TextStyle(
+                color: _AdminColors.getMuted(isDark),
+                fontSize: 12,
+              ),
+            ),
+          ],
+          const SizedBox(height: 20),
+          Text(
+            'Quick actions',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+          ),
+          const SizedBox(height: 8),
+          _QuickActionCard(
+            title: 'Rental requests',
+            subtitle: 'Review requests, prepare units, and confirm handoffs.',
+            count: pending + approved,
+            icon: Icons.receipt_long_outlined,
+            onTap: () => _selectTab(1),
+          ),
+          const SizedBox(height: 10),
+          _QuickActionCard(
+            title: 'Returns & inspections',
+            subtitle: 'Receive equipment and finish return checks.',
+            count: active + inspections,
+            icon: Icons.assignment_return_outlined,
+            onTap: () => _selectTab(3),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'For inventory setup, reports, rates, and staff settings, use the web admin workspace.',
+            style: TextStyle(
+              color: _AdminColors.getMuted(isDark),
+              fontSize: 12,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = _map(_api.currentUser);
+    final title = switch (_selectedIndex) {
+      1 => 'Rentals',
+      3 => 'Returns',
+      _ => 'Staff counter',
+    };
+    final scheme = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      backgroundColor: _AdminColors.getCanvas(isDark),
       appBar: AppBar(
-        backgroundColor: _AdminColors.getCardBg(isDark),
+        backgroundColor: scheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: isWide
-            ? Padding(
-                padding: const EdgeInsets.only(left: 18),
-                child: _brandMark(),
-              )
-            : null,
-        titleSpacing: isWide
-            ? 16
-            : width < 480
-                ? 6
-                : null,
         title: Text(
           title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: _AdminColors.getInk(isDark),
             fontWeight: FontWeight.w800,
-            fontSize: width < 480 ? 17 : 19,
+            fontSize: 18,
           ),
         ),
         actions: [
           IconButton(
-            tooltip: 'Refresh workspace',
-            onPressed: _loading ? null : () => _refresh(withInventory: true),
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : () => unawaited(_refresh()),
             icon:
                 Icon(Icons.refresh_rounded, color: _AdminColors.getInk(isDark)),
           ),
@@ -269,25 +478,26 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           PopupMenuButton<String>(
             tooltip: 'Staff account',
             onSelected: (value) {
-              if (value == 'profile') _selectPage('Profile');
-              if (value == 'admin-settings') _selectPage('Admin settings');
-              if (value == 'logout') _logout();
+              if (value == 'sign-out') unawaited(_logout());
             },
             itemBuilder: (context) => const [
-              PopupMenuItem(value: 'profile', child: Text('Account profile')),
               PopupMenuItem(
-                  value: 'admin-settings', child: Text('Admin settings')),
-              PopupMenuDivider(),
-              PopupMenuItem(value: 'logout', child: Text('Sign out')),
+                value: 'sign-out',
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(Icons.logout),
+                  title: Text('Sign out'),
+                ),
+              ),
             ],
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: width < 480 ? 8 : 14),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
               child: CircleAvatar(
                 radius: 17,
                 backgroundColor:
                     isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFE7D5),
                 child: Text(
-                  _initials(user['name']?.toString() ?? 'Admin'),
+                  _initials(user['name']?.toString() ?? ''),
                   style: const TextStyle(
                     color: _AdminColors.orangeDark,
                     fontWeight: FontWeight.w800,
@@ -297,560 +507,211 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
             ),
           ),
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
         ],
       ),
-      body: Row(
+      body: Column(
         children: [
-          if (isWide)
-            SizedBox(
-              width: 256,
-              child: Material(
-                color: _AdminColors.getCardBg(isDark),
-                child: _navigation(user, isDark, _closeDrawer),
-              ),
+          if (_connectionError.isNotEmpty)
+            _ConnectionBanner(
+              message: _connectionError,
+              onRetry: () => unawaited(_refresh()),
             ),
-          Expanded(
-            child: Column(
-              children: [
-                if (_connectionError.isNotEmpty)
-                  _ConnectionBanner(
-                    message: _connectionError,
-                    onRetry: () => _refresh(withInventory: true),
-                  ),
-                Expanded(
-                  child: RefreshIndicator(
-                    color: _AdminColors.orange,
-                    onRefresh: () => _refresh(withInventory: true),
-                    child: SingleChildScrollView(
-                      key: PageStorageKey<String>(_page),
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: EdgeInsets.fromLTRB(
-                        width < 480 ? 14 : 24,
-                        20,
-                        width < 480 ? 14 : 24,
-                        36,
-                      ),
-                      child: Center(
-                        child: ConstrainedBox(
-                          constraints: const BoxConstraints(maxWidth: 1320),
-                          child: AdminModuleView(
-                            page: _page,
-                            dashboard: _dashboard,
-                            workspace: _workspace,
-                            inventory: _inventory,
-                            loading: _loading,
-                            onNavigate: _selectPage,
-                            onRefresh: () => _refresh(withInventory: true),
-                            onChanged: () => _refresh(withInventory: true),
-                            onInventoryRefresh: () =>
-                                _loadWorkspace(withInventory: true),
-                            onSignOut: _logout,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+          Expanded(child: _buildCurrentPage(user, isDark)),
         ],
       ),
-    );
-  }
-
-  Widget _buildSignInPage() {
-    return Scaffold(
-      backgroundColor: _AdminColors.navy,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(22),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 520),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Row(
-                    children: [
-                      _brandMark(inverse: true),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'OWNER / OPERATOR WORKSPACE',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 11,
-                          letterSpacing: 1.25,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 34),
-                  Container(
-                    padding: const EdgeInsets.all(26),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
-                    child: AutofillGroup(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Container(
-                            width: 46,
-                            height: 46,
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: _AdminColors.orange.withValues(alpha: .12),
-                              borderRadius: BorderRadius.circular(14),
-                            ),
-                            child: const Icon(
-                              Icons.admin_panel_settings_outlined,
-                              color: _AdminColors.orangeDark,
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          const Text(
-                            'Welcome back!',
-                            style: TextStyle(
-                              color: _AdminColors.ink,
-                              fontSize: 26,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          const Text(
-                            'Sign in with an active admin account to manage Rent & Play.',
-                            style: TextStyle(color: _AdminColors.muted),
-                          ),
-                          const SizedBox(height: 22),
-                          TextField(
-                            controller: _emailController,
-                            keyboardType: TextInputType.emailAddress,
-                            autofillHints: const [AutofillHints.username],
-                            decoration: const InputDecoration(
-                              labelText: 'Admin email',
-                              prefixIcon: Icon(Icons.email_outlined),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          TextField(
-                            controller: _passwordController,
-                            obscureText: true,
-                            autofillHints: const [AutofillHints.password],
-                            onSubmitted: (_) => _signIn(),
-                            decoration: const InputDecoration(
-                              labelText: 'Password',
-                              prefixIcon: Icon(Icons.lock_outline),
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                          if (_loginError.isNotEmpty) ...[
-                            const SizedBox(height: 14),
-                            Text(
-                              _loginError,
-                              style: const TextStyle(
-                                color: Color(0xFFB42318),
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            height: 50,
-                            child: FilledButton(
-                              onPressed: _submittingLogin ? null : _signIn,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: _AdminColors.orange,
-                                foregroundColor: Colors.white,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                              child: _submittingLogin
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : const Text(
-                                      'Sign in to your workspace',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            'Connected securely through Firebase',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: _AdminColors.muted,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  const Text(
-                    'Your account. Your equipment. Your workspace.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ),
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          height: 72,
+          backgroundColor: scheme.surface,
+          indicatorColor: scheme.primary.withValues(alpha: isDark ? .2 : .12),
+          surfaceTintColor: Colors.transparent,
+          iconTheme: WidgetStateProperty.resolveWith((states) => IconThemeData(
+                color: states.contains(WidgetState.selected)
+                    ? scheme.primary
+                    : scheme.onSurfaceVariant,
+              )),
+          labelTextStyle: WidgetStateProperty.resolveWith((states) => TextStyle(
+                color: states.contains(WidgetState.selected)
+                    ? scheme.primary
+                    : scheme.onSurfaceVariant,
+                fontSize: 11,
+                fontWeight: states.contains(WidgetState.selected)
+                    ? FontWeight.w700
+                    : FontWeight.w500,
+              )),
+        ),
+        child: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: _selectTab,
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home_rounded),
+              label: 'Home',
             ),
-          ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long_rounded),
+              label: 'Rentals',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.qr_code_scanner_rounded),
+              selectedIcon: Icon(Icons.qr_code_scanner_rounded),
+              label: 'Scan',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.assignment_return_outlined),
+              selectedIcon: Icon(Icons.assignment_return_rounded),
+              label: 'Returns',
+            ),
+          ],
         ),
       ),
     );
   }
+}
 
-  void _closeDrawer() {
-    _scaffoldKey.currentState?.closeDrawer();
-  }
+class _CounterMetric extends StatelessWidget {
+  const _CounterMetric({
+    required this.label,
+    required this.value,
+    required this.icon,
+    required this.tone,
+  });
 
-  Widget _navigation(
-    Map<String, dynamic> user,
-    bool isDark,
-    VoidCallback closeDrawer,
-  ) {
-    final settings = _map(_workspace['settings']);
-    final businessName = settings['business_name']?.toString() ?? 'Rent & Play';
-    final businessLocation =
-        settings['location']?.toString() ?? 'Los Baños, Laguna';
-    final interrupted = _connectionError.isNotEmpty;
-    return SafeArea(
+  final String label;
+  final String value;
+  final IconData icon;
+  final Color tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      height: 104,
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+        color: _AdminColors.getCardBg(isDark),
+        border: Border.all(color: _AdminColors.getLine(isDark)),
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
-            child: Row(children: [
-              _brandMark(),
-              const SizedBox(width: 11),
+          Row(
+            children: [
+              Icon(icon, color: tone, size: 19),
+              const Spacer(),
+              Text(
+                value,
+                style: TextStyle(
+                  color: _AdminColors.getInk(isDark),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          Text(
+            label,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              color: _AdminColors.getMuted(isDark),
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuickActionCard extends StatelessWidget {
+  const _QuickActionCard({
+    required this.title,
+    required this.subtitle,
+    required this.count,
+    required this.icon,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final int count;
+  final IconData icon;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Material(
+      color: _AdminColors.getCardBg(isDark),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            border: Border.all(color: _AdminColors.getLine(isDark)),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: _AdminColors.orange.withValues(alpha: .12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: _AdminColors.orangeDark),
+              ),
+              const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'rent&play',
+                      title,
                       style: TextStyle(
                         color: _AdminColors.getInk(isDark),
-                        fontSize: 17,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
+                    const SizedBox(height: 3),
                     Text(
-                      'RENTAL MANAGEMENT',
+                      subtitle,
                       style: TextStyle(
                         color: _AdminColors.getMuted(isDark),
-                        fontSize: 9,
-                        letterSpacing: .8,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
                       ),
                     ),
                   ],
                 ),
               ),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 6, 16, 12),
-            child: Container(
-              padding: const EdgeInsets.all(11),
-              decoration: BoxDecoration(
-                color:
-                    isDark ? const Color(0xFF1A2638) : const Color(0xFFF7F8FA),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: _AdminColors.getLine(isDark)),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: _AdminColors.getCardBg(isDark),
-                    borderRadius: BorderRadius.circular(9),
+              const SizedBox(width: 8),
+              CircleAvatar(
+                radius: 14,
+                backgroundColor: _AdminColors.getCanvas(isDark),
+                child: Text(
+                  '$count',
+                  style: TextStyle(
+                    color: _AdminColors.getInk(isDark),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
                   ),
-                  child: Icon(
-                    Icons.storefront_outlined,
-                    size: 18,
-                    color: _AdminColors.getMuted(isDark),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        businessName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _AdminColors.getInk(isDark),
-                          fontSize: 12,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        businessLocation,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          color: _AdminColors.getMuted(isDark),
-                          fontSize: 10,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ]),
-            ),
-          ),
-          Divider(height: 1, color: _AdminColors.getLine(isDark)),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
-              children: [
-                _navButton(_dashboardItem, closeDrawer, isDark),
-                for (final group in _navGroups)
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      dividerColor: Colors.transparent,
-                      splashColor: _AdminColors.orange.withValues(alpha: .08),
-                      highlightColor:
-                          _AdminColors.orange.withValues(alpha: .05),
-                    ),
-                    child: ExpansionTile(
-                      key: PageStorageKey<String>(
-                        'admin-navigation-${group.label}',
-                      ),
-                      initiallyExpanded:
-                          _expandedNavGroups[group.label] ?? true,
-                      onExpansionChanged: (expanded) {
-                        _expandedNavGroups[group.label] = expanded;
-                      },
-                      leading: Icon(
-                        group.icon,
-                        size: 20,
-                        color: _AdminColors.getMuted(isDark),
-                      ),
-                      title: Text(
-                        group.label,
-                        style: TextStyle(
-                          color: _AdminColors.getInk(isDark),
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 12),
-                      childrenPadding: const EdgeInsets.fromLTRB(10, 0, 0, 6),
-                      collapsedShape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
-                      iconColor: _AdminColors.getMuted(isDark),
-                      collapsedIconColor: _AdminColors.getMuted(isDark),
-                      children: [
-                        for (final item in group.items)
-                          _navButton(
-                            item,
-                            closeDrawer,
-                            isDark,
-                            nested: true,
-                          ),
-                      ],
-                    ),
-                  ),
-                _navButton(_reportsItem, closeDrawer, isDark),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: _AdminColors.getLine(isDark)),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-            child: _navButton(_settingsItem, closeDrawer, isDark),
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: ListTile(
-              leading: Icon(Icons.logout, color: _AdminColors.getMuted(isDark)),
-              title: Text(
-                'Sign out',
-                style: TextStyle(
-                  color: _AdminColors.getInk(isDark),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
                 ),
               ),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-              onTap: () {
-                closeDrawer();
-                _logout();
-              },
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
-              decoration: BoxDecoration(
-                color:
-                    isDark ? const Color(0xFF14271F) : const Color(0xFFF3F8F5),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(children: [
-                Container(
-                  width: 7,
-                  height: 7,
-                  decoration: BoxDecoration(
-                    color: interrupted
-                        ? const Color(0xFFCF4B4B)
-                        : const Color(0xFF6D9A86),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        interrupted
-                            ? 'Connection interrupted'
-                            : 'Connected workspace',
-                        style: TextStyle(
-                          color: interrupted
-                              ? const Color(0xFFB44040)
-                              : const Color(0xFF527467),
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      Text(
-                        _workspace.isEmpty
-                            ? 'Waiting for database'
-                            : 'Cloud Firestore records',
-                        style: TextStyle(
-                          color: _AdminColors.getMuted(isDark),
-                          fontSize: 9,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ]),
-            ),
-          ),
-          ListTile(
-            onTap: () {
-              closeDrawer();
-              _selectPage('Profile');
-            },
-            leading: CircleAvatar(
-              radius: 18,
-              backgroundColor:
-                  isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFE7D5),
-              child: Text(
-                _initials(user['name']?.toString() ?? 'Admin'),
-                style: const TextStyle(
-                  color: _AdminColors.orangeDark,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-            ),
-            title: Text(
-              user['name']?.toString() ?? 'Admin',
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: _AdminColors.getInk(isDark),
-                fontWeight: FontWeight.w700,
-                fontSize: 13,
-              ),
-            ),
-            subtitle: Text(
-              'Staff account',
-              style:
-                  TextStyle(color: _AdminColors.getMuted(isDark), fontSize: 11),
-            ),
-            trailing: Icon(Icons.chevron_right,
-                size: 19, color: _AdminColors.getMuted(isDark)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _navButton(
-    _AdminNavItem item,
-    VoidCallback closeDrawer,
-    bool isDark, {
-    bool nested = false,
-  }) {
-    final selected = _page == item.label;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 1),
-      child: ListTile(
-        contentPadding: EdgeInsets.symmetric(horizontal: nested ? 10 : 12),
-        minLeadingWidth: 28,
-        horizontalTitleGap: 10,
-        minTileHeight: 48,
-        selected: selected,
-        selectedTileColor:
-            isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFF1E8),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        leading: Icon(
-          item.icon,
-          color: selected
-              ? _AdminColors.orangeDark
-              : _AdminColors.getMuted(isDark),
-          size: 20,
-        ),
-        title: Text(
-          item.label,
-          style: TextStyle(
-            color: selected
-                ? _AdminColors.orangeDark
-                : _AdminColors.getInk(isDark),
-            fontSize: 13,
-            fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right, color: _AdminColors.getMuted(isDark)),
+            ],
           ),
         ),
-        onTap: () {
-          closeDrawer();
-          _selectPage(item.label);
-        },
-      ),
-    );
-  }
-
-  Widget _brandMark({bool inverse = false}) {
-    return Container(
-      width: 38,
-      height: 38,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: inverse ? Colors.white : _AdminColors.navy,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Icon(
-        Icons.sports_basketball_rounded,
-        color: inverse ? _AdminColors.orange : Colors.white,
-        size: 22,
       ),
     );
   }
@@ -867,14 +728,14 @@ class _ConnectionBanner extends StatelessWidget {
     return Material(
       color: const Color(0xFFFFF4E5),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         child: Row(
           children: [
             const Icon(Icons.cloud_off_outlined, color: Color(0xFF9A5B00)),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
-                '$message Showing the last successfully loaded records.',
+                message,
                 style: const TextStyle(
                   color: Color(0xFF7A4B00),
                   fontSize: 12,
@@ -889,23 +750,7 @@ class _ConnectionBanner extends StatelessWidget {
   }
 }
 
-class _AdminNavGroup {
-  const _AdminNavGroup(this.label, this.icon, this.items);
-
-  final String label;
-  final IconData icon;
-  final List<_AdminNavItem> items;
-}
-
-class _AdminNavItem {
-  const _AdminNavItem(this.label, this.icon);
-
-  final String label;
-  final IconData icon;
-}
-
 class _AdminColors {
-  static const navy = Color(0xFF162A42);
   static const orange = Color(0xFFDF762D);
   static const orangeDark = Color(0xFFC45E1B);
   static const ink = Color(0xFF172333);
@@ -920,7 +765,8 @@ class _AdminColors {
       isDark ? const Color(0xFF0B1320) : canvas;
   static Color getCardBg(bool isDark) =>
       isDark ? const Color(0xFF131D2D) : Colors.white;
-  static Color getLine(bool isDark) => isDark ? const Color(0xFF1E2C42) : line;
+  static Color getLine(bool isDark) =>
+      isDark ? const Color(0xFF1E2C42) : line;
 }
 
 Map<String, dynamic> _map(dynamic value) {
@@ -929,8 +775,15 @@ Map<String, dynamic> _map(dynamic value) {
   return <String, dynamic>{};
 }
 
+List<Map<String, dynamic>> _rows(dynamic value) => value is List
+    ? value
+        .whereType<Map>()
+        .map((row) => row.map((key, value) => MapEntry('$key', value)))
+        .toList()
+    : <Map<String, dynamic>>[];
+
 String _initials(String name) {
   final parts =
-      name.trim().split(RegExp(r'\s+')).where((part) => part.isNotEmpty);
+      name.trim().split(' ').where((part) => part.isNotEmpty).toList();
   return parts.take(2).map((part) => part[0].toUpperCase()).join();
 }

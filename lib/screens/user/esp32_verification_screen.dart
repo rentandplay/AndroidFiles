@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/rental_model.dart';
-import 'catalog_screen.dart';
+import 'customer_home_screen.dart';
 
 class Esp32VerificationScreen extends StatelessWidget {
   final RentalModel rental;
@@ -121,7 +121,7 @@ class Esp32VerificationScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (_) => const CatalogScreen()),
+                        MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
                         (route) => false,
                       );
                     },

@@ -39,7 +39,7 @@ class _BookingTicketState extends State<BookingTicket> {
   @override
   Widget build(BuildContext context) => AlertDialog(
         insetPadding: const EdgeInsets.all(16),
-        title: const Text('Your booking QR'),
+        title: const Text('Your rental handoff QR'),
         content: SizedBox(
             width: 340,
             child: FutureBuilder<Map<String, dynamic>>(
@@ -99,13 +99,13 @@ class _BookingTicketState extends State<BookingTicket> {
                         if (context.mounted)
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
-                                  content: Text('Booking code copied.')));
+                                  content: Text('Rental code copied.')));
                       },
                       icon: const Icon(Icons.copy, size: 16),
-                      label: const Text('Copy booking code')),
+                      label: const Text('Copy rental code')),
                   if (expiry != null)
                     Text(
-                        '${status == 'PENDING_ADMIN_APPROVAL' ? 'Review hold ends' : 'Pickup before'} ${DateFormat('MMM d · h:mm a').format(expiry.toLocal())}',
+                        '${status == 'PENDING_ADMIN_APPROVAL' ? 'Review hold ends' : 'Handoff before'} ${DateFormat('MMM d · h:mm a').format(expiry.toLocal())}',
                         textAlign: TextAlign.center,
                         style: TextStyle(
                             color:
@@ -115,13 +115,13 @@ class _BookingTicketState extends State<BookingTicket> {
                   RentalNotice(
                       title: expired
                           ? 'This hold has ended'
-                          : 'Show this to the admin',
+                          : 'Show this to the operator',
                       isError: expired,
                       message: expired
-                          ? 'Close this ticket and refresh My Rentals to check your booking.'
+                          ? 'Close this ticket and refresh My Rentals to check your rental request.'
                           : status == 'PENDING_ADMIN_APPROVAL'
-                              ? 'The admin will review your booking first. The rental clock starts at physical handoff.'
-                              : 'Bring one valid ID. The admin will scan this QR, verify your equipment and confirm the handoff.'),
+                              ? 'The owner will review your rental request first. The rental clock starts at the physical handoff.'
+                              : 'Bring one valid ID. At your selected location, the operator will scan this QR and confirm that the prepared item reached you.'),
                 ]));
               },
             )),

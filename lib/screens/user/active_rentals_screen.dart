@@ -1,16 +1,20 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/rental_ui.dart';
+import '../auth/login_screen.dart';
 import '../shared/transaction_ticket_dialog.dart';
 import 'return_equipment_screen.dart';
 
 class ActiveRentalsScreen extends StatefulWidget {
-  const ActiveRentalsScreen({super.key});
+  const ActiveRentalsScreen({super.key, this.onBrowse});
+  final VoidCallback? onBrowse;
   @override
   State<ActiveRentalsScreen> createState() => _ActiveRentalsScreenState();
 }
@@ -21,6 +25,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
   bool _refreshing = false;
   String _error = '', _filter = 'All';
   final _cancelling = <String>{};
+  final _uploadingProof = <String>{};
   @override
   void initState() {
     super.initState();
@@ -60,20 +65,35 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
         _ => true,
       };
 
+  int _countForFilter(String filter, List<RentalModel> rentals) =>
+      filter == 'All' ? rentals.length : rentals.where((rental) {
+        return switch (filter) {
+          'Review' => rental.isPendingAdminReview,
+          'Pickup' => rental.isAwaitingPickup,
+          'In use' => rental.isActive,
+          'Inspection' => rental.isAwaitingInspection,
+          _ => false,
+        };
+      }).length;
+
+  void _openBrowse() {
+    widget.onBrowse?.call();
+  }
+
   Future<void> _cancelBooking(RentalModel rental) async {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (c) => AlertDialog(
-              title: const Text('Cancel this booking?'),
+              title: const Text('Cancel this rental request?'),
               content: const Text(
-                  'The equipment hold will be released. Any verified payments remain recorded for refund.'),
+                  'The equipment hold will be released. Any verified payment remains recorded for refund.'),
               actions: [
                 TextButton(
                     onPressed: () => Navigator.pop(c, false),
-                    child: const Text('Keep booking')),
+                    child: const Text('Keep request')),
                 FilledButton(
                     onPressed: () => Navigator.pop(c, true),
-                    child: const Text('Cancel booking')),
+                    child: const Text('Cancel request')),
               ],
             ));
     if (confirmed != true || !mounted) return;
@@ -87,6 +107,47 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
             .showSnackBar(SnackBar(content: Text('$error')));
     } finally {
       if (mounted) setState(() => _cancelling.remove(rental.rentalId));
+    }
+  }
+
+  Future<void> _uploadPaymentProof(RentalModel rental) async {
+    try {
+      final file = await ImagePicker().pickImage(
+          source: ImageSource.gallery, maxWidth: 1800, imageQuality: 75);
+      if (file == null) return;
+      final bytes = await file.readAsBytes();
+      if (bytes.length > 350000) {
+        throw const MobileApiException('Choose a screenshot under 350 KB.');
+      }
+      final isPng = bytes.length >= 8 &&
+          bytes[0] == 137 &&
+          bytes[1] == 80 &&
+          bytes[2] == 78 &&
+          bytes[3] == 71;
+      final isJpeg = bytes.length >= 3 &&
+          bytes[0] == 255 &&
+          bytes[1] == 216 &&
+          bytes[2] == 255;
+      if (!isPng && !isJpeg) {
+        throw const MobileApiException('Choose a PNG or JPEG screenshot.');
+      }
+      setState(() => _uploadingProof.add(rental.rentalId));
+      await MobileApiService.instance.submitPaymentProof(
+          rentalId: rental.rentalId,
+          imageDataUrl:
+              'data:image/${isPng ? 'png' : 'jpeg'};base64,${base64Encode(bytes)}',
+          reference: rental.paymentProofReference);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Payment screenshot sent for owner review.')));
+        await _refreshRentals();
+      }
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+    } finally {
+      if (mounted) setState(() => _uploadingProof.remove(rental.rentalId));
     }
   }
 
@@ -104,9 +165,19 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
             icon: const Icon(Icons.refresh)),
       ]),
       body: user == null
-          ? const RentalEmptyState(
+          ? RentalEmptyState(
               title: 'Sign in to view rentals',
-              message: 'Your bookings and equipment in use will appear here.')
+              message:
+                  'Your rental requests and equipment in use will appear here.',
+              action: FilledButton.icon(
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                ),
+                icon: const Icon(Icons.login_rounded),
+                label: const Text('Sign in'),
+              ),
+            )
           : _rentals == null && _error.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
@@ -136,7 +207,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
                                   fontSize: 20, fontWeight: FontWeight.w800)),
                           const SizedBox(height: 4),
                           Text(
-                              'Follow approval, pickup and return in one place.',
+                              'Follow payment review, delivery and return in one place.',
                               style: TextStyle(
                                   color: Theme.of(context)
                                       .colorScheme
@@ -151,7 +222,8 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
                               'Inspection'
                             ])
                               ChoiceChip(
-                                  label: Text(label),
+                                  label: Text(
+                                      '$label (${_countForFilter(label, open)})'),
                                   selected: label == _filter,
                                   onSelected: (_) =>
                                       setState(() => _filter = label)),
@@ -164,20 +236,31 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
                                 ? 'No open rentals yet'
                                 : 'Nothing in this stage',
                             message: open.isEmpty
-                                ? 'Choose equipment from the catalog to start a booking.'
+                                ? 'Choose equipment from the catalog to send a rental request.'
                                 : 'Try another filter to see your other rentals.',
                             action: open.isNotEmpty
                                 ? TextButton(
                                     onPressed: () =>
                                         setState(() => _filter = 'All'),
                                     child: const Text('Show all rentals'))
-                                : null,
+                                : widget.onBrowse == null
+                                    ? null
+                                    : FilledButton.icon(
+                                        onPressed: _openBrowse,
+                                        icon: const Icon(
+                                            Icons.storefront_outlined),
+                                        label: const Text('Browse equipment'),
+                                      ),
                           ),
                         for (final rental in visible)
                           RentalBookingCard(
                             rental: rental,
                             onTicket: () =>
                                 TransactionTicketDialog.show(context, rental),
+                            onUploadPaymentProof:
+                                _uploadingProof.contains(rental.rentalId)
+                                    ? null
+                                    : () => _uploadPaymentProof(rental),
                             onCancel: _cancelling.contains(rental.rentalId)
                                 ? null
                                 : () => _cancelBooking(rental),
@@ -204,9 +287,11 @@ class RentalBookingCard extends StatelessWidget {
       this.onTicket,
       this.onCancel,
       this.onReturn,
+      this.onUploadPaymentProof,
       this.onRefresh});
   final RentalModel rental;
-  final VoidCallback? onTicket, onCancel, onReturn, onRefresh;
+  final VoidCallback? onTicket, onCancel, onReturn, onRefresh,
+      onUploadPaymentProof;
   String _date(DateTime value) =>
       DateFormat('MMM d · h:mm a').format(value.toLocal());
   @override
@@ -225,17 +310,21 @@ class RentalBookingCard extends StatelessWidget {
     final (heading, message) = holdEnded
         ? (
             'Hold ended',
-            'Refresh to check the latest status before making another booking.'
+            'Refresh to check the latest status before sending another rental request.'
           )
         : rental.isPendingAdminReview
             ? (
                 'Waiting for admin approval',
-                'Your booking is being reviewed. The rental clock has not started.'
+                'Your rental request is being reviewed. The rental clock has not started.'
               )
             : rental.isAwaitingPickup
                 ? (
-                    'Ready to receive your equipment',
-                    'Show your booking QR and valid ID to the admin. Pay and check the item at handoff.'
+                    rental.deliveryStatus == 'PREPARED'
+                        ? 'Ready for delivery'
+                        : 'Rental request approved',
+                    rental.deliveryStatus == 'PREPARED'
+                        ? 'The operator is preparing delivery to ${rental.deliveryLocation}. Show your rental QR and valid ID at handoff.'
+                        : 'The operator is checking the assigned unit before delivery to ${rental.deliveryLocation}. The rental clock has not started.'
                   )
                 : rental.isAwaitingInspection
                     ? (
@@ -286,9 +375,23 @@ class RentalBookingCard extends StatelessWidget {
                   : Icons.info_outline),
       const SizedBox(height: 12),
       RentalValueRow('Pickup / resort', rental.deliveryLocation),
+      if (rental.paymentMethod.toUpperCase() == 'QR' &&
+          rental.paymentProofStatus == 'PENDING_REVIEW')
+        const RentalNotice(
+            title: 'Payment screenshot under review',
+            message:
+                'The owner will verify the InstaPay transfer before approving your rental request.'),
+      if (rental.paymentMethod.toUpperCase() == 'QR' &&
+          rental.paymentProofStatus == 'REJECTED')
+        RentalNotice(
+            title: 'Upload a corrected payment screenshot',
+            message: rental.paymentProofNote.isEmpty
+                ? 'The owner could not verify the transfer. Upload a clear screenshot of the successful payment.'
+                : rental.paymentProofNote,
+            isError: true),
       if (rental.holdExpiresAt != null && rental.canCancel)
         RentalValueRow(
-            rental.isPendingAdminReview ? 'Review hold ends' : 'Pickup before',
+            rental.isPendingAdminReview ? 'Review hold ends' : 'Handoff before',
             _date(rental.holdExpiresAt!)),
       if (rental.isActive)
         RentalValueRow(
@@ -301,19 +404,27 @@ class RentalBookingCard extends StatelessWidget {
         RentalValueRow('Balance due', rentalMoney(rental.balanceDue)),
       if (rental.refundDue > 0)
         RentalValueRow('Refund due', rentalMoney(rental.refundDue)),
+      if (rental.isAwaitingPickup) ...[
+        const SizedBox(height: 14),
+        FilledButton.icon(
+            onPressed: onTicket,
+            icon: const Icon(Icons.qr_code),
+            label: const Text('Show rental handoff QR')),
+      ],
+      if (rental.paymentMethod.toUpperCase() == 'QR' &&
+          rental.paymentProofStatus == 'REJECTED')
+        OutlinedButton.icon(
+            onPressed: onUploadPaymentProof,
+            icon: const Icon(Icons.upload_file),
+            label: const Text('Upload new payment screenshot')),
       if (rental.canCancel) ...[
         const SizedBox(height: 14),
         if (holdEnded)
           OutlinedButton.icon(
               onPressed: onRefresh,
               icon: const Icon(Icons.refresh),
-              label: const Text('Refresh booking'))
-        else
-          FilledButton.icon(
-              onPressed: onTicket,
-              icon: const Icon(Icons.qr_code),
-              label: const Text('Show booking QR')),
-        TextButton(onPressed: onCancel, child: const Text('Cancel booking')),
+              label: const Text('Refresh rental request')),
+        TextButton(onPressed: onCancel, child: const Text('Cancel request')),
       ],
       if (rental.isActive && !rental.hasPendingReturnRequest) ...[
         const SizedBox(height: 14),

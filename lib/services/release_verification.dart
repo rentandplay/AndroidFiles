@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 
-/// Keeps each handoff tied to the codes that the server actually verified.
+/// Checks the customer's handoff QR after the assigned unit was prepared at the shop.
 class ReleaseVerification extends ChangeNotifier {
   ReleaseVerification({required this.rentalId, required this.request});
   final String rentalId;
@@ -55,30 +55,21 @@ class ReleaseVerification extends ChangeNotifier {
 
   void back() {
     if (!busy && step > 0) {
-      step--;
+      step = 0;
       error = '';
       _emit();
     }
   }
 
   Future<void> verify() async {
-    if (busy || step > 1) return;
-    final equipment = step == 1;
-    if (transactionCode.trim().isEmpty ||
-        (equipment && inventoryCode.trim().isEmpty)) {
-      error = equipment
-          ? 'Scan or enter the equipment code.'
-          : 'Scan or enter the customer booking code.';
+    if (busy || step > 0) return;
+    if (transactionCode.trim().isEmpty) {
+      error = 'Scan or enter the customer rental QR.';
       _emit();
       return;
     }
     if (manual && manualReason.trim().isEmpty) {
       error = 'Explain why you are using the printed codes.';
-      _emit();
-      return;
-    }
-    if (equipment && !bookingVerified) {
-      error = 'Verify the booking first.';
       _emit();
       return;
     }
@@ -89,7 +80,6 @@ class ReleaseVerification extends ChangeNotifier {
     try {
       final result = await request({
         'transactionCode': transactionCode.trim(),
-        if (equipment) 'inventoryCode': inventoryCode.trim(),
         if (manual) 'manualReason': manualReason.trim(),
       });
       if (_disposed || revision != _revision) return;
@@ -97,15 +87,15 @@ class ReleaseVerification extends ChangeNotifier {
       if (rental is! Map ||
           rental['id'] != rentalId ||
           result['booking_verified'] != true ||
-          (equipment && result['inventory_verified'] != true)) {
-        throw StateError('The scanned codes do not match this booking.');
+          result['delivery_prepared'] != true) {
+        throw StateError('The rental QR is not ready for delivery handoff.');
       }
       bookingVerified = true;
-      inventoryVerified = equipment;
+      inventoryVerified = true;
       item = result['item'] is Map
           ? Map<String, dynamic>.from(result['item'])
           : null;
-      step = equipment ? 2 : 1;
+      step = 2;
     } catch (exception) {
       if (_disposed || revision != _revision) return;
       error = '$exception';
@@ -119,11 +109,10 @@ class ReleaseVerification extends ChangeNotifier {
 
   Map<String, dynamic> get releaseCodes {
     if (step != 2 || busy || !bookingVerified || !inventoryVerified) {
-      throw StateError('Verify both the booking and equipment before release.');
+      throw StateError('Verify the customer rental QR before handoff.');
     }
     return {
       'transactionCode': transactionCode.trim(),
-      'inventoryCode': inventoryCode.trim(),
       if (manual) 'manualReason': manualReason.trim(),
     };
   }

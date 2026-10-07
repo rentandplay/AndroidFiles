@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
 import '../../models/item_model.dart';
+import '../../models/user_model.dart';
+import '../../services/auth_service.dart';
+import '../../widgets/sign_in_prompt.dart';
+import '../auth/id_verification_screen.dart';
 import 'checkout_screen.dart';
 
 class ItemDetailsScreen extends StatelessWidget {
@@ -9,6 +15,50 @@ class ItemDetailsScreen extends StatelessWidget {
     super.key,
     required this.item,
   });
+
+  Future<void> _continueToRental(BuildContext context) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    if (authService.currentUser == null) {
+      await showSignInPrompt(context);
+      return;
+    }
+
+    final messenger = ScaffoldMessenger.of(context);
+    UserModel? userModel;
+    try {
+      userModel = await authService.getCurrentUserModel();
+    } catch (error) {
+      if (context.mounted) {
+        messenger.showSnackBar(SnackBar(content: Text('$error')));
+      }
+      return;
+    }
+    if (!context.mounted) return;
+
+    if (userModel == null ||
+        userModel.validIdUrl?.isNotEmpty != true ||
+        !userModel.hasAcceptedTerms) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Please review rental policies and complete your profile before renting.',
+          ),
+        ),
+      );
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => IdVerificationScreen(userModel: userModel),
+        ),
+      );
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CheckoutScreen(item: item)),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -196,7 +246,7 @@ class ItemDetailsScreen extends StatelessWidget {
                     ),
                     _buildDetailRow(
                       'Late Return Penalty',
-                      '₱50 / hour overdue',
+                      '₱${item.latePenalty.toStringAsFixed(0)} / hour overdue',
                     ),
                     if (item.category == 'Board Games' || item.category == 'Cards')
                       _buildDetailRow(
@@ -225,7 +275,7 @@ class ItemDetailsScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Physical Valid ID Required: Renter must present 1 physical valid ID to the operator at the terminal upon pickup.',
+                      'Valid ID required: show one physical ID to the operator when the rented item is handed over at your selected location.',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.blue.shade900,
@@ -255,7 +305,7 @@ class ItemDetailsScreen extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Submit a booking and wait for admin approval. Show your transaction QR at pickup. Your rental timer starts when the admin physically releases the equipment.',
+                      'Send a rental request and wait for payment review and approval. The operator prepares the item at the shop, then scans your rental QR when the item reaches your selected location. Your rental timer starts at that handoff.',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.amber.shade900,
@@ -282,16 +332,8 @@ class ItemDetailsScreen extends StatelessWidget {
                   ),
                   elevation: 2,
                 ),
-                onPressed: isAvailable
-                    ? () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => CheckoutScreen(item: item),
-                          ),
-                        );
-                      }
-                    : null,
+                onPressed:
+                    isAvailable ? () => _continueToRental(context) : null,
                 child: const Text(
                   'Continue to Rental',
                   style: TextStyle(

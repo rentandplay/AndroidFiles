@@ -7,7 +7,7 @@ import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import 'register_screen.dart';
 import 'id_verification_screen.dart';
-import '../user/catalog_screen.dart';
+import '../user/customer_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -32,6 +32,23 @@ class _LoginScreenState extends State<LoginScreen> {
     super.dispose();
   }
 
+  void _openAdminWorkspace() {
+    final navigator = Navigator.of(context);
+    void returnToLogin() {
+      navigator.pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    }
+
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => AdminDashboardScreen(onSignedOut: returnToLogin),
+      ),
+      (route) => false,
+    );
+  }
+
   void _handleLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
@@ -54,14 +71,7 @@ class _LoginScreenState extends State<LoginScreen> {
         if (['ADMIN', 'OWNER'].contains(userModel.role.toUpperCase())) {
           await AdminFirestoreService.instance.restoreAdminSession();
           if (!mounted) return;
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (_) => AdminDashboardScreen(
-                initialAdminEmail: _emailController.text.trim(),
-              ),
-            ),
-            (route) => false,
-          );
+          _openAdminWorkspace();
           return;
         }
 
@@ -75,13 +85,13 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         } else {
           Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const CatalogScreen()),
+            MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
             (route) => false,
           );
         }
       } else {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const CatalogScreen()),
+          MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
           (route) => false,
         );
       }
@@ -137,14 +147,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
       if (userModel != null) {
         if (['ADMIN', 'OWNER'].contains(userModel.role.toUpperCase())) {
-          Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(
-              builder: (_) => AdminDashboardScreen(
-                initialAdminEmail: userModel.email,
-              ),
-            ),
-            (route) => false,
-          );
+          _openAdminWorkspace();
           return;
         }
 
@@ -158,7 +161,7 @@ class _LoginScreenState extends State<LoginScreen> {
           );
         } else {
           Navigator.of(context).pushAndRemoveUntil(
-            MaterialPageRoute(builder: (_) => const CatalogScreen()),
+            MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
             (route) => false,
           );
         }
@@ -557,7 +560,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     } else {
                       Navigator.of(context).pushReplacement(
                         MaterialPageRoute(
-                            builder: (_) => const CatalogScreen()),
+                            builder: (_) => const CustomerHomeScreen()),
                       );
                     }
                   },
