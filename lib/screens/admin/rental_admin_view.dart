@@ -166,6 +166,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
 
   void _details(Map<String, dynamic> row, {String? code}) {
     final fee = _map(row['fee_breakdown']);
+    final returnRequest = _map(row['mobile_return_request']);
     void open(String action) {
       Navigator.pop(context);
       _action(row, action, code: action == 'release' ? code : null);
@@ -221,6 +222,33 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                 'Refund due', _money(row['refund_due'])),
                           if (row['final_reason'] != null)
                             Text(_text(row['final_reason'])),
+                          if (returnRequest.isNotEmpty) ...[
+                            const Divider(height: 24),
+                            Text(
+                                'Customer return request · ${_text(returnRequest['status']).isEmpty ? _text(row['latest_return_request_status']) : _text(returnRequest['status'])}',
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold)),
+                            RentalValueRow('Requested',
+                                _date(returnRequest['requested_at'])),
+                            RentalValueRow(
+                                'Reported condition',
+                                _text(returnRequest['reported_condition'])
+                                        .isEmpty
+                                    ? 'Not recorded'
+                                    : _text(returnRequest['reported_condition'])),
+                            if (_text(returnRequest['notes']).isNotEmpty)
+                              Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 5),
+                                  child: Text(
+                                      'Customer notes: ${_text(returnRequest['notes'])}')),
+                            if (_text(returnRequest['reason']).isNotEmpty)
+                              Padding(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 5),
+                                  child: Text(
+                                      'Review note: ${_text(returnRequest['reason'])}')),
+                          ],
                           for (final phase in [
                             'release_condition',
                             'return_condition'
@@ -285,9 +313,16 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                     : 'Prepare for delivery'))
                   ],
                   if (row['status'] == 'ACTIVE')
-                    FilledButton(
-                        onPressed: () => open('receipt'),
-                        child: const Text('Record physical receipt')),
+                    ...[
+                      if (row['latest_return_request_status'] ==
+                          'PENDING_ADMIN_APPROVAL')
+                        TextButton(
+                            onPressed: () => open('reject-return'),
+                            child: const Text('Reject return request')),
+                      FilledButton(
+                          onPressed: () => open('receipt'),
+                          child: const Text('Record physical receipt')),
+                    ],
                   if (row['status'] == 'RETURN_PENDING_INSPECTION')
                     FilledButton(
                         onPressed: () => open('complete-return'),
@@ -469,6 +504,19 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                       if (row['status'] == 'RETURN_PENDING_INSPECTION')
                         RentalValueRow(
                             'Physically received', _date(row['received_at'])),
+                      if (row['latest_return_request_status'] ==
+                          'PENDING_ADMIN_APPROVAL') ...[
+                        const SizedBox(height: 8),
+                        RentalNotice(
+                            title: 'Customer requested a return',
+                            icon: Icons.assignment_return_outlined,
+                            message: [
+                              'Reported condition: ${_text(_map(row['mobile_return_request'])['reported_condition']).isEmpty ? 'Not recorded' : _text(_map(row['mobile_return_request'])['reported_condition'])}.',
+                              if (_text(_map(row['mobile_return_request'])['notes'])
+                                  .isNotEmpty)
+                                _text(_map(row['mobile_return_request'])['notes']),
+                            ].join(' ')),
+                      ],
                       if (row['balance_due'] != null)
                         RentalValueRow('Balance', _money(row['balance_due'])),
                       const SizedBox(height: 10),
@@ -480,6 +528,12 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                         OutlinedButton(
                             onPressed: () => _details(row),
                             child: const Text('View details')),
+                      if (row['status'] == 'ACTIVE' &&
+                          row['latest_return_request_status'] ==
+                              'PENDING_ADMIN_APPROVAL')
+                        TextButton(
+                            onPressed: () => _action(row, 'reject-return'),
+                            child: const Text('Reject return request')),
                     ])),
             ]));
   }
@@ -902,6 +956,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                 ? 'Confirm the screenshot shows a successful transfer for the rental fee and refundable deposit, then approve the request?'
                                 : _action == 'payment-reject'
                                     ? 'Reject this payment screenshot? The customer can upload a corrected one.'
+                                    : _action == 'reject-return'
+                                        ? 'Reject this request? The rental remains active until staff physically receives the equipment.'
                                     : _action == 'approve'
                                         ? 'Approve this rental request? It will wait for equipment preparation and handoff.'
                                         : 'Save the reviewed details?'),
@@ -965,6 +1021,13 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         case 'reject':
           path = '/mobile/rentals/$id/review';
           payload.addAll({'action': 'REJECT', 'reason': _reason.text});
+          break;
+        case 'reject-return':
+          path = '/mobile/rentals/$id/return/review';
+          payload.addAll({
+            'action': 'REJECT',
+            'reason': _reason.text.trim(),
+          });
           break;
         case 'release':
           payload.addAll({
@@ -1040,6 +1103,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         'payment-reject' => 'Reject QR payment proof',
         'prepare-delivery' => 'Prepare for delivery',
         'reject' => 'Reject / cancel rental request',
+        'reject-return' => 'Reject customer return request',
         'release' => 'Confirm resort handoff',
         'receipt' => 'Record physical receipt',
         'complete-return' => 'Confirm Return',
@@ -1244,6 +1308,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                           ],
                           if (_action == 'payment-reject')
                             _field(_reason, 'Why this proof is invalid'),
+                          if (_action == 'reject-return')
+                            _field(_reason, 'Reason for rejecting return request'),
                           if (_action == 'prepare-delivery') ...[
                             RentalNotice(
                                 title: 'Shop preparation',
