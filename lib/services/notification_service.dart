@@ -110,7 +110,7 @@ class RentalNotificationService extends ChangeNotifier {
       if (uid == null) return;
       await refresh();
       if (_disposed || version != _generation) return;
-      _poll = Timer.periodic(const Duration(seconds: 20), (_) {
+      _poll = Timer.periodic(const Duration(minutes: 2), (_) {
         if (_active) refresh();
       });
       await _setupPush();
@@ -226,7 +226,8 @@ class RentalNotificationService extends ChangeNotifier {
     final recipient = message.data['recipient_id'];
     if (recipient != null && recipient.isNotEmpty && recipient != _uid) return;
     final messageAudience = message.data['audience'];
-    if (messageAudience != null && messageAudience.isNotEmpty &&
+    if (messageAudience != null &&
+        messageAudience.isNotEmpty &&
         messageAudience != audience) return;
     final id = message.data['notification_id'];
     if (id != null) _opens.add(id);

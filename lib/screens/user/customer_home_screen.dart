@@ -82,7 +82,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             onItemSelected: _openItem,
           ),
         1 => const CatalogScreen(),
-        2 => ActiveRentalsScreen(onBrowse: () => _selectPage(1)),
+        2 => ActiveRentalsScreen(
+            key: const ValueKey('customer-active-rentals'),
+            onBrowse: () => _selectPage(1),
+            isActive: _selectedIndex == 2,
+          ),
         3 => RentalHistoryScreen(onBrowse: () => _selectPage(1)),
         _ => const ProfileScreen(showBackButton: false),
       };
@@ -99,7 +103,10 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   void _selectPage(int index) {
     if (_pages[index] == null) _pages[index] = _pageFor(index);
     if (index == 0) _homeKey.currentState?.refresh();
-    setState(() => _selectedIndex = index);
+    setState(() {
+      _selectedIndex = index;
+      if (_pages[2] != null) _pages[2] = _pageFor(2);
+    });
   }
 
   @override

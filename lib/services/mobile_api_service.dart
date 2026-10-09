@@ -41,7 +41,7 @@ class MobileApiService {
 
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'https://rent-and-play.onrender.com/api',
+    defaultValue: 'http://10.0.2.2:3000/api',
   );
 
   final FirebaseAuth _auth;
@@ -51,9 +51,13 @@ class MobileApiService {
           (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
       .join();
 
-  Future<Map<String, dynamic>> adminRequest(String path,
-          {String method = 'GET', Map<String, dynamic>? body}) =>
-      _request(path, method: method, body: body);
+  Future<Map<String, dynamic>> adminRequest(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+    bool forceRefresh = false,
+  }) =>
+      _request(path, method: method, body: body, forceRefresh: forceRefresh);
 
   Future<Map<String, dynamic>> notifications({String? before, String? since}) {
     final query = <String, String>{
@@ -158,8 +162,10 @@ class MobileApiService {
     String method = 'GET',
     Map<String, dynamic>? body,
     bool authenticated = true,
+    bool forceRefresh = false,
   }) async {
     final headers = <String, String>{'Accept': 'application/json'};
+    if (forceRefresh) headers['Cache-Control'] = 'no-cache';
     if (authenticated) {
       final user = _auth.currentUser;
       if (user == null) {

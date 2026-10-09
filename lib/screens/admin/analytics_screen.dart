@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
-import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
+import '../../services/admin_firestore_service.dart';
 
 class AnalyticsScreen extends StatefulWidget {
   const AnalyticsScreen({super.key});
@@ -12,9 +11,22 @@ class AnalyticsScreen extends StatefulWidget {
 }
 
 class _AnalyticsScreenState extends State<AnalyticsScreen> {
+  final _api = AdminFirestoreService.instance;
+  late Future<Map<String, dynamic>> _dashboardFuture;
   String _selectedPeriod = 'Last 30 days';
   String _selectedCategory = 'All categories';
   String _selectedSubTab = 'Rental performance';
+
+  @override
+  void initState() {
+    super.initState();
+    _dashboardFuture = _api.getMap('/analytics');
+  }
+
+  void _refresh() {
+    setState(
+        () => _dashboardFuture = _api.getMap('/analytics', forceRefresh: true));
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -41,10 +53,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           IconButton(
             icon: const Icon(Icons.refresh, color: Color(0xFF64748B), size: 22),
             tooltip: 'Refresh',
-            onPressed: () => setState(() {}),
+            onPressed: _refresh,
           ),
           IconButton(
-            icon: const Icon(Icons.file_download_outlined, color: Color(0xFF64748B), size: 22),
+            icon: const Icon(Icons.file_download_outlined,
+                color: Color(0xFF64748B), size: 22),
             tooltip: 'Export CSV',
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
@@ -69,123 +82,117 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('rentals').snapshots(),
-        builder: (context, rentalSnap) {
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance.collection('items').snapshots(),
-            builder: (context, itemSnap) {
-              if (rentalSnap.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
+      body: FutureBuilder<Map<String, dynamic>>(
+        future: _dashboardFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Could not load the rental report.'),
+                  TextButton(onPressed: _refresh, child: const Text('Retry')),
+                ],
+              ),
+            );
+          }
+          final data = snapshot.data ?? const <String, dynamic>{};
+          final confirmedFees =
+              (data['confirmed_fees'] as num?)?.toDouble() ?? 0;
+          final confirmedRentals =
+              (data['confirmed_rentals'] as num?)?.toInt() ?? 0;
+          final activeCount = (data['active_count'] as num?)?.toInt() ?? 0;
+          final totalCatalog = (data['total_catalog'] as num?)?.toInt() ?? 0;
+          final avgFee =
+              confirmedRentals > 0 ? confirmedFees / confirmedRentals : 0.0;
+          final utilization =
+              totalCatalog > 0 ? (activeCount / totalCatalog) * 100 : 0.0;
 
-              double confirmedFees = 0.0;
-              int confirmedRentals = 0;
-              int activeCount = 0;
-              int totalCatalog = 14;
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. Filter Controls Card
+                _buildFiltersCard(),
 
-              if (rentalSnap.hasData && rentalSnap.data!.docs.isNotEmpty) {
-                for (var doc in rentalSnap.data!.docs) {
-                  final rental = RentalModel.fromMap(doc.data() as Map<String, dynamic>, id: doc.id);
-                  if (rental.status == 'completed' || rental.status == 'active') {
-                    confirmedFees += (rental.rateFee + rental.latePenalty);
-                    confirmedRentals++;
-                  }
-                  if (rental.status == 'active') activeCount++;
-                }
-              }
+                const SizedBox(height: 16),
 
-              if (itemSnap.hasData && itemSnap.data!.docs.isNotEmpty) {
-                totalCatalog = itemSnap.data!.docs.length;
-              }
-
-              double avgFee = confirmedRentals > 0 ? confirmedFees / confirmedRentals : 0.0;
-              double utilization = totalCatalog > 0 ? (activeCount / totalCatalog) * 100 : 0.0;
-
-              return SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 1. Filter Controls Card
-                    _buildFiltersCard(),
-
-                    const SizedBox(height: 16),
-
-                    // Timestamp Notice
-                    const Text(
-                      'Philippine time • Recorded rental fees exclude deposits. Today is a partial day.',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // 2. Sub-Navigation Tabs
-                    _buildSubNavTabs(),
-
-                    const SizedBox(height: 20),
-
-                    // 3. Section Tag & Header
-                    const Text(
-                      '01 / DEMAND & INCOME',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF94A3B8),
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Rental performance',
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF0F172A),
-                      ),
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // 4. Performance Metric 2x2 Grid
-                    _buildPerformanceGrid(
-                      confirmedFees: confirmedFees,
-                      confirmedRentals: confirmedRentals,
-                      utilization: utilization,
-                      avgFee: avgFee,
-                      activeCount: activeCount,
-                      totalCatalog: totalCatalog,
-                    ),
-
-                    const SizedBox(height: 20),
-
-                    // 5. Revenue & Rentals Trends Section
-                    _buildTrendCard(
-                      title: 'Revenue trend',
-                      subtitle: 'Confirmed rental fees • daily',
-                      contentValue: '₱${confirmedFees.toStringAsFixed(2)}',
-                      icon: Icons.show_chart,
-                      color: const Color(0xFF0284C7),
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    _buildTrendCard(
-                      title: 'Rentals trend',
-                      subtitle: 'Confirmed rental count • daily',
-                      contentValue: '$confirmedRentals rentals',
-                      icon: Icons.bar_chart_rounded,
-                      color: const Color(0xFF16A34A),
-                    ),
-
-                    const SizedBox(height: 24),
-
-                    // 6. Connected Workspace Footer
-                    _buildWorkspaceFooter(authService),
-                  ],
+                // Timestamp Notice
+                const Text(
+                  'Philippine time • Recorded rental fees exclude deposits. Today is a partial day.',
+                  style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
                 ),
-              );
-            },
+
+                const SizedBox(height: 16),
+
+                // 2. Sub-Navigation Tabs
+                _buildSubNavTabs(),
+
+                const SizedBox(height: 20),
+
+                // 3. Section Tag & Header
+                const Text(
+                  '01 / DEMAND & INCOME',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF94A3B8),
+                    letterSpacing: 1.0,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                const Text(
+                  'Rental performance',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF0F172A),
+                  ),
+                ),
+
+                const SizedBox(height: 16),
+
+                // 4. Performance Metric 2x2 Grid
+                _buildPerformanceGrid(
+                  confirmedFees: confirmedFees,
+                  confirmedRentals: confirmedRentals,
+                  utilization: utilization,
+                  avgFee: avgFee,
+                  activeCount: activeCount,
+                  totalCatalog: totalCatalog,
+                ),
+
+                const SizedBox(height: 20),
+
+                // 5. Revenue & Rentals Trends Section
+                _buildTrendCard(
+                  title: 'Revenue trend',
+                  subtitle: 'Confirmed rental fees • daily',
+                  contentValue: '₱${confirmedFees.toStringAsFixed(2)}',
+                  icon: Icons.show_chart,
+                  color: const Color(0xFF0284C7),
+                ),
+
+                const SizedBox(height: 12),
+
+                _buildTrendCard(
+                  title: 'Rentals trend',
+                  subtitle: 'Confirmed rental count • daily',
+                  contentValue: '$confirmedRentals rentals',
+                  icon: Icons.bar_chart_rounded,
+                  color: const Color(0xFF16A34A),
+                ),
+
+                const SizedBox(height: 24),
+
+                // 6. Connected Workspace Footer
+                _buildWorkspaceFooter(authService),
+              ],
+            ),
           );
         },
       ),
@@ -211,17 +218,24 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Period', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                    const Text('Period',
+                        style:
+                            TextStyle(fontSize: 11, color: Color(0xFF64748B))),
                     const SizedBox(height: 4),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       initialValue: _selectedPeriod,
                       decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                       items: ['Last 30 days', 'Last 7 days', 'This Month']
-                          .map((p) => DropdownMenuItem(value: p, child: Text(p, style: const TextStyle(fontSize: 12))))
+                          .map((p) => DropdownMenuItem(
+                              value: p,
+                              child: Text(p,
+                                  style: const TextStyle(fontSize: 12))))
                           .toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _selectedPeriod = val);
@@ -235,20 +249,34 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Category', style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                    const Text('Category',
+                        style:
+                            TextStyle(fontSize: 11, color: Color(0xFF64748B))),
                     const SizedBox(height: 4),
                     DropdownButtonFormField<String>(
                       isExpanded: true,
                       initialValue: _selectedCategory,
                       decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
-                      items: ['All categories', 'Sports', 'Cards', 'Board Games', 'Tech Rentals']
-                          .map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 12))))
+                      items: [
+                        'All categories',
+                        'Sports',
+                        'Cards',
+                        'Board Games',
+                        'Tech Rentals'
+                      ]
+                          .map((c) => DropdownMenuItem(
+                              value: c,
+                              child: Text(c,
+                                  style: const TextStyle(fontSize: 12))))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null) setState(() => _selectedCategory = val);
+                        if (val != null)
+                          setState(() => _selectedCategory = val);
                       },
                     ),
                   ],
@@ -264,7 +292,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFF57C00),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
                 elevation: 0,
               ),
               onPressed: () {
@@ -273,7 +302,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 );
               },
               icon: const Icon(Icons.download, size: 18),
-              label: const Text('Export analytics CSV', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              label: const Text('Export analytics CSV',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
             ),
           ),
         ],
@@ -305,17 +335,22 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             return GestureDetector(
               onTap: () => setState(() => _selectedSubTab = tab),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? const Color(0xFFFEF3EA) : Colors.transparent,
+                  color:
+                      isSelected ? const Color(0xFFFEF3EA) : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   tab,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    color: isSelected ? const Color(0xFFC2410C) : const Color(0xFF64748B),
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected
+                        ? const Color(0xFFC2410C)
+                        : const Color(0xFF64748B),
                   ),
                 ),
               ),
@@ -413,14 +448,20 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w500),
+            style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFF64748B),
+                fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 6),
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
               value,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+              style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF0F172A)),
             ),
           ),
           const SizedBox(height: 4),
@@ -462,12 +503,16 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                    style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF0F172A)),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
+                    style:
+                        const TextStyle(fontSize: 11, color: Color(0xFF64748B)),
                   ),
                 ],
               ),
@@ -485,10 +530,12 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Daily Summary:', style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                const Text('Daily Summary:',
+                    style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
                 Text(
                   contentValue,
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: color),
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.bold, color: color),
                 ),
               ],
             ),
@@ -523,8 +570,13 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               const Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Connected workspace', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                  Text('Cloud Firestore records', style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
+                  Text('Connected workspace',
+                      style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A))),
+                  Text('Cloud Firestore records',
+                      style: TextStyle(fontSize: 10, color: Color(0xFF64748B))),
                 ],
               ),
             ],
@@ -535,14 +587,26 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
               const CircleAvatar(
                 radius: 16,
                 backgroundColor: Color(0xFFFED7AA),
-                child: Text('RP', style: TextStyle(color: Color(0xFFC2410C), fontWeight: FontWeight.bold, fontSize: 11)),
+                child: Text('RP',
+                    style: TextStyle(
+                        color: Color(0xFFC2410C),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11)),
               ),
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(authService.currentUser?.email ?? 'Reynold Pastor', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0F172A))),
-                  const Text('ADMIN', style: TextStyle(fontSize: 10, color: Color(0xFFC2410C), fontWeight: FontWeight.bold)),
+                  Text(authService.currentUser?.email ?? 'Reynold Pastor',
+                      style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF0F172A))),
+                  const Text('ADMIN',
+                      style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFFC2410C),
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ],

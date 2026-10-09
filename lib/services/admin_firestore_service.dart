@@ -50,11 +50,15 @@ class AdminFirestoreService {
     await _auth.signOut();
   }
 
-  Future<Map<String, dynamic>> _remote(String path,
-      {String method = 'GET', Map<String, dynamic>? body}) async {
+  Future<Map<String, dynamic>> _remote(
+    String path, {
+    String method = 'GET',
+    Map<String, dynamic>? body,
+    bool forceRefresh = false,
+  }) async {
     try {
-      return await MobileApiService.instance
-          .adminRequest(path, method: method, body: body);
+      return await MobileApiService.instance.adminRequest(path,
+          method: method, body: body, forceRefresh: forceRefresh);
     } on MobileApiException catch (error) {
       throw AdminApiException(error.message, statusCode: error.statusCode);
     } catch (_) {
@@ -64,22 +68,15 @@ class AdminFirestoreService {
     }
   }
 
-  Future<Map<String, dynamic>> loadWorkspace() async {
-    final results = await Future.wait(
-        [_remote('/workspace'), _remote('/dashboard'), _remote('/inventory')]);
-    return {
-      ...results[0],
-      'items': results[2]['items'],
-      '_dashboard': results[1],
-      '_inventory': results[2]
-    };
-  }
+  Future<Map<String, dynamic>> loadWorkspace({bool forceRefresh = false}) =>
+      _remote('/mobile/admin-workspace', forceRefresh: forceRefresh);
 
   Map<String, dynamic> dashboardFromWorkspace(Map<String, dynamic> workspace) =>
       Map<String, dynamic>.from(workspace['_dashboard'] as Map);
   Map<String, dynamic> inventoryFromWorkspace(Map<String, dynamic> workspace) =>
       Map<String, dynamic>.from(workspace['_inventory'] as Map);
-  Future<Map<String, dynamic>> getMap(String path) => _remote(path);
+  Future<Map<String, dynamic>> getMap(String path, {bool forceRefresh = false}) =>
+      _remote(path, forceRefresh: forceRefresh);
   Future<Map<String, dynamic>> post(String path,
           {Map<String, dynamic> body = const {}}) =>
       _remote(path, method: 'POST', body: body);

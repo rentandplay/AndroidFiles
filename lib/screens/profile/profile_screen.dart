@@ -1,6 +1,5 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -96,12 +95,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await ref.putData(bytes);
       final url = await ref.getDownloadURL();
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .update({
-        'profileImageUrl': url,
-      });
+      await authService.updateProfileImageUrl(url);
 
       if (!mounted) return;
       setState(() {

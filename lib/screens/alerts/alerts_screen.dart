@@ -21,7 +21,7 @@ class _AlertsScreenState extends State<AlertsScreen> {
     _clock = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    _refresh = Timer.periodic(const Duration(seconds: 20), (_) => _load());
+    _refresh = Timer.periodic(const Duration(minutes: 2), (_) => _load());
   }
 
   Future<void> _load() async {

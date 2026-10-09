@@ -75,12 +75,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
   void _startAutoRefresh() {
     _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (mounted && !_leaving) unawaited(_loadWorkspace(quiet: true));
     });
   }
 
-  Future<void> _loadWorkspace({bool quiet = false}) async {
+  Future<void> _loadWorkspace(
+      {bool quiet = false, bool forceRefresh = false}) async {
     if (_refreshing || _leaving) return;
     if (!_api.hasSession) {
       _returnToLogin();
@@ -94,7 +95,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       });
     }
     try {
-      final workspace = await _api.loadWorkspace();
+      final workspace = await _api.loadWorkspace(forceRefresh: forceRefresh);
       if (!mounted) return;
       setState(() {
         _workspace = workspace;
@@ -117,7 +118,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     }
   }
 
-  Future<void> _refresh() => _loadWorkspace();
+  Future<void> _refresh() => _loadWorkspace(forceRefresh: true);
+  Future<void> _refreshAfterChange() => _loadWorkspace();
 
   Future<void> _logout() async {
     if (_leaving) return;
@@ -250,7 +252,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       key: ValueKey(returns ? 'staff-returns' : 'staff-rentals'),
       page: returns ? 'Returns' : 'Rentals',
       workspace: _workspace,
-      onChanged: _refresh,
+      onChanged: _refreshAfterChange,
       initialScanKind: _requestedScanKind,
       scanRequestId: _scanRequestId,
       onScanConsumed: _consumeScanRequest,

@@ -97,6 +97,15 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> updateProfileImageUrl(String imageUrl) async {
+    if (currentUser == null) {
+      throw const MobileApiException('Sign in to update your profile picture.',
+          statusCode: 401);
+    }
+    await _api.profile(method: 'PATCH', body: {'profileImageUrl': imageUrl});
+    notifyListeners();
+  }
+
   Future<UserModel> updateCustomerProfile({
     required String name,
     required String phone,

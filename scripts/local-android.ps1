@@ -11,82 +11,137 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$androidProject = Split-Path -Parent $PSScriptRoot
+$projectRoot = Split-Path -Parent $PSScriptRoot
 if ($Install -and -not $BuildApk) {
     throw 'Use -BuildApk -Install to build and install a local APK.'
 }
 
-function Get-AndroidAdb {
+function Get-LanIpv4Address {
+    $candidates = foreach ($adapter in [System.Net.NetworkInformation.NetworkInterface]::GetAllNetworkInterfaces()) {
+        if ($adapter.OperationalStatus -ne [System.Net.NetworkInformation.OperationalStatus]::Up -or
+            $adapter.NetworkInterfaceType -in @(
+                [System.Net.NetworkInformation.NetworkInterfaceType]::Loopback,
+                [System.Net.NetworkInformation.NetworkInterfaceType]::Tunnel
+            )) {
+            continue
+        }
+
+        $properties = $adapter.GetIPProperties()
+        $hasIpv4Gateway = @($properties.GatewayAddresses | Where-Object {
+            $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+            $_.Address.ToString() -ne '0.0.0.0'
+        }).Count -gt 0
+        if (-not $hasIpv4Gateway) { continue }
+
+        $ipv4 = $properties.UnicastAddresses | Where-Object {
+            $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
+            -not $_.Address.IsLoopback -and
+            -not $_.Address.ToString().StartsWith('169.254.')
+        } | Select-Object -First 1
+        if (-not $ipv4) { continue }
+
+        [PSCustomObject]@{
+            Priority = if ($adapter.Name -match 'wi-?fi|wlan|wireless') { 0 } else { 1 }
+            Name     = $adapter.Name
+            Address  = $ipv4.Address.ToString()
+        }
+    }
+
+    $selected = $candidates | Sort-Object Priority | Select-Object -First 1
+    if (-not $selected) {
+        throw 'Could not find an active Wi-Fi/LAN IPv4 address. Connect this computer to the same Wi-Fi as the phone, then try again or pass -ApiHost <laptop-ip>.'
+    }
+
+    Write-Host "Using $($selected.Name): $($selected.Address)"
+    return $selected.Address
+}
+
+function Get-AdbPath {
     $adbCommand = Get-Command adb.exe -ErrorAction SilentlyContinue
     if ($adbCommand) { return $adbCommand.Source }
+
     $sdkDirectory = if ($env:ANDROID_HOME) { $env:ANDROID_HOME }
         elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT }
         else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
     $adbExecutable = Join-Path $sdkDirectory 'platform-tools\adb.exe'
-    if (-not (Test-Path -LiteralPath $adbExecutable)) {
-        throw 'Android SDK platform-tools are required. Set ANDROID_HOME to your SDK directory.'
-    }
-    return $adbExecutable
+    if (Test-Path -LiteralPath $adbExecutable) { return $adbExecutable }
+
+    throw 'Android SDK platform-tools are required. Set ANDROID_HOME to your SDK directory.'
 }
 
-$adbArguments = if ($DeviceId) { @('-s', $DeviceId) } else { @() }
-if ($Connection -eq 'USB') {
-    $ApiHost = '127.0.0.1'
-    $adbExecutable = Get-AndroidAdb
-    & $adbExecutable @adbArguments reverse "tcp:$ApiPort" "tcp:$ApiPort"
-    if ($LASTEXITCODE -ne 0) { throw 'Connect one authorized Android device or specify -DeviceId.' }
-} elseif ($Connection -eq 'Emulator') {
-    $ApiHost = '10.0.2.2'
-} elseif (-not $ApiHost) {
-    $networks = @(Get-NetIPConfiguration | Where-Object {
-        $_.IPv4DefaultGateway -and $_.IPv4Address
-    })
-    $wifi = @($networks | Where-Object { $_.InterfaceAlias -match 'Wi-?Fi|Wireless' })
-    $selectedNetwork = if ($wifi.Count -eq 1) { $wifi[0] }
-        elseif ($networks.Count -eq 1) { $networks[0] }
-        else { throw 'Specify -ApiHost with the laptop IPv4 address on the phone Wi-Fi network.' }
-    $ApiHost = $selectedNetwork.IPv4Address.IPAddress | Select-Object -First 1
+switch ($Connection) {
+    'Emulator' { $ApiHost = '10.0.2.2' }
+    'USB'      { $ApiHost = '127.0.0.1' }
+    'WiFi'     { if (-not $ApiHost) { $ApiHost = Get-LanIpv4Address } }
 }
 
 $apiBaseUrl = "http://${ApiHost}:$ApiPort/api"
-$checkBaseUrl = if ($Connection -eq 'WiFi') { $apiBaseUrl } else { "http://127.0.0.1:$ApiPort/api" }
-$catalog = Invoke-RestMethod -Uri "$checkBaseUrl/mobile/catalog" -TimeoutSec 20
-if ($catalog.items -isnot [System.Array]) {
-    throw 'The local server did not return a catalog. Start Rent & Play: Start App in VS Code.'
-}
-Write-Host "Local Android API: $apiBaseUrl ($($catalog.items.Count) catalog items)"
-if ($Connection -eq 'WiFi') {
-    Write-Host 'Keep the phone and laptop on the same Wi-Fi and leave the backend running.'
-} elseif ($Connection -eq 'USB') {
-    Write-Host 'Keep USB connected. Run this script again after reconnecting to restore forwarding.'
+$flutterCommand = Get-Command flutter.bat -ErrorAction Stop
+$adbPath = $null
+
+if ($Connection -eq 'USB' -or $Install) {
+    $adbPath = Get-AdbPath
 }
 
-$flutterExecutable = (Get-Command flutter.bat -ErrorAction Stop).Source
-Push-Location $androidProject
-try {
-    if ($BuildApk) {
-        $apkDirectory = Join-Path $androidProject 'build\app\outputs\flutter-apk'
-        $defaultApk = Join-Path $apkDirectory 'app-debug.apk'
-        $previousApk = Join-Path $apkDirectory 'app-debug-before-local.apk'
-        if ((Test-Path -LiteralPath $defaultApk) -and -not (Test-Path -LiteralPath $previousApk)) {
-            Copy-Item -LiteralPath $defaultApk -Destination $previousApk
-        }
-        & $flutterExecutable build apk --debug "--dart-define=API_BASE_URL=$apiBaseUrl"
-        if ($LASTEXITCODE -ne 0) { throw 'The local APK build failed.' }
-        $localApk = Join-Path $apkDirectory 'app-local-debug.apk'
-        Copy-Item -LiteralPath $defaultApk -Destination $localApk -Force
-        Write-Host "Local test APK: $localApk"
-        if ($Install) {
-            $adbExecutable = Get-AndroidAdb
-            & $adbExecutable @adbArguments install -r $localApk
-            if ($LASTEXITCODE -ne 0) { throw 'The local APK could not be installed.' }
-        }
-    } else {
-        $flutterArguments = @('run', "--dart-define=API_BASE_URL=$apiBaseUrl")
-        if ($DeviceId) { $flutterArguments += @('-d', $DeviceId) }
-        & $flutterExecutable @flutterArguments
-        if ($LASTEXITCODE -ne 0) { throw 'The local Android run failed.' }
+if ($Connection -eq 'USB') {
+    $adbArgs = @()
+    if ($DeviceId) { $adbArgs += @('-s', $DeviceId) }
+    & $adbPath @adbArgs reverse "tcp:$ApiPort" "tcp:$ApiPort"
+    if ($LASTEXITCODE -ne 0) { throw 'adb reverse failed. Check that the phone is connected and authorized for USB debugging.' }
+}
+
+$flutterDefineArg = '--dart-define=API_BASE_URL=' + $apiBaseUrl
+$flutterRunArgs = @()
+if ($DeviceId) { $flutterRunArgs += @('-d', $DeviceId) }
+$flutterRunArgs += $flutterDefineArg
+
+if ($BuildApk) {
+    Write-Host "Building local Android APK with API $apiBaseUrl"
+    Push-Location $projectRoot
+    try {
+        & $flutterCommand.Source build apk --debug $flutterDefineArg
+        if ($LASTEXITCODE -ne 0) { throw "Flutter APK build failed with exit code $LASTEXITCODE." }
+    } finally {
+        Pop-Location
     }
+
+    $builtApk = Join-Path $projectRoot 'build\app\outputs\flutter-apk\app-debug.apk'
+    if (-not (Test-Path -LiteralPath $builtApk)) { throw "Flutter reported success but the APK was not found at $builtApk." }
+
+    $localApk = Join-Path $projectRoot 'build\app\outputs\flutter-apk\app-local-debug.apk'
+    Copy-Item -LiteralPath $builtApk -Destination $localApk -Force
+    Write-Host "Created $localApk"
+
+    if ($Install) {
+        $adbArgs = @()
+        if ($DeviceId) { $adbArgs += @('-s', $DeviceId) }
+        & $adbPath @adbArgs install -r $localApk
+        if ($LASTEXITCODE -ne 0) { throw "APK installation failed with exit code $LASTEXITCODE." }
+    }
+    return
+}
+
+# A raw TCP check confirms the local API is listening without making a Firebase
+# request or spending any Firestore reads.
+$tcpClient = [System.Net.Sockets.TcpClient]::new()
+try {
+    $connect = $tcpClient.BeginConnect($ApiHost, $ApiPort, $null, $null)
+    if (-not $connect.AsyncWaitHandle.WaitOne(3000)) {
+        throw "Timed out reaching the backend at ${ApiHost}:$ApiPort. Start the Rent & Play backend first."
+    }
+    $tcpClient.EndConnect($connect)
+} catch {
+    throw "Cannot reach the local backend at ${ApiHost}:$ApiPort. Start the Rent & Play backend first and check Windows Firewall/private-network access. Original error: $($_.Exception.Message)"
+} finally {
+    $tcpClient.Dispose()
+}
+
+Write-Host "Running Flutter against $apiBaseUrl"
+Write-Host 'For Wi-Fi mode, keep the phone and laptop on the same Wi-Fi and leave the backend running.'
+Push-Location $projectRoot
+try {
+    & $flutterCommand.Source run @flutterRunArgs
+    if ($LASTEXITCODE -ne 0) { throw "Flutter run failed with exit code $LASTEXITCODE." }
 } finally {
     Pop-Location
 }

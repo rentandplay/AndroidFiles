@@ -17,14 +17,6 @@
       "program": "lib/main.dart",
       "flutterMode": "debug",
       "toolArgs": ["--dart-define=API_BASE_URL=http://10.0.2.2:3000/api"]
-    },
-    {
-      "name": "Rent & Play: Android hosted (Render)",
-      "type": "dart",
-      "request": "launch",
-      "program": "lib/main.dart",
-      "flutterMode": "debug",
-      "toolArgs": ["--dart-define=API_BASE_URL=https://rent-and-play.onrender.com/api"]
     }
   ]
 }

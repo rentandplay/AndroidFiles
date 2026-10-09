@@ -14,30 +14,59 @@ import '../shared/transaction_ticket_dialog.dart';
 import 'return_equipment_screen.dart';
 
 class ActiveRentalsScreen extends StatefulWidget {
-  const ActiveRentalsScreen({super.key, this.onBrowse});
+  const ActiveRentalsScreen({super.key, this.onBrowse, this.isActive = true});
   final VoidCallback? onBrowse;
+  final bool isActive;
   @override
   State<ActiveRentalsScreen> createState() => _ActiveRentalsScreenState();
 }
 
-class _ActiveRentalsScreenState extends State<ActiveRentalsScreen> {
+class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
+    with WidgetsBindingObserver {
   List<RentalModel>? _rentals;
   Timer? _poll;
   bool _refreshing = false;
+  bool _appResumed = true;
   String _error = '';
   final _cancelling = <String>{};
   final _uploadingProof = <String>{};
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _refreshRentals();
-    _poll =
-        Timer.periodic(const Duration(seconds: 20), (_) => _refreshRentals());
+    _syncPolling();
+  }
+
+  @override
+  void didUpdateWidget(covariant ActiveRentalsScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.isActive != widget.isActive) {
+      _syncPolling();
+      if (widget.isActive) _refreshRentals();
+    }
+  }
+
+  void _syncPolling() {
+    _poll?.cancel();
+    _poll = null;
+    if (widget.isActive && _appResumed) {
+      _poll =
+          Timer.periodic(const Duration(minutes: 2), (_) => _refreshRentals());
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appResumed = state == AppLifecycleState.resumed;
+    _syncPolling();
+    if (_appResumed && widget.isActive) _refreshRentals();
   }
 
   @override
   void dispose() {
     _poll?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -235,6 +264,9 @@ class RentalBookingCard extends StatelessWidget {
       this.onReturn,
       this.onUploadPaymentProof,
       this.onRefresh});
+  static const _rentalStages = ['Request', 'Handoff', 'In use'];
+  static const _returnStages = ['Request sent', 'Received', 'Inspection'];
+
   final RentalModel rental;
   final VoidCallback? onTicket,
       onCancel,
@@ -244,13 +276,27 @@ class RentalBookingCard extends StatelessWidget {
   String _date(DateTime value) =>
       DateFormat('MMM d · h:mm a').format(value.toLocal());
 
-  int _progressStep() {
-    if (rental.isAwaitingInspection) return 3;
-    if (rental.isActive || rental.hasPendingReturnRequest) return 2;
+  int _rentalProgressStep() {
+    if (rental.isActive ||
+        rental.hasPendingReturnRequest ||
+        rental.isAwaitingInspection) return 2;
     if (rental.isPendingVerification) {
       return rental.normalizedStatus.contains('RETURN') ? 2 : 1;
     }
     if (rental.isAwaitingPickup) return 1;
+    return 0;
+  }
+
+  bool get _hasReturnProgress =>
+      rental.hasPendingReturnRequest ||
+      (rental.isPendingVerification &&
+          rental.normalizedStatus.contains('RETURN')) ||
+      rental.isAwaitingInspection;
+
+  int _returnProgressStep() {
+    if (rental.isAwaitingInspection) return 2;
+    if (rental.isPendingVerification &&
+        rental.normalizedStatus.contains('RETURN')) return 1;
     return 0;
   }
 
@@ -386,7 +432,23 @@ class RentalBookingCard extends StatelessWidget {
         ),
       ]),
       const SizedBox(height: 18),
-      _RentalProgressTracker(step: _progressStep()),
+      const Text('Rental progress',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+      const SizedBox(height: 4),
+      _ProgressTracker(
+          step: _rentalProgressStep(),
+          labels: _rentalStages,
+          semanticLabel: 'Rental progress'),
+      if (_hasReturnProgress) ...[
+        const SizedBox(height: 12),
+        const Text('Return progress',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        _ProgressTracker(
+            step: _returnProgressStep(),
+            labels: _returnStages,
+            semanticLabel: 'Return progress'),
+      ],
       const SizedBox(height: 18),
       _RentalNextStep(
           title: heading, message: message, icon: nextIcon, color: alertColor),
@@ -686,10 +748,14 @@ class _RentalNextStep extends StatelessWidget {
   }
 }
 
-class _RentalProgressTracker extends StatelessWidget {
-  const _RentalProgressTracker({required this.step});
+class _ProgressTracker extends StatelessWidget {
+  const _ProgressTracker(
+      {required this.step,
+      required this.labels,
+      required this.semanticLabel});
   final int step;
-  static const _labels = ['Request', 'Handoff', 'In use', 'Return'];
+  final List<String> labels;
+  final String semanticLabel;
 
   @override
   Widget build(BuildContext context) {
@@ -697,13 +763,14 @@ class _RentalProgressTracker extends StatelessWidget {
     final active = scheme.primary;
     final track = scheme.outline.withValues(alpha: .45);
     return Semantics(
-      label: 'Rental progress: ${_labels[step]} stage',
+      label: '$semanticLabel: ${labels[step]} stage',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(
           height: 18,
           child: CustomPaint(
             painter: _RentalProgressPainter(
                 step: step,
+                stageCount: labels.length,
                 active: active,
                 track: track,
                 surface: scheme.surface),
@@ -711,9 +778,9 @@ class _RentalProgressTracker extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Row(children: [
-          for (var index = 0; index < _labels.length; index++)
+          for (var index = 0; index < labels.length; index++)
             Expanded(
-              child: Text(_labels[index],
+              child: Text(labels[index],
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   style: TextStyle(
@@ -732,10 +799,12 @@ class _RentalProgressTracker extends StatelessWidget {
 class _RentalProgressPainter extends CustomPainter {
   const _RentalProgressPainter(
       {required this.step,
+      required this.stageCount,
       required this.active,
       required this.track,
       required this.surface});
   final int step;
+  final int stageCount;
   final Color active, track, surface;
 
   @override
@@ -744,7 +813,7 @@ class _RentalProgressPainter extends CustomPainter {
     final centerY = size.height / 2;
     final startX = radius;
     final endX = size.width - radius;
-    final spacing = (endX - startX) / 3;
+    final spacing = (endX - startX) / (stageCount - 1);
     final basePaint = Paint()
       ..color = track
       ..strokeWidth = 3
@@ -758,7 +827,7 @@ class _RentalProgressPainter extends CustomPainter {
       canvas.drawLine(Offset(startX, centerY),
           Offset(startX + spacing * step, centerY), activePaint);
     }
-    for (var index = 0; index < 4; index++) {
+    for (var index = 0; index < stageCount; index++) {
       final center = Offset(startX + spacing * index, centerY);
       if (index == step) {
         canvas.drawCircle(
@@ -796,5 +865,6 @@ class _RentalProgressPainter extends CustomPainter {
       oldDelegate.step != step ||
       oldDelegate.active != active ||
       oldDelegate.track != track ||
-      oldDelegate.surface != surface;
+      oldDelegate.surface != surface ||
+      oldDelegate.stageCount != stageCount;
 }
