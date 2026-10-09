@@ -66,7 +66,7 @@ class MainActivity : FlutterActivity() {
     private var isPrinterConnected = false
     private var txCharacteristic: BluetoothGattCharacteristic? = null
     private var rxCharacteristic: BluetoothGattCharacteristic? = null
-    private var printerName = "MX10"
+    private var printerName = "Printer"
     private var connectResult: MethodChannel.Result? = null
     private var connectTimeout: Runnable? = null
     private var flowPaused = false
@@ -102,10 +102,13 @@ class MainActivity : FlutterActivity() {
                     "discoverPrinters" -> withBluetoothPermissions(result) {
                         discoverPrinters(result)
                     }
+                    "getPrinterStatus" -> result.success(
+                        mapOf("connected" to (activeGatt != null && isPrinterConnected)),
+                    )
                     "connectPrinter" -> {
                         val id = call.argument<String>("id")
                         if (id.isNullOrBlank()) {
-                            result.error("invalid_device", "Choose an MX10 printer first.", null)
+                            result.error("invalid_device", "Choose a printer first.", null)
                         } else {
                             withBluetoothPermissions(result) { connectPrinter(id, result) }
                         }
@@ -179,7 +182,7 @@ class MainActivity : FlutterActivity() {
         } else {
             result?.error(
                 "bluetooth_permission_denied",
-                "Allow Bluetooth access to find and print to the MX10 label printer.",
+                "Allow Bluetooth access to find and print to a compatible printer.",
                 null,
             )
         }
@@ -197,7 +200,7 @@ class MainActivity : FlutterActivity() {
             return
         }
         if (!adapter.isEnabled) {
-            result.error("bluetooth_off", "Turn on Bluetooth, then search for the MX10 printer again.", null)
+            result.error("bluetooth_off", "Turn on Bluetooth, then search for a printer again.", null)
             return
         }
         val scanner = adapter.bluetoothLeScanner
@@ -271,7 +274,7 @@ class MainActivity : FlutterActivity() {
     private fun connectPrinter(address: String, result: MethodChannel.Result) {
         val adapter = bluetoothAdapter()
         if (adapter == null || !adapter.isEnabled) {
-            result.error("bluetooth_off", "Turn on Bluetooth before connecting to the MX10.", null)
+            result.error("bluetooth_off", "Turn on Bluetooth before connecting to the printer.", null)
             return
         }
         if (activeGatt?.device?.address == address && isPrinterConnected) {
@@ -285,7 +288,7 @@ class MainActivity : FlutterActivity() {
             result.error("invalid_device", "The selected printer is no longer available. Scan again.", null)
             return
         }
-        printerName = device.name ?: "MX10"
+        printerName = device.name ?: "Printer"
         connectResult = result
         connectTimeout = Runnable {
             if (connectResult === result) {
@@ -293,18 +296,18 @@ class MainActivity : FlutterActivity() {
                 activeGatt?.disconnect()
                 activeGatt?.close()
                 activeGatt = null
-                result.error("connect_timeout", "The MX10 did not connect. Check that it is on and not connected to another device.", null)
+                result.error("connect_timeout", "The printer did not connect. Check that it is on and not connected to another device.", null)
             }
         }.also { mainHandler.postDelayed(it, 20000L) }
         try {
             activeGatt = device.connectGatt(this, false, gattCallback, BluetoothDevice.TRANSPORT_LE)
             if (activeGatt == null) {
-                failConnection("Could not start the MX10 Bluetooth connection.")
+                failConnection("Could not start the Bluetooth connection to the printer.")
             }
         } catch (error: SecurityException) {
             failConnection("Bluetooth permission was not granted.")
         } catch (error: Exception) {
-            failConnection(error.message ?: "Could not connect to the MX10.")
+            failConnection(error.message ?: "Could not connect to the printer.")
         }
     }
 
@@ -312,21 +315,21 @@ class MainActivity : FlutterActivity() {
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (gatt !== activeGatt) return
             if (status != BluetoothGatt.GATT_SUCCESS) {
-                mainHandler.post { failConnection("MX10 Bluetooth connection failed (code $status).") }
+                mainHandler.post { failConnection("Printer Bluetooth connection failed (code $status).") }
                 return
             }
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 mainHandler.post {
                     try {
-                        if (!gatt.discoverServices()) failConnection("Could not read the MX10 printer services.")
+                        if (!gatt.discoverServices()) failConnection("Could not read the printer services.")
                     } catch (error: Exception) {
-                        failConnection(error.message ?: "Could not read the MX10 printer services.")
+                        failConnection(error.message ?: "Could not read the printer services.")
                     }
                 }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 mainHandler.post {
-                    failPrint("Bluetooth disconnected while communicating with the MX10.")
-                    if (connectResult != null) failConnection("The MX10 disconnected before it was ready.")
+                    failPrint("Bluetooth disconnected while communicating with the printer.")
+                    if (connectResult != null) failConnection("The printer disconnected before it was ready.")
                     if (activeGatt === gatt) {
                         isPrinterConnected = false
                         txCharacteristic = null
@@ -342,13 +345,13 @@ class MainActivity : FlutterActivity() {
             if (gatt !== activeGatt) return
             mainHandler.post {
                 if (status != BluetoothGatt.GATT_SUCCESS) {
-                    failConnection("Could not inspect the MX10 printer services.")
+                    failConnection("Could not inspect the printer services.")
                     return@post
                 }
                 val service = SERVICE_UUIDS.firstNotNullOfOrNull { gatt.getService(it) }
                 val output = service?.getCharacteristic(TX_UUID)
                 if (service == null || output == null) {
-                    failConnection("This device does not expose the MX10 label-print service.")
+                    failConnection("This device does not expose a supported label-print service.")
                     return@post
                 }
                 txCharacteristic = output
@@ -542,7 +545,7 @@ class MainActivity : FlutterActivity() {
     ) {
         val gatt = activeGatt
         if (gatt == null || !isPrinterConnected || txCharacteristic == null) {
-            result.error("printer_disconnected", "Connect the MX10 printer before printing.", null)
+            result.error("printer_disconnected", "Connect the printer before printing.", null)
             return
         }
         if (printResult != null) {
@@ -565,7 +568,7 @@ class MainActivity : FlutterActivity() {
             } catch (error: Exception) {
                 mainHandler.post {
                     if (printResult === result) {
-                        failPrint(error.message ?: "Could not prepare the MX10 print job.")
+                        failPrint(error.message ?: "Could not prepare the printer job.")
                     }
                 }
             }
@@ -581,7 +584,7 @@ class MainActivity : FlutterActivity() {
             return
         }
         val characteristic = txCharacteristic ?: run {
-            failPrint("The MX10 print channel is no longer available.")
+            failPrint("The printer connection is no longer available.")
             return
         }
         if (printOffset >= job.size) {
@@ -611,17 +614,17 @@ class MainActivity : FlutterActivity() {
                 }
             }
         } catch (error: Exception) {
-            failPrint(error.message ?: "Could not send data to the MX10.")
+            failPrint(error.message ?: "Could not send data to the printer.")
             return
         }
         if (!started) {
-            failPrint("The MX10 rejected a print packet. Reconnect and try again.")
+            failPrint("The printer rejected a print packet. Reconnect and try again.")
             return
         }
         val expectedResult = printResult
         val timeout = Runnable {
             if (printResult === expectedResult && writePending) {
-                failPrint("The MX10 did not acknowledge a Bluetooth print packet. Check its paper and connection.")
+                failPrint("The printer did not acknowledge a Bluetooth print packet. Check its paper and connection.")
             }
         }
         writeTimeout?.let(mainHandler::removeCallbacks)
@@ -634,7 +637,7 @@ class MainActivity : FlutterActivity() {
         writeTimeout?.let(mainHandler::removeCallbacks)
         writeTimeout = null
         if (status != BluetoothGatt.GATT_SUCCESS) {
-            failPrint("The MX10 could not receive a print packet (code $status).")
+            failPrint("The printer could not receive a print packet (code $status).")
             return
         }
         printOffset += pendingWriteLength
@@ -653,7 +656,7 @@ class MainActivity : FlutterActivity() {
         val expectedResult = printResult
         val timeout = Runnable {
             if (printResult === expectedResult && flowPaused) {
-                failPrint("The MX10 stayed busy for too long. Check the paper roll and try again.")
+                failPrint("The printer stayed busy for too long. Check the paper roll and try again.")
             }
         }
         flowTimeout = timeout
@@ -788,7 +791,7 @@ class MainActivity : FlutterActivity() {
         parts.add(printerCommand(0xa1, byteArrayOf(0x10, 0x00)))
         rows.forEach { row ->
             if (row.size != PRINTER_WIDTH / 8) {
-                throw IllegalArgumentException("The MX10 print bitmap has an invalid row width.")
+                throw IllegalArgumentException("The printer bitmap has an invalid row width.")
             }
             parts.add(printerCommand(0xa2, row))
         }

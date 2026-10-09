@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -56,13 +57,28 @@ class EquipmentQrLabelDialog extends StatefulWidget {
 class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
   bool _printing = false;
   bool _sharing = false;
-  bool _printingMx10 = false;
-  String? _mx10PrinterName;
+  bool _connectingPrinter = false;
+  bool _printingPrinter = false;
+  bool _checkingPrinter = true;
+  bool _printerConnected = false;
+  bool _refreshingPrinterStatus = false;
+  Timer? _printerStatusTimer;
 
   @override
   void initState() {
     super.initState();
-    _mx10PrinterName = Mx10PrinterService.instance.connectedDeviceName;
+    unawaited(_refreshPrinterStatus());
+    _printerStatusTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (!_connectingPrinter && !_printingPrinter) {
+        unawaited(_refreshPrinterStatus());
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _printerStatusTimer?.cancel();
+    super.dispose();
   }
 
   String get _payload => widget.qrData?.trim().isNotEmpty == true
@@ -185,7 +201,7 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
     }
   }
 
-  Future<Map<String, String>?> _chooseMx10Printer(
+  Future<Map<String, String>?> _choosePrinter(
     List<Map<String, String>> printers,
   ) =>
       showModalBottomSheet<Map<String, String>>(
@@ -199,40 +215,102 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Choose MX10 printer',
+                  'Choose printer',
                   style: Theme.of(context).textTheme.titleLarge,
                 ),
                 const SizedBox(height: 8),
-                ...printers.map(
-                  (printer) => ListTile(
-                    leading: const Icon(Icons.print_rounded),
-                    title: Text(printer['name'] ?? 'MX10 label printer'),
-                    subtitle: Text(printer['id'] ?? ''),
-                    onTap: () => Navigator.pop(sheetContext, printer),
-                  ),
-                ),
+                ...printers.asMap().entries.map(
+                      (entry) => ListTile(
+                        leading: const Icon(Icons.print_rounded),
+                        title: Text('Printer ${entry.key + 1}'),
+                        subtitle: const Text('Available over Bluetooth'),
+                        onTap: () => Navigator.pop(sheetContext, entry.value),
+                      ),
+                    ),
               ],
             ),
           ),
         ),
       );
 
-  Future<void> _printOnMx10() async {
-    if (_printingMx10 || _payload.isEmpty || widget.qrMatrix == null) return;
-    setState(() => _printingMx10 = true);
+  Future<void> _refreshPrinterStatus() async {
+    if (_refreshingPrinterStatus) return;
+    _refreshingPrinterStatus = true;
+    try {
+      final connected = await Mx10PrinterService.instance.isConnected();
+      if (mounted) {
+        setState(() {
+          _printerConnected = connected;
+          _checkingPrinter = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _printerConnected = false;
+          _checkingPrinter = false;
+        });
+      }
+    } finally {
+      _refreshingPrinterStatus = false;
+    }
+  }
+
+  Future<void> _connectPrinter() async {
+    if (_connectingPrinter || _printingPrinter || _payload.isEmpty) return;
+    setState(() => _connectingPrinter = true);
     try {
       final printerService = Mx10PrinterService.instance;
-      if (_mx10PrinterName == null) {
-        final printers = await printerService.discoverPrinters();
-        if (!mounted) return;
-        if (printers.isEmpty) {
-          throw Exception('No MX10 printer found. Turn it on and try again.');
-        }
-        final selected = printers.length == 1
-            ? printers.first
-            : await _chooseMx10Printer(printers);
-        if (!mounted || selected == null) return;
-        _mx10PrinterName = await printerService.connect(selected['id'] ?? '');
+      final printers = await printerService.discoverPrinters();
+      if (!mounted) return;
+      if (printers.isEmpty) {
+        throw Exception('No printer found. Turn it on and try again.');
+      }
+      final selected = printers.length == 1
+          ? printers.first
+          : await _choosePrinter(printers);
+      if (!mounted || selected == null) return;
+      await printerService.connect(selected['id'] ?? '');
+      await _refreshPrinterStatus();
+      if (mounted && !_printerConnected) {
+        throw Exception('Could not connect to the printer. Try again.');
+      }
+    } on PlatformException catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.message ?? 'Could not connect to printer.'),
+          ),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(error.toString().replaceFirst('Exception: ', '')),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _connectingPrinter = false);
+    }
+  }
+
+  Future<void> _printOnPrinter() async {
+    if (_printingPrinter ||
+        !_printerConnected ||
+        _payload.isEmpty ||
+        widget.qrMatrix == null) {
+      return;
+    }
+    setState(() => _printingPrinter = true);
+    try {
+      final printerService = Mx10PrinterService.instance;
+      if (!await printerService.isConnected()) {
+        if (mounted) setState(() => _printerConnected = false);
+        throw Exception(
+          'Printer disconnected. Connect the printer before printing.',
+        );
       }
       await printerService.printLabel(
         code: widget.qrCode,
@@ -241,19 +319,13 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-              content: Text('Label sent to ${_mx10PrinterName ?? 'MX10'}.')),
+          const SnackBar(content: Text('Label sent to printer.')),
         );
       }
     } on PlatformException catch (error) {
       if (mounted) {
-        if (error.code == 'printer_disconnected' ||
-            error.code == 'print_failed') {
-          _mx10PrinterName = null;
-          Mx10PrinterService.instance.clearConnection();
-        }
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(error.message ?? 'MX10 print failed.')),
+          SnackBar(content: Text(error.message ?? 'Printer print failed.')),
         );
       }
     } catch (error) {
@@ -264,7 +336,8 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
         );
       }
     } finally {
-      if (mounted) setState(() => _printingMx10 = false);
+      await _refreshPrinterStatus();
+      if (mounted) setState(() => _printingPrinter = false);
     }
   }
 
@@ -274,6 +347,30 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
         widget.qrCode.trim().isEmpty ? 'EQUIPMENT' : widget.qrCode.trim();
     final displayName =
         widget.itemName.trim().isEmpty ? 'Equipment' : widget.itemName.trim();
+    final colors = Theme.of(context).colorScheme;
+    final printerStatusColor = _printerConnected
+        ? const Color(0xFF238655)
+        : _checkingPrinter || _connectingPrinter
+            ? colors.secondary
+            : colors.error;
+    final printerStatusText = _checkingPrinter
+        ? 'Checking connection…'
+        : _connectingPrinter
+            ? 'Connecting…'
+            : _printerConnected
+                ? 'Connected'
+                : 'Disconnected';
+    final printerStatusDescription = _checkingPrinter
+        ? 'Checking the current printer connection.'
+        : _connectingPrinter
+            ? 'Keep the printer nearby while it connects.'
+            : _printingPrinter
+                ? 'Sending the label to the printer…'
+                : _printerConnected
+                    ? 'Ready to print.'
+                    : 'Connect a printer before printing.';
+    final printerButtonBusy =
+        _checkingPrinter || _connectingPrinter || _printingPrinter;
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -412,13 +509,63 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
               ],
             ),
             const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: printerStatusColor.withOpacity(.08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: printerStatusColor.withOpacity(.25),
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    _checkingPrinter || _connectingPrinter
+                        ? Icons.bluetooth_searching_rounded
+                        : _printerConnected
+                            ? Icons.bluetooth_connected_rounded
+                            : Icons.bluetooth_disabled_rounded,
+                    color: printerStatusColor,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          printerStatusText,
+                          style: TextStyle(
+                            color: printerStatusColor,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          printerStatusDescription,
+                          style: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
             SizedBox(
               width: double.infinity,
               child: FilledButton.icon(
-                onPressed: _printingMx10 || widget.qrMatrix == null
+                onPressed: printerButtonBusy || widget.qrMatrix == null
                     ? null
-                    : _printOnMx10,
-                icon: _printingMx10
+                    : _printerConnected
+                        ? _printOnPrinter
+                        : _connectPrinter,
+                icon: printerButtonBusy
                     ? const SizedBox.square(
                         dimension: 18,
                         child: CircularProgressIndicator(
@@ -427,11 +574,15 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
                         ),
                       )
                     : const Icon(Icons.bluetooth_rounded),
-                label: Text(_printingMx10
-                    ? (_mx10PrinterName == null ? 'Finding MX10…' : 'Printing…')
-                    : _mx10PrinterName == null
-                        ? 'Connect & print with MX10'
-                        : 'Print with $_mx10PrinterName'),
+                label: Text(_checkingPrinter
+                    ? 'Checking connection…'
+                    : _connectingPrinter
+                        ? 'Connecting…'
+                        : _printingPrinter
+                            ? 'Printing…'
+                            : _printerConnected
+                                ? 'Print label'
+                                : 'Connect printer'),
                 style: FilledButton.styleFrom(
                   backgroundColor: const Color(0xFFDF762D),
                   foregroundColor: Colors.white,
@@ -456,7 +607,7 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
             ),
             const SizedBox(height: 7),
             Text(
-              'MX10 uses Bluetooth. The Android print dialog is available for other compatible printers.',
+              'Bluetooth connects directly to a nearby printer. The Android print dialog supports other compatible printers.',
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

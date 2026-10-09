@@ -2,7 +2,7 @@
 
 ## Mobile staff counter
 
-The Android app uses the same login page for customers, operators, and owners. An active `ADMIN` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, return inspection, and a read-only equipment list. Staff can view equipment details, print 50 × 30 mm QR labels directly to a nearby MX10 over Bluetooth, open the Android print screen, or share the label PDF. Equipment editing, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out of the staff counter returns to the shared login page.
+The Android app uses the same login page for customers, operators, and owners. An active `ADMIN` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, return inspection, and a read-only equipment list. Staff can view equipment details, check the Bluetooth printer connection and print 50 × 30 mm QR labels, open the Android print screen, or share the label PDF. Equipment editing, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out of the staff counter returns to the shared login page.
 
 ## Test customer rentals without the ESP32
 

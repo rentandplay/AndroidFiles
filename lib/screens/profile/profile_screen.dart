@@ -11,9 +11,18 @@ import '../auth/login_screen.dart';
 import '../../widgets/notification_widgets.dart';
 
 class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key, this.showBackButton = true});
+  const ProfileScreen({
+    super.key,
+    this.showBackButton = true,
+    this.showAppBar = true,
+    this.onOpenEquipment,
+    this.onSignOut,
+  });
 
   final bool showBackButton;
+  final bool showAppBar;
+  final VoidCallback? onOpenEquipment;
+  final Future<void> Function()? onSignOut;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -171,6 +180,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    if (widget.onSignOut != null) {
+      await widget.onSignOut!();
+      return;
+    }
     await authService.logout();
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
@@ -201,29 +214,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       backgroundColor: bgColor,
-      appBar: AppBar(
-        backgroundColor: cardBg,
-        elevation: 0.5,
-        automaticallyImplyLeading: widget.showBackButton,
-        leading: widget.showBackButton
-            ? IconButton(
-                icon: Icon(Icons.arrow_back, color: textPrimary),
-                onPressed: () => Navigator.pop(context),
-              )
-            : null,
-        title: Text(
-          'Profile & settings',
-          style: TextStyle(
-            color: textPrimary,
-            fontWeight: FontWeight.bold,
-            fontSize: 20,
-          ),
-        ),
-        actions: [
-          if (user != null) RentalNotificationBell(color: textSecondary),
-          const SizedBox(width: 8),
-        ],
-      ),
+      appBar: widget.showAppBar
+          ? AppBar(
+              backgroundColor: cardBg,
+              elevation: 0.5,
+              automaticallyImplyLeading: widget.showBackButton,
+              leading: widget.showBackButton
+                  ? IconButton(
+                      icon: Icon(Icons.arrow_back, color: textPrimary),
+                      onPressed: () => Navigator.pop(context),
+                    )
+                  : null,
+              title: Text(
+                'Profile & settings',
+                style: TextStyle(
+                  color: textPrimary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+              actions: [
+                if (user != null) RentalNotificationBell(color: textSecondary),
+                const SizedBox(width: 8),
+              ],
+            )
+          : null,
       body: FutureBuilder<UserModel?>(
         future: authService.getCurrentUserModel(),
         builder: (context, snapshot) {
@@ -255,6 +270,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textPrimary,
                   textSecondary,
                 ),
+
+                if (isAdmin && widget.onOpenEquipment != null) ...[
+                  const SizedBox(height: 16),
+                  _buildEquipmentMenu(
+                    cardBg,
+                    cardBorder,
+                    textPrimary,
+                    textSecondary,
+                  ),
+                ],
 
                 const SizedBox(height: 20),
 
@@ -329,6 +354,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
       {'name': 'Account & security', 'icon': Icons.lock_outline},
     ];
   }
+
+  Widget _buildEquipmentMenu(
+    Color cardBg,
+    Color cardBorder,
+    Color textPrimary,
+    Color textSecondary,
+  ) => Container(
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cardBorder),
+        ),
+        child: ListTile(
+          leading: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF2E7),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.inventory_2_outlined,
+              color: Color(0xFFC45E1B),
+            ),
+          ),
+          title: Text(
+            'Equipment',
+            style: TextStyle(
+              color: textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          subtitle: Text(
+            'View equipment and print labels',
+            style: TextStyle(color: textSecondary),
+          ),
+          trailing: Icon(Icons.chevron_right_rounded, color: textSecondary),
+          onTap: widget.onOpenEquipment,
+        ),
+      );
 
   // --- SUB NAV TABS ---
   Widget _buildSubNavTabs(

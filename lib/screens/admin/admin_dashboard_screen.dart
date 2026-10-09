@@ -6,6 +6,7 @@ import '../../services/admin_firestore_service.dart';
 import '../../widgets/notification_widgets.dart';
 import 'equipment_list_screen.dart';
 import 'rental_admin_view.dart';
+import '../profile/profile_screen.dart';
 
 /// Lightweight staff counter for the Android app.
 ///
@@ -186,6 +187,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     setState(() => _requestedScanKind = null);
   }
 
+  void _openEquipmentList() {
+    Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => Scaffold(
+          appBar: AppBar(title: const Text('Equipment')),
+          body: EquipmentListScreen(
+            items: _rows(_workspace['items']),
+            onRefresh: _refresh,
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showScanOptions() async {
     final kind = await showModalBottomSheet<String>(
       context: context,
@@ -239,9 +254,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     if (_selectedIndex == 1) return _buildTransactionPage(returns: false);
     if (_selectedIndex == 3) return _buildTransactionPage(returns: true);
     if (_selectedIndex == 4) {
-      return EquipmentListScreen(
-        items: _rows(_workspace['items']),
-        onRefresh: _refresh,
+      return ProfileScreen(
+        showBackButton: false,
+        showAppBar: false,
+        onOpenEquipment: _openEquipmentList,
+        onSignOut: _logout,
       );
     }
     return _buildHomePage(user, isDark);
@@ -459,7 +476,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     final title = switch (_selectedIndex) {
       1 => 'Rentals',
       3 => 'Returns',
-      4 => 'Equipment',
+      4 => 'Profile',
       _ => 'Staff counter',
     };
     final scheme = Theme.of(context).colorScheme;
@@ -577,9 +594,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               label: 'Returns',
             ),
             NavigationDestination(
-              icon: Icon(Icons.inventory_2_outlined),
-              selectedIcon: Icon(Icons.inventory_2_rounded),
-              label: 'Equipment',
+              icon: Icon(Icons.person_outline_rounded),
+              selectedIcon: Icon(Icons.person_rounded),
+              label: 'Profile',
             ),
           ],
         ),

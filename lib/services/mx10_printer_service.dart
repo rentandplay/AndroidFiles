@@ -5,9 +5,6 @@ class Mx10PrinterService {
 
   static final Mx10PrinterService instance = Mx10PrinterService._();
   static const _channel = MethodChannel('rent_and_play/mx10_printer');
-  String? _connectedDeviceName;
-
-  String? get connectedDeviceName => _connectedDeviceName;
 
   Future<List<Map<String, String>>> discoverPrinters() async {
     final result = await _channel.invokeListMethod<dynamic>('discoverPrinters');
@@ -19,17 +16,18 @@ class Mx10PrinterService {
         .toList(growable: false);
   }
 
-  Future<String> connect(String id) async {
-    final result = await _channel.invokeMapMethod<String, dynamic>(
+  Future<void> connect(String id) async {
+    await _channel.invokeMapMethod<String, dynamic>(
       'connectPrinter',
       {'id': id},
     );
-    _connectedDeviceName = result?['name']?.toString() ?? 'MX10';
-    return _connectedDeviceName!;
   }
 
-  void clearConnection() {
-    _connectedDeviceName = null;
+  Future<bool> isConnected() async {
+    final status = await _channel.invokeMapMethod<String, dynamic>(
+      'getPrinterStatus',
+    );
+    return status?['connected'] == true;
   }
 
   Future<void> printLabel({

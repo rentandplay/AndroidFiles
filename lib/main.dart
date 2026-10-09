@@ -7,7 +7,7 @@ import 'services/auth_service.dart';
 import 'services/esp32_service.dart';
 import 'services/rental_service.dart';
 import 'providers/theme_provider.dart';
-import 'screens/user/customer_home_screen.dart';
+import 'screens/startup_router.dart';
 import 'services/notification_service.dart';
 import 'widgets/notification_widgets.dart';
 
@@ -54,7 +54,7 @@ class RentAndPlayApp extends StatelessWidget {
             theme: themeProvider.lightTheme,
             darkTheme: themeProvider.darkTheme,
             themeMode: themeProvider.themeMode,
-            home: const CustomerHomeScreen(),
+            home: const StartupRouter(),
           );
         },
       ),
