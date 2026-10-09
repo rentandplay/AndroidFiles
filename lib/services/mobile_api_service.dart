@@ -232,6 +232,40 @@ class MobileApiService {
           {String method = 'GET', Map<String, dynamic>? body}) =>
       _request('/mobile/profile', method: method, body: body);
 
+  Future<void> sendRegistrationEmailCode(String email) async {
+    await _request('/mobile/registration/email-code',
+        method: 'POST', authenticated: false, body: {'email': email});
+  }
+
+  Future<String> verifyRegistrationEmailCode({
+    required String email,
+    required String code,
+  }) async {
+    final result = await _request('/mobile/registration/verify-email-code',
+        method: 'POST',
+        authenticated: false,
+        body: {'email': email, 'code': code});
+    final token = result['verificationToken'];
+    if (token is! String || token.isEmpty) {
+      throw const MobileApiException(
+          'The verification service returned an invalid response.');
+    }
+    return token;
+  }
+
+  Future<Map<String, dynamic>> completeMobileRegistration({
+    required String email,
+    required String verificationToken,
+    required String name,
+    required String phone,
+  }) =>
+      _request('/mobile/registration/complete', method: 'POST', body: {
+        'email': email,
+        'verificationToken': verificationToken,
+        'name': name,
+        'phone': phone,
+      });
+
   Future<List<Map<String, dynamic>>> catalog() async {
     final result = await _request('/mobile/catalog', authenticated: false);
     return (result['items'] as List)

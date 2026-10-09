@@ -20,14 +20,48 @@ class AuthService extends ChangeNotifier {
       {required String name,
       required String email,
       required String password,
-      required String phone}) async {
-    await _auth.createUserWithEmailAndPassword(
-        email: email.trim(), password: password);
-    final result = await _api.profile(
-        method: 'POST', body: {'name': name.trim(), 'phone': phone.trim()});
+      required String phone,
+      required String verificationToken}) async {
+    final emailAddress = email.trim().toLowerCase();
+    final existingUser = currentUser;
+    final user = existingUser != null &&
+            existingUser.email?.toLowerCase() == emailAddress &&
+            existingUser.emailVerified
+        ? existingUser
+        : (await _auth.createUserWithEmailAndPassword(
+                email: emailAddress, password: password))
+            .user;
+    if (user == null) return null;
+    late final Map<String, dynamic> result;
+    try {
+      result = await _api.completeMobileRegistration(
+        email: emailAddress,
+        verificationToken: verificationToken,
+        name: name.trim().replaceAll(RegExp(r'\s+'), ' '),
+        phone: phone.trim(),
+      );
+    } catch (_) {
+      // A backend or network failure can happen after Firebase creates the
+      // identity. Remove an unverified identity so the customer can retry the
+      // registration flow from the start. Keep verified identities so a retry
+      // can finish the profile if the server was interrupted mid-request.
+      try {
+        await user.reload();
+        final refreshedUser = currentUser ?? user;
+        if (!refreshedUser.emailVerified) {
+          await refreshedUser.delete();
+          await _auth.signOut();
+        }
+      } catch (_) {
+        // Preserve the original registration error for the screen.
+      }
+      rethrow;
+    }
+    await user.reload();
+    await user.getIdToken(true);
     notifyListeners();
-    return UserModel.fromMap(Map<String, dynamic>.from(result['user'] as Map),
-        uid: currentUser!.uid);
+    return UserModel.fromMap(
+        Map<String, dynamic>.from(result['user'] as Map), uid: user.uid);
   }
 
   Future<UserCredential> loginWithEmailAndPassword(

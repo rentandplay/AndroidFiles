@@ -419,7 +419,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               const SizedBox(height: 8),
               const RentalNotice(
                   message:
-                      'Review the payment, scan the equipment QR at the shop to prepare it, then scan the customer rental QR at the resort when the item is handed over. The rental timer starts at handoff.'),
+                      '1. Review the request and verify QR payment proof if provided. 2. Scan the assigned unit at the shop. 3. At handoff, scan the customer QR, verify their ID, confirm payment and deposit, and inspect the unit and accessories. The timer starts only after handoff is confirmed.'),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 if (widget.page == 'Rentals')
@@ -942,34 +942,40 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       await _preview();
       return;
     }
-    final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (c) => AlertDialog(
-                title: Text(_title),
-                content: Text(_action == 'receipt'
-                    ? 'Record the time you physically received the item? Inspection can be completed afterward.'
-                    : _action == 'release'
-                        ? 'Confirm the customer received the prepared equipment? The rental timer starts now.'
-                        : _action == 'prepare-delivery'
-                            ? 'Mark this exact unit ready for delivery? The rental timer will remain stopped.'
-                            : _action == 'payment-review'
-                                ? 'Confirm the screenshot shows a successful transfer for the rental fee and refundable deposit, then approve the request?'
-                                : _action == 'payment-reject'
-                                    ? 'Reject this payment screenshot? The customer can upload a corrected one.'
-                                    : _action == 'reject-return'
-                                        ? 'Reject this request? The rental remains active until staff physically receives the equipment.'
-                                    : _action == 'approve'
-                                        ? 'Approve this rental request? It will wait for equipment preparation and handoff.'
-                                        : 'Save the reviewed details?'),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(c, false),
-                      child: const Text('Review')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(c, true),
-                      child: const Text('Confirm'))
-                ]));
-    if (confirmed != true || !mounted) return;
+    final requiresConfirmation =
+        !['prepare-delivery', 'release'].contains(_action);
+    if (requiresConfirmation) {
+      final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (c) => AlertDialog(
+                  title: Text(_title),
+                  content: Text(_action == 'receipt'
+                      ? 'Record the time you physically received the item? Inspection can be completed afterward.'
+                      : _action == 'release'
+                          ? 'Confirm the customer received the prepared equipment? The rental timer starts now.'
+                          : _action == 'prepare-delivery'
+                              ? 'Mark this exact unit ready for delivery? The rental timer will remain stopped.'
+                              : _action == 'payment-review'
+                                  ? 'Confirm the screenshot shows a successful transfer for the rental fee and refundable deposit, then approve the request?'
+                                  : _action == 'payment-reject'
+                                      ? 'Reject this payment screenshot? The customer can upload a corrected one.'
+                                      : _action == 'reject-return'
+                                          ? 'Reject this request? The rental remains active until staff physically receives the equipment.'
+                                          : _action == 'approve'
+                                              ? 'Approve this rental request? It will wait for equipment preparation and handoff.'
+                                              : 'Save the reviewed details?'),
+                  actions: [
+                    TextButton(
+                        onPressed: () => Navigator.pop(c, false),
+                        child: const Text('Review')),
+                    FilledButton(
+                        onPressed: () => Navigator.pop(c, true),
+                        child: const Text('Confirm'))
+                  ]));
+      if (confirmed != true || !mounted) return;
+    } else if (!mounted) {
+      return;
+    }
     setState(() {
       _busy = true;
       _error = '';
@@ -992,12 +998,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
           break;
         case 'approve':
           path = '/mobile/rentals/$id/review';
-          payload.addAll({
-            'action': 'APPROVE',
-            'paymentVerified': _paymentVerified,
-            'depositReceived': _depositReceived,
-            'notes': _notes.text
-          });
+          payload.addAll({'action': 'APPROVE', 'notes': _notes.text});
           break;
         case 'payment-review':
         case 'payment-reject':
@@ -1321,19 +1322,11 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                           ],
                           if (_action == 'approve') ...[
                             const Text(
-                                'Approval holds the assigned unit. Any cash payment and deposit are collected at handoff.'),
+                                'Approval holds the assigned unit. Verify any outstanding payment and deposit at handoff.'),
                             RentalValueRow(
                                 'Rental fee', _money(_row['rental_fee'])),
                             RentalValueRow('Refundable deposit',
                                 _money(_row['deposit_amount'])),
-                            _check(
-                                'Rental payment already received and verified',
-                                _paymentVerified,
-                                (value) => _paymentVerified = value),
-                            _check(
-                                'Refundable deposit already received',
-                                _depositReceived,
-                                (value) => _depositReceived = value),
                             _field(_notes, 'Review notes', required: false)
                           ],
                           if (_action == 'reject')

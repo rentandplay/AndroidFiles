@@ -14,6 +14,74 @@ class ItemDetailsScreen extends StatelessWidget {
 
   final ItemModel item;
 
+  Future<void> _showRentalGuide(BuildContext context) =>
+      showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        showDragHandle: true,
+        builder: (sheetContext) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.route_outlined,
+                          color: Theme.of(sheetContext).colorScheme.primary),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text('How renting works',
+                            style: Theme.of(sheetContext)
+                                .textTheme
+                                .titleLarge
+                                ?.copyWith(fontWeight: FontWeight.w700)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Your rental time starts at handoff.',
+                    style: TextStyle(
+                        color: Theme.of(sheetContext)
+                            .colorScheme
+                            .onSurfaceVariant),
+                  ),
+                  const SizedBox(height: 14),
+                  const _RentalStep(
+                    number: '1',
+                    title: 'Choose your rental options',
+                    message:
+                        'Select the duration, location, and payment method.',
+                  ),
+                  const _RentalStep(
+                    number: '2',
+                    title: 'Send your request',
+                    message:
+                        'Staff reviews it. If you choose QR payment, they also check your receipt.',
+                  ),
+                  const _RentalStep(
+                    number: '3',
+                    title: 'Show your QR and valid ID',
+                    message:
+                        'The rental timer starts after the operator confirms the handoff.',
+                  ),
+                  const SizedBox(height: 12),
+                  const RentalNotice(
+                    title: 'Bring a physical valid ID',
+                    message:
+                        'The operator will check your ID when the equipment is handed over.',
+                    icon: Icons.badge_outlined,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+
   Future<void> _continueToRental(BuildContext context) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (authService.currentUser == null) {
@@ -74,7 +142,16 @@ class ItemDetailsScreen extends StatelessWidget {
         : item.rateText.trim();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Equipment details')),
+      appBar: AppBar(
+        title: const Text('Equipment details'),
+        actions: [
+          IconButton(
+            tooltip: 'How renting works',
+            onPressed: () => _showRentalGuide(context),
+            icon: const Icon(Icons.help_outline_rounded),
+          ),
+        ],
+      ),
       bottomNavigationBar: RentalActionBar(
         label: isAvailable ? 'Choose rental options' : 'Unavailable right now',
         onPressed: isAvailable ? () => _continueToRental(context) : null,
@@ -220,40 +297,6 @@ class ItemDetailsScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                RentalSection(
-                  title: 'How renting works',
-                  subtitle: 'Your rental time starts at handoff.',
-                  icon: Icons.route_outlined,
-                  child: Column(
-                    children: const [
-                      _RentalStep(
-                        number: '1',
-                        title: 'Choose your rental options',
-                        message:
-                            'Select the duration, location, and payment method.',
-                      ),
-                      _RentalStep(
-                        number: '2',
-                        title: 'Send your request',
-                        message:
-                            'Staff reviews it. If you choose QR payment, they also check your receipt.',
-                      ),
-                      _RentalStep(
-                        number: '3',
-                        title: 'Show your QR and valid ID',
-                        message:
-                            'The rental timer starts after the operator confirms the handoff.',
-                      ),
-                    ],
-                  ),
-                ),
-                const RentalNotice(
-                  title: 'Bring a physical valid ID',
-                  message:
-                      'The operator will check your ID when the equipment is handed over.',
-                  icon: Icons.badge_outlined,
-                ),
-                const SizedBox(height: 8),
               ],
             ),
           ),

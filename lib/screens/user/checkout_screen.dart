@@ -22,7 +22,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   int _selectedDurationMinutes = 60;
   String _selectedResort = '';
   final _customResortController = TextEditingController();
-  final _deliveryDetailsController = TextEditingController();
   String _paymentMethod = 'CASH';
   bool _isSubmitting = false, _quoteLoading = true, _paymentConfirmed = false;
   Map<String, dynamic>? _quote;
@@ -200,7 +199,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _quoteVersion++;
     _customResortController.dispose();
-    _deliveryDetailsController.dispose();
     _paymentReferenceController.dispose();
     super.dispose();
   }
@@ -238,12 +236,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         durationMinutes: _selectedDurationMinutes,
         deliveryLocation: _selectedResort == 'ASRI Hotspring Resort'
             ? rentAndPlayPickupLocation
-            : [
-                _selectedResort == 'Other / Custom Resort'
-                    ? _customResortController.text.trim()
-                    : _selectedResort,
-                _deliveryDetailsController.text.trim(),
-              ].where((part) => part.isNotEmpty).join(' — '),
+            : _selectedResort == 'Other / Custom Resort'
+                ? _customResortController.text.trim()
+                : _selectedResort,
         paymentMethod: _paymentMethod,
         requestKey: _requestKey,
         paymentProofImageDataUrl: _paymentProofImage,
@@ -396,7 +391,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                               ? 'Ihahatid sa resort mo'
                               : 'Ihahatid sa $_selectedResort',
                           message:
-                              'Ilagay ang villa o cottage para malaman ng staff kung saan ihahatid ang item.',
+                              'Ihanda ang rental QR para makumpirma ng staff ang pag-abot ng item.',
                         ),
                         if (_selectedResort == 'Other / Custom Resort') ...[
                           const SizedBox(height: 10),
@@ -416,22 +411,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                         : null,
                           ),
                         ],
-                        const SizedBox(height: 10),
-                        TextFormField(
-                          controller: _deliveryDetailsController,
-                          enabled: !_isSubmitting,
-                          maxLength: 100,
-                          textInputAction: TextInputAction.done,
-                          decoration: const InputDecoration(
-                              labelText: 'Villa / cottage / drop-off point',
-                              hintText: 'Hal. Villa 3 o Cottage A'),
-                          validator: (value) => _selectedResort.isEmpty ||
-                                  _selectedResort == 'ASRI Hotspring Resort'
-                              ? null
-                              : value == null || value.trim().isEmpty
-                                  ? 'Ilagay kung saan mismo ihahatid sa resort.'
-                                  : null,
-                        ),
                       ],
                     ]),
               ),
