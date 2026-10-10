@@ -66,7 +66,7 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final totalAmount = widget.rental.rateFee + widget.rental.deposit;
+    final totalAmount = widget.rental.rateFee;
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -93,7 +93,6 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
             _buildRow('Terminal', widget.rental.terminalId),
             _buildRow('Payment Method', widget.rental.paymentMethod),
             _buildRow('Rental Fee', '₱${widget.rental.rateFee.toStringAsFixed(2)}'),
-            _buildRow('Deposit', '₱${widget.rental.deposit.toStringAsFixed(2)}'),
             const Divider(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

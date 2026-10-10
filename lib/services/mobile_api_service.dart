@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
@@ -46,6 +47,13 @@ class MobileApiService {
 
   final FirebaseAuth _auth;
   final http.Client _client;
+  late final StreamController<Map<String, dynamic>> _rentalEventController =
+      StreamController<Map<String, dynamic>>.broadcast(
+    onListen: _startRentalEventStream,
+    onCancel: _stopRentalEventStream,
+  );
+  StreamSubscription<Map<String, dynamic>>? _rentalEventTransport;
+  int _rentalEventGeneration = 0;
 
   static String operationKey() => List.generate(16,
           (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
@@ -58,6 +66,11 @@ class MobileApiService {
     bool forceRefresh = false,
   }) =>
       _request(path, method: method, body: body, forceRefresh: forceRefresh);
+
+  Future<void> requestPasswordReset(String email) async {
+    await _request('/auth/password-reset',
+        method: 'POST', authenticated: false, body: {'email': email});
+  }
 
   Future<Map<String, dynamic>> notifications({String? before, String? since}) {
     final query = <String, String>{
@@ -329,6 +342,120 @@ class MobileApiService {
       return RentalModel.fromMap(map,
           id: (map['id'] ?? map['rentalId'])?.toString());
     }).toList();
+  }
+
+  Stream<Map<String, dynamic>> watchRentalEvents() {
+    return _rentalEventController.stream;
+  }
+
+  void resetRentalEventStream() {
+    final hasListeners = _rentalEventController.hasListener;
+    _stopRentalEventStream();
+    if (hasListeners) _startRentalEventStream();
+  }
+
+  void _startRentalEventStream() {
+    if (_rentalEventTransport != null || !_rentalEventController.hasListener) {
+      return;
+    }
+    final generation = ++_rentalEventGeneration;
+    _rentalEventTransport = _readRentalEvents(generation).listen(
+      (event) {
+        if (generation == _rentalEventGeneration &&
+            !_rentalEventController.isClosed) {
+          _rentalEventController.add(event);
+        }
+      },
+      onError: (Object _, StackTrace __) {},
+      onDone: () {
+        if (generation == _rentalEventGeneration) {
+          _rentalEventTransport = null;
+        }
+      },
+    );
+  }
+
+  void _stopRentalEventStream() {
+    _rentalEventGeneration++;
+    final transport = _rentalEventTransport;
+    _rentalEventTransport = null;
+    if (transport != null) unawaited(transport.cancel());
+  }
+
+  Stream<Map<String, dynamic>> _readRentalEvents(int generation) async* {
+    var retrySeconds = 1;
+    while (!_rentalEventController.isClosed &&
+        generation == _rentalEventGeneration) {
+      final user = _auth.currentUser;
+      if (user == null) return;
+      final connectedAt = DateTime.now();
+      try {
+        final token = await user.getIdToken();
+        if (token == null || token.isEmpty) return;
+        if (generation != _rentalEventGeneration) return;
+        final request = http.Request('GET', _uri('/rental-events'))
+          ..headers['Accept'] = 'text/event-stream'
+          ..headers['Authorization'] = 'Bearer $token'
+          ..headers['Cache-Control'] = 'no-cache';
+        final response =
+            await _client.send(request).timeout(const Duration(seconds: 30));
+        if (response.statusCode == 204 ||
+            response.statusCode == 401 ||
+            response.statusCode == 403) {
+          await response.stream.drain<void>();
+          return;
+        }
+        if (response.statusCode != 200 ||
+            !(response.headers['content-type'] ?? '')
+                .toLowerCase()
+                .startsWith('text/event-stream')) {
+          await response.stream.drain<void>();
+          throw MobileApiException(
+              'Live rental updates are temporarily unavailable.',
+              statusCode: response.statusCode);
+        }
+
+        String? eventName;
+        final dataLines = <String>[];
+        await for (final line in response.stream
+            .transform(utf8.decoder)
+            .transform(const LineSplitter())) {
+          if (generation != _rentalEventGeneration) return;
+          if (line.isEmpty) {
+            if (eventName != null && dataLines.isNotEmpty) {
+              try {
+                final decoded = jsonDecode(dataLines.join('\n'));
+                if (decoded is Map) {
+                  yield {
+                    'event': eventName,
+                    ...Map<String, dynamic>.from(decoded),
+                  };
+                }
+              } on FormatException {
+                // Ignore malformed frames and keep the connection alive.
+              }
+            }
+            eventName = null;
+            dataLines.clear();
+            continue;
+          }
+          if (line.startsWith(':')) continue;
+          if (line.startsWith('event:')) {
+            eventName = line.substring(6).trim();
+          } else if (line.startsWith('data:')) {
+            dataLines.add(line.substring(5).trimLeft());
+          }
+        }
+      } catch (_) {
+        if (generation != _rentalEventGeneration) return;
+      }
+      if (generation != _rentalEventGeneration) return;
+      if (DateTime.now().difference(connectedAt) > const Duration(minutes: 2)) {
+        retrySeconds = 1;
+      }
+      await Future<void>.delayed(Duration(seconds: retrySeconds));
+      retrySeconds = (retrySeconds * 2).clamp(1, 30).toInt();
+    }
   }
 
   Future<void> requestReturn({

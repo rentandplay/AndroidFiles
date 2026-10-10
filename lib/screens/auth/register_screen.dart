@@ -9,6 +9,7 @@ import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../utils/account_validation.dart';
 import 'id_verification_screen.dart';
 import 'login_screen.dart';
 
@@ -40,8 +41,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  String? _emailDomainError;
 
-  String get _currentEmail => _emailController.text.trim().toLowerCase();
+  String get _currentEmail => _emailController.text.toLowerCase();
   bool get _codeMatchesCurrentEmail =>
       _codeSent && _requestedEmail != null && _requestedEmail == _currentEmail;
   bool get _verifiedCurrentEmail =>
@@ -69,6 +71,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _handleEmailChange() {
+    if (_emailDomainError != null) setState(() => _emailDomainError = null);
     if (_verificationToken.isEmpty || _requestedEmail == _currentEmail) return;
     setState(() {
       _verificationToken = '';
@@ -77,29 +80,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String? _validateName(String? value, String label) {
-    final name = value?.trim() ?? '';
-    if (name.isEmpty) return 'Enter your $label.';
-    if (name.length < 2) return 'Use at least 2 characters.';
-    if (name.length > 60) return 'Keep this field under 60 characters.';
-    if (!RegExp(r"^[\p{L}\p{M}]+(?:[ '\u2019.\-][\p{L}\p{M}]+)*$",
-            unicode: true)
-        .hasMatch(name)) {
-      return 'Use letters, spaces, apostrophes, or hyphens.';
-    }
-    return null;
+    return AccountValidation.name(value, label: label, max: 60);
   }
 
   String? _validateEmail(String? value) {
-    final email = value?.trim() ?? '';
-    if (email.isEmpty) return 'Enter your email address.';
-    final parts = email.split('@');
-    if (email.length > 254 ||
-        parts.length != 2 ||
-        parts.first.length > 64 ||
-        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$').hasMatch(email)) {
-      return 'Enter a valid email address.';
-    }
-    return null;
+    return AccountValidation.email(value) ?? _emailDomainError;
   }
 
   String? _validatePhone(String? value) {
@@ -126,15 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String? _validatePassword(String? value) {
-    final password = value ?? '';
-    if (password.isEmpty) return 'Enter a password.';
-    if (password.length < 8 ||
-        !RegExp(r'[A-Z]').hasMatch(password) ||
-        !RegExp(r'[a-z]').hasMatch(password) ||
-        !RegExp(r'\d').hasMatch(password)) {
-      return 'Use 8+ characters with uppercase, lowercase, and a number.';
-    }
-    return null;
+    return AccountValidation.password(value);
   }
 
   String? _validateCode(String? value) {
@@ -184,6 +161,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _showMessage('We sent a verification code to $email.');
     } catch (error) {
       if (!mounted) return;
+      if (error is MobileApiException && error.code == 'INVALID_EMAIL_DOMAIN') {
+        setState(() => _emailDomainError = error.userMessage);
+        _formKey.currentState?.validate();
+      }
       _showMessage(_errorMessage(error), isError: true);
     } finally {
       if (mounted) setState(() => _isSendingCode = false);
@@ -508,7 +489,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   enabled: !_isLoading,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
-                  inputFormatters: [LengthLimitingTextInputFormatter(254)],
+                  inputFormatters: [
+                    const LowercaseEmailFormatter(),
+                    LengthLimitingTextInputFormatter(254)
+                  ],
                   autofillHints: const [AutofillHints.email],
                   autocorrect: false,
                   enableSuggestions: false,
@@ -655,7 +639,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   enableSuggestions: false,
                   autocorrect: false,
                   decoration: _decoration(
-                      '8+ chars, mixed case, and a number', Icons.lock_outline,
+                      '8+ chars, one capital letter, and a number',
+                      Icons.lock_outline,
                       suffixIcon: IconButton(
                         tooltip: _obscurePassword
                             ? 'Show password'

@@ -123,7 +123,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
 
                 // Timestamp Notice
                 const Text(
-                  'Philippine time • Recorded rental fees exclude deposits. Today is a partial day.',
+                  'Philippine time • Today is a partial day.',
                   style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
                 ),
 
@@ -602,8 +602,11 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                           fontSize: 12,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFF0F172A))),
-                  const Text('ADMIN',
-                      style: TextStyle(
+                  Text(
+                      _api.currentUser?['role'] == 'OWNER'
+                          ? 'OWNER'
+                          : 'OPERATOR',
+                      style: const TextStyle(
                           fontSize: 10,
                           color: Color(0xFFC2410C),
                           fontWeight: FontWeight.bold)),

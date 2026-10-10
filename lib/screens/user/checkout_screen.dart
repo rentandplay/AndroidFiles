@@ -204,9 +204,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   num? get _baseFee => _quote?['rental_fee'] as num?;
-  num? get _deposit => _quote?['deposit_amount'] as num?;
-  num? get _total =>
-      _baseFee == null || _deposit == null ? null : _baseFee! + _deposit!;
+  num? get _total => _baseFee;
   int get _billedMinutes =>
       (_quote?['billed_minutes'] as num?)?.toInt() ?? _selectedDurationMinutes;
   String get _packageLength => _billedMinutes % 60 == 0
@@ -245,7 +243,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentReference: _paymentReferenceController.text,
         expectedQuote: {
           'rentalFee': _baseFee,
-          'depositAmount': _deposit,
           'billedMinutes': _quote!['billed_minutes']
         },
       );
@@ -272,16 +269,20 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       child: Scaffold(
         appBar: AppBar(title: const Text('Review rental request')),
         bottomNavigationBar: RentalActionBar(
-          summaryLabel: _paymentMethod == 'QR' ? 'Pay now' : 'Due at handoff',
+          summaryLabel:
+              _paymentMethod == 'QR' ? 'Transfer total' : 'Due at handoff',
           summaryValue: _quoteLoading ? 'Updating…' : rentalMoney(_total),
           label: 'Send rental request',
           busy: _isSubmitting,
           onPressed:
               !_quoteLoading && _quote != null ? _submitRentalRequest : null,
         ),
-        body: Form(
-          key: _form,
-          child: SingleChildScrollView(
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 712),
+            child: Form(
+              key: _form,
+              child: SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             padding: const EdgeInsets.all(16),
             child:
@@ -423,7 +424,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       if (_quoteLoading) ...[
                         const LinearProgressIndicator(),
                         const SizedBox(height: 12),
-                        const Text('Checking the current rental price…'),
+                        const Text('Updating price…'),
                       ] else if (_quoteError.isNotEmpty)
                         RentalNotice(
                           isError: true,
@@ -436,11 +437,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         )
                       else ...[
                         RentalValueRow('Rental fee', rentalMoney(_baseFee)),
-                        RentalValueRow('Refundable security deposit',
-                            rentalMoney(_deposit)),
                         const SizedBox(height: 8),
                         Text(
-                            'Includes $_packageLength.${_billedMinutes > _selectedDurationMinutes ? ' This item has a minimum package duration.' : ''} Deposit is refunded after inspection, less any outstanding charges.',
+                            'Billed for $_packageLength${_billedMinutes > _selectedDurationMinutes ? ' (minimum package)' : ''}.',
                             style: TextStyle(
                                 fontSize: 13,
                                 color: scheme.onSurfaceVariant,
@@ -451,9 +450,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               RentalSection(
                 title: 'Payment',
                 icon: Icons.payments_outlined,
-                subtitle: _paymentMethod == 'QR'
-                    ? 'Pay the exact total and upload your receipt.'
-                    : 'Pay the fee and deposit at handoff.',
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -501,8 +497,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 RentalSection(
                     title: 'Pay by InstaPay',
                     icon: Icons.qr_code_2,
-                    subtitle:
-                        'Pay the exact total and upload your receipt for review.',
+                    subtitle: 'Scan to transfer, then upload your receipt.',
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -572,6 +567,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                           ],
                           CheckboxListTile(
                               contentPadding: EdgeInsets.zero,
+                              dense: true,
                               value: _paymentConfirmed,
                               onChanged: _isSubmitting
                                   ? null
@@ -583,6 +579,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ],
               const SizedBox(height: 16),
             ]),
+              ),
+            ),
           ),
         ),
       ),

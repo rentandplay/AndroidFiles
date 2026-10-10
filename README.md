@@ -2,13 +2,19 @@
 
 ## Mobile staff counter
 
-The Android app uses the same login page for customers, operators, and owners. An active `ADMIN` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, return inspection, and a read-only equipment list. Staff can view equipment details, check the Bluetooth printer connection and print 50 × 30 mm QR labels, open the Android print screen, or share the label PDF. Equipment editing, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out of the staff counter returns to the shared login page.
+The Android app uses the same login page for customers, operators, and owners. An active `OPERATOR` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, return inspection, and a read-only equipment list. Staff can view equipment details, check the Bluetooth printer connection and print 50 × 30 mm QR labels, open the Android print screen, or share the label PDF. Equipment editing, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out of the staff counter returns to the shared login page. Legacy `ADMIN`/`USER` roles map to Operator/Customer.
+
+## Account validation and recovery
+
+Login and registration normalize emails to lowercase, reject spaces, and check real mail domains through the backend. Company and school addresses are accepted. Registration shows inline name, email, phone, password-strength, and matching-confirmation errors. New passwords require at least eight characters, a capital letter, and a number. Forgot password opens an email-entry screen, then requests a real reset link and shows the recipient and next steps. App launch uses an ordinary opening screen; it does not describe a saved login as account recovery.
+
+New Owner/Operator accounts must change their temporary password before entering the staff workspace. The backend enforces this restriction independently of routing, and mobile asks the user to log in with the new password. See [the shared account procedures](../RENT-AND-PLAY/docs/architecture/account-access.md).
 
 ## Test customer rentals without the ESP32
 
-Customer checkout saves an authoritative quote and holds the physical unit while the request waits for admin review. The customer gets a transaction QR. In web or Android admin, approve the request: it becomes **Awaiting pickup**, and the timer has not started. Scan the customer's transaction QR and the assigned equipment sticker, verify the customer and actual fee/deposit collection, check condition/accessories, then confirm release. This starts the timer and marks the equipment rented.
+Customer checkout saves an authoritative quote for the rental fee and holds the physical unit while the request waits for admin review. The customer gets a transaction QR. In web or Android admin, approve the request: it becomes **Awaiting pickup**, and the timer has not started. Scan the customer's transaction QR and the assigned equipment sticker, verify the customer and rental payment, check condition/accessories, then confirm release. This starts the timer and marks the equipment rented.
 
-On return, admin scans the equipment and records physical receipt. The timer stops immediately while the unit stays under inspection. Complete inspection with an explicit penalty (zero if none) to make it available or send it to maintenance. Payment balances and deposit refunds remain separate. The customer can report a return, but only staff receipt stops the timer. Pending/approved bookings can be cancelled and unclaimed holds expire automatically.
+On return, admin scans the equipment and records physical receipt. The timer stops immediately while the unit stays under inspection. Complete inspection with an explicit penalty (zero if none) to make it available or send it to maintenance. Rental payment balances are tracked separately from equipment availability. The customer can report a return, but only staff receipt stops the timer. Pending/approved bookings can be cancelled and unclaimed holds expire automatically.
 
 The **ESP32 terminal** page stays visible on standby. Android hardware actions are disabled and the backend defaults to `ENABLE_ESP32=false`. No current rental step uses the terminal.
 
@@ -30,7 +36,7 @@ In an `AndroidFiles` VS Code window, use one of the included local Android launc
 
 ## Local API and manual commands
 
-The bell opens the rental notification inbox for customers, operators, and owners. New customer booking/return requests alert active `ADMIN` operators and `OWNER` super admins; approval, rejection, release and return decisions alert the booking owner. Tap an update to open that booking, or use **Mark shown as read**. On Android, select **Enable phone alerts** in the inbox to grant notification permission and register background FCM alerts. Sign-out unregisters the phone, and switching accounts rotates the device token. See `../RENT-AND-PLAY/docs/architecture/rental-notifications.md` for deployment and real-device acceptance steps.
+The bell opens the rental notification inbox for customers, operators, and owners. New customer booking/return requests alert active `OPERATOR` and `OWNER` accounts; approval, rejection, release and return decisions alert the booking owner. Tap an update to open that booking, or use **Mark shown as read**. On Android, select **Enable phone alerts** in the inbox to grant notification permission and register background FCM alerts. Sign-out unregisters the phone, and switching accounts rotates the device token. See `../RENT-AND-PLAY/docs/architecture/rental-notifications.md` for deployment and real-device acceptance steps.
 
 The app defaults to the local Android emulator API at `http://10.0.2.2:3000/api`; the included USB launch profile uses `http://127.0.0.1:3000/api`. To test local changes:
 

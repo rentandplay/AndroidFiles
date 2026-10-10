@@ -15,7 +15,6 @@ class RentalModel {
   final DateTime dueDate;
   final DateTime? returnedDate;
   final double rateFee;
-  final double deposit;
   final double latePenalty;
   final String paymentMethod; // "QR", "Cash"
   final bool paymentConfirmedByAdmin;
@@ -107,7 +106,6 @@ class RentalModel {
     required this.dueDate,
     this.returnedDate,
     required this.rateFee,
-    required this.deposit,
     this.latePenalty = 0.0,
     required this.paymentMethod,
     this.paymentConfirmedByAdmin = false,
@@ -142,7 +140,6 @@ class RentalModel {
       'returnedDate':
           returnedDate != null ? Timestamp.fromDate(returnedDate!) : null,
       'rateFee': rateFee,
-      'deposit': deposit,
       'latePenalty': latePenalty,
       'paymentMethod': paymentMethod,
       'paymentConfirmedByAdmin': paymentConfirmedByAdmin,
@@ -215,7 +212,6 @@ class RentalModel {
           map['returnedDate'] ??
           map['confirmed_return_at']),
       rateFee: amount(map['rental_fee'] ?? map['rateFee']),
-      deposit: amount(map['deposit_amount'] ?? map['deposit']),
       latePenalty: amount(map['late_penalty'] ??
           map['latePenalty'] ??
           (amount(fee['overtime_fee']) + amount(fee['penalty_amount']))),
@@ -262,7 +258,6 @@ class RentalModel {
     DateTime? dueDate,
     DateTime? returnedDate,
     double? rateFee,
-    double? deposit,
     double? latePenalty,
     String? paymentMethod,
     bool? paymentConfirmedByAdmin,
@@ -288,7 +283,6 @@ class RentalModel {
       dueDate: dueDate ?? this.dueDate,
       returnedDate: returnedDate ?? this.returnedDate,
       rateFee: rateFee ?? this.rateFee,
-      deposit: deposit ?? this.deposit,
       latePenalty: latePenalty ?? this.latePenalty,
       paymentMethod: paymentMethod ?? this.paymentMethod,
       paymentConfirmedByAdmin:

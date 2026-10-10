@@ -55,11 +55,15 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
           appBar: AppBar(title: const Text('Request return')),
           bottomNavigationBar: RentalActionBar(
               label: 'Send return request', onPressed: _submit, busy: _busy),
-          body: SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.all(16),
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          body: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 712),
+              child: SingleChildScrollView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
+                padding: const EdgeInsets.all(16),
+                child:
+                    Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               RentalSection(
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,15 +83,8 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
                                 .format(widget.rental.dueDate.toLocal())
                             : 'Not recorded'),
                   ])),
-              const RentalNotice(
-                  title: 'The clock stops at physical receipt',
-                  icon: Icons.assignment_return_outlined,
-                  message:
-                      'Send this request, then hand the equipment to the admin. They will scan it, record receipt and inspect it.'),
-              const SizedBox(height: 16),
               RentalSection(
                 title: 'How is the equipment?',
-                subtitle: 'This helps the admin prepare the return inspection.',
                 icon: Icons.fact_check_outlined,
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -119,9 +116,10 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
                     ]),
               ),
               const RentalNotice(
-                  title: 'Final charges and deposit',
+                  title: 'Return steps',
+                  icon: Icons.assignment_return_outlined,
                   message:
-                      'The admin will confirm any late or damage charges after inspection and record the deposit refund.'),
+                      'Send this request, then hand the item to the admin. Rental time stops at receipt while they inspect it.'),
               if (_error.isNotEmpty) ...[
                 const SizedBox(height: 16),
                 RentalNotice(
@@ -130,7 +128,9 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
                     message: _error),
               ],
               const SizedBox(height: 16),
-            ]),
+                    ]),
+              ),
+            ),
           ),
         ),
       );

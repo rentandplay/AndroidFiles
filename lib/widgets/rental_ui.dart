@@ -195,38 +195,49 @@ class RentalActionBar extends StatelessWidget {
                     top: BorderSide(color: Theme.of(context).dividerColor))),
             child: SafeArea(
                 top: false,
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    if (summaryLabel != null) ...[
-                      RentalValueRow(summaryLabel!, summaryValue ?? '—',
-                          emphasis: true),
-                      const SizedBox(height: 6),
-                    ],
-                    SizedBox(
-                        width: double.infinity,
-                        child: FilledButton(
-                          onPressed: busy ? null : onPressed,
-                          style: FilledButton.styleFrom(
-                              minimumSize: const Size.fromHeight(50),
-                              backgroundColor: Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? const Color(0xFFF0AD7C)
-                                  : const Color(0xFFB45316),
-                              foregroundColor: Theme.of(context).brightness ==
-                                      Brightness.dark
-                                  ? const Color(0xFF0F172A)
-                                  : Colors.white),
-                          child: busy
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child:
-                                      CircularProgressIndicator(strokeWidth: 2))
-                              : Text(label, textAlign: TextAlign.center),
-                        )),
-                    if (secondary != null) secondary!,
-                  ]),
+                // Scaffold gives bottom bars the available screen height. Keep
+                // the centering wrapper shrink-wrapped so it does not cover
+                // the app bar and the rental form above it.
+                child: Center(
+                  heightFactor: 1,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 712),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        if (summaryLabel != null) ...[
+                          RentalValueRow(summaryLabel!, summaryValue ?? '—',
+                              emphasis: true),
+                          const SizedBox(height: 6),
+                        ],
+                        SizedBox(
+                            width: double.infinity,
+                            child: FilledButton(
+                              onPressed: busy ? null : onPressed,
+                              style: FilledButton.styleFrom(
+                                  minimumSize: const Size.fromHeight(50),
+                                  backgroundColor:
+                                      Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const Color(0xFFF0AD7C)
+                                          : const Color(0xFFB45316),
+                                  foregroundColor:
+                                      Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const Color(0xFF0F172A)
+                                          : Colors.white),
+                              child: busy
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : Text(label, textAlign: TextAlign.center),
+                            )),
+                        if (secondary != null) secondary!,
+                      ]),
+                    ),
+                  ),
                 )),
           ),
         ),

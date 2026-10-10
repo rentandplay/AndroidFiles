@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/mobile_api_service.dart';
+import '../../utils/account_validation.dart';
 import '../../services/admin_firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import 'register_screen.dart';
+import 'forgot_password_screen.dart';
+import 'required_password_change_screen.dart';
 import 'id_verification_screen.dart';
 import '../user/customer_home_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
@@ -24,6 +29,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
+  String? _emailDomainError;
 
   @override
   void dispose() {
@@ -50,7 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleLogin() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_isLoading || !_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
@@ -68,7 +74,14 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (userModel != null) {
-        if (['ADMIN', 'OWNER'].contains(userModel.role.toUpperCase())) {
+        if (userModel.isStaff) {
+          if (userModel.mustChangePassword) {
+            Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                    builder: (_) => const RequiredPasswordChangeScreen()),
+                (_) => false);
+            return;
+          }
           await AdminFirestoreService.instance.restoreAdminSession();
           if (!mounted) return;
           _openAdminWorkspace();
@@ -98,7 +111,14 @@ class _LoginScreenState extends State<LoginScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      String errorMessage = 'Login failed: ${e.toString()}';
+      String errorMessage = 'Could not log in. Please try again.';
+      if (e is MobileApiException) {
+        errorMessage = e.userMessage;
+        if (e.code == 'INVALID_EMAIL_DOMAIN') {
+          setState(() => _emailDomainError = e.userMessage);
+          _formKey.currentState?.validate();
+        }
+      }
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'user-not-found':
@@ -137,6 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   void _handleGoogleSignIn() async {
+    if (_isLoading) return;
     setState(() => _isLoading = true);
 
     try {
@@ -146,7 +167,16 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (userModel != null) {
-        if (['ADMIN', 'OWNER'].contains(userModel.role.toUpperCase())) {
+        if (userModel.isStaff) {
+          if (userModel.mustChangePassword) {
+            Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(
+                    builder: (_) => const RequiredPasswordChangeScreen()),
+                (_) => false);
+            return;
+          }
+          await AdminFirestoreService.instance.restoreAdminSession();
+          if (!mounted) return;
           _openAdminWorkspace();
           return;
         }
@@ -181,8 +211,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final emailRegex = RegExp(r'^[\w-.]+@([\w-]+\.)+[\w-]{2,4}$');
-
     return Scaffold(
       backgroundColor: AppTheme.brandNavy,
       body: SafeArea(
@@ -254,6 +282,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           const EdgeInsets.fromLTRB(24.0, 28.0, 24.0, 28.0),
                       child: Form(
                         key: _formKey,
+                        autovalidateMode: AutovalidateMode.onUserInteraction,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -276,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                             const SizedBox(height: 24),
                             const Text(
-                              'USERNAME OR EMAIL',
+                              'EMAIL ADDRESS',
                               style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
@@ -287,11 +316,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 6),
                             TextFormField(
                               controller: _emailController,
+                              enabled: !_isLoading,
+                              autocorrect: false,
+                              textCapitalization: TextCapitalization.none,
+                              autofillHints: const [AutofillHints.email],
+                              inputFormatters: [
+                                const LowercaseEmailFormatter(),
+                                LengthLimitingTextInputFormatter(254)
+                              ],
+                              onChanged: (_) =>
+                                  setState(() => _emailDomainError = null),
                               keyboardType: TextInputType.emailAddress,
                               style: const TextStyle(
                                   fontSize: 14, color: Colors.black87),
                               decoration: InputDecoration(
-                                hintText: 'Enter username or email',
+                                hintText: 'Enter your email address',
                                 hintStyle: TextStyle(
                                     color: Colors.grey.shade400, fontSize: 14),
                                 prefixIcon: const Icon(Icons.person_outline,
@@ -316,19 +355,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: AppTheme.brandOrange, width: 1.5),
                                 ),
                               ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter username or email.';
-                                }
-                                if (!value.contains('@') && value.length < 3) {
-                                  return 'Please enter a valid username or email.';
-                                }
-                                if (value.contains('@') &&
-                                    !emailRegex.hasMatch(value.trim())) {
-                                  return 'Please enter a valid email format.';
-                                }
-                                return null;
-                              },
+                              validator: (value) =>
+                                  AccountValidation.email(value) ??
+                                  _emailDomainError,
                             ),
                             const SizedBox(height: 16),
                             const Text(
@@ -343,6 +372,8 @@ class _LoginScreenState extends State<LoginScreen> {
                             const SizedBox(height: 6),
                             TextFormField(
                               controller: _passwordController,
+                              enabled: !_isLoading,
+                              autofillHints: const [AutofillHints.password],
                               obscureText: _obscurePassword,
                               style: const TextStyle(
                                   fontSize: 14, color: Colors.black87),
@@ -390,9 +421,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 if (value == null || value.isEmpty) {
                                   return 'Please enter your password.';
                                 }
-                                if (value.length < 6) {
-                                  return 'Password must be at least 6 characters.';
-                                }
                                 return null;
                               },
                             ),
@@ -406,13 +434,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                   tapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                onPressed: () {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                        content: Text(
-                                            'Password reset link sent to your email.')),
-                                  );
-                                },
+                                onPressed: _isLoading
+                                    ? null
+                                    : () => Navigator.of(context).push(
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                ForgotPasswordScreen(
+                                                    initialEmail:
+                                                        _emailController
+                                                            .text))),
                                 child: const Text(
                                   'Forgot password?',
                                   style: TextStyle(
@@ -437,14 +467,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 onPressed: _isLoading ? null : _handleLogin,
                                 child: _isLoading
-                                    ? const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: Colors.white,
-                                        ),
-                                      )
+                                    ? const Row(mainAxisSize: MainAxisSize.min, children: [SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)), SizedBox(width: 10), Text('Logging in…')])
                                     : const Text(
                                         'Login',
                                         style: TextStyle(

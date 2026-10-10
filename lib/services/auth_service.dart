@@ -60,17 +60,31 @@ class AuthService extends ChangeNotifier {
     await user.reload();
     await user.getIdToken(true);
     notifyListeners();
-    return UserModel.fromMap(
-        Map<String, dynamic>.from(result['user'] as Map), uid: user.uid);
+    return UserModel.fromMap(Map<String, dynamic>.from(result['user'] as Map),
+        uid: user.uid);
   }
 
   Future<UserCredential> loginWithEmailAndPassword(
       {required String email, required String password}) async {
+    final address = email.toLowerCase();
     final credential = await _auth.signInWithEmailAndPassword(
-        email: email.trim(), password: password);
+        email: address, password: password);
     await _api.profile(method: 'POST', body: {});
     notifyListeners();
     return credential;
+  }
+
+  Future<void> changeTemporaryPassword(
+      {required String currentPassword,
+      required String newPassword,
+      required String confirmation}) async {
+    await _api.adminRequest('/auth/change-password', method: 'POST', body: {
+      'currentPassword': currentPassword,
+      'newPassword': newPassword,
+      'confirmPassword': confirmation,
+    });
+    await _auth.signOut();
+    notifyListeners();
   }
 
   Future<UserModel?> signInWithGoogle() async {
@@ -155,8 +169,7 @@ class AuthService extends ChangeNotifier {
     });
     await user.reload();
     notifyListeners();
-    return UserModel.fromMap(
-        Map<String, dynamic>.from(result['user'] as Map),
+    return UserModel.fromMap(Map<String, dynamic>.from(result['user'] as Map),
         uid: user.uid);
   }
 

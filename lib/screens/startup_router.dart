@@ -3,6 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
+import '../services/mobile_api_service.dart';
+import '../services/admin_firestore_service.dart';
+import 'auth/required_password_change_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
 import 'auth/login_screen.dart';
 import 'user/customer_home_screen.dart';
@@ -33,21 +36,33 @@ class _StartupRouterState extends State<StartupRouter> {
     final firebaseUser = await auth.authStateChanges.first;
     if (firebaseUser == null) return const CustomerHomeScreen();
 
-    final user = await auth.getCurrentUserModel();
+    UserModel? user;
+    try {
+      user = await auth.getCurrentUserModel();
+    } on MobileApiException catch (error) {
+      if (error.statusCode == 401 || error.statusCode == 403) {
+        await auth.logout();
+        return const LoginScreen();
+      }
+      rethrow;
+    }
     if (user == null) return const CustomerHomeScreen();
 
     if (_isAdmin(user)) {
+      if (user.mustChangePassword) return const RequiredPasswordChangeScreen();
+      await AdminFirestoreService.instance.restoreAdminSession();
       return AdminDashboardScreen(onSignedOut: _returnToLogin);
     }
 
     return const CustomerHomeScreen();
   }
 
-  bool _isAdmin(UserModel user) =>
-      const {'ADMIN', 'OWNER'}.contains(user.role.trim().toUpperCase());
+  bool _isAdmin(UserModel user) => user.isStaff;
 
   void _retry() {
-    setState(() => _startup = _resolveInitialScreen());
+    setState(() {
+      _startup = _resolveInitialScreen();
+    });
   }
 
   void _returnToLogin() {
@@ -82,9 +97,18 @@ class _StartupLoadingScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
+              SizedBox(
+                  height: 100,
+                  child: Image(
+                      image:
+                          AssetImage('assets/images/logo_rent_and_play.png'))),
+              SizedBox(height: 24),
+              SizedBox(
+                  width: 28,
+                  height: 28,
+                  child: CircularProgressIndicator(strokeWidth: 3)),
               SizedBox(height: 16),
-              Text('Restoring your account…'),
+              Text('Opening Rent & Play…'),
             ],
           ),
         ),
@@ -107,7 +131,7 @@ class _StartupErrorScreen extends StatelessWidget {
                 const Icon(Icons.cloud_off_outlined, size: 48),
                 const SizedBox(height: 16),
                 const Text(
-                  'Could not restore your account',
+                  'Could not open Rent & Play',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
                   textAlign: TextAlign.center,
                 ),

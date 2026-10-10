@@ -160,8 +160,6 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                   if (rental.returnedDate != null)
                     RentalValueRow('Returned', _date(rental.returnedDate!)),
                   RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
-                  RentalValueRow(
-                      'Refundable deposit', rentalMoney(rental.deposit)),
                   RentalValueRow('Payment', _paymentLabel(rental)),
                   if (rental.balanceDue > 0)
                     RentalValueRow('Balance due', rentalMoney(rental.balanceDue)),
@@ -234,11 +232,6 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                   Expanded(
                     child: _amountSummary(
                         'Rental fee', rentalMoney(rental.rateFee)),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _amountSummary(
-                        'Refundable deposit', rentalMoney(rental.deposit)),
                   ),
                 ],
               ),

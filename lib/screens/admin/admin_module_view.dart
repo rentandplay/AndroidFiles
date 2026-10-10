@@ -2,6 +2,7 @@ import 'rental_admin_view.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../utils/account_validation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../services/admin_firestore_service.dart';
@@ -224,7 +225,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
 
     final revenuePanel = panel(
       'Confirmed rental fees',
-      'This week · refundable deposits excluded',
+      'This week',
       revenue(bars),
     );
 
@@ -525,7 +526,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         ]),
         Wrap(spacing: 12, children: [
           fact('Rate', money(x['rental_rate']) + ' ' + label(x['rate_type'])),
-          fact('Deposit', money(x['deposit_amount'])),
           fact('Condition', label(x['condition_status']))
         ])
       ]));
@@ -567,8 +567,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           }),
       Field('rentalRate', 'Rate',
           initial: s(current['rental_rate']), numeric: true),
-      Field('deposit', 'Deposit',
-          initial: s(current['deposit_amount'] ?? 0), numeric: true),
       Field('latePenalty', 'Late penalty',
           initial: s(current['late_penalty_rate'] ?? 0), numeric: true),
       Field('pricingProductId', 'Client rate sheet',
@@ -621,7 +619,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         'condition': v['condition'],
         'rateType': v['rateType'],
         'rentalRate': n(v['rentalRate']),
-        'deposit': n(v['deposit']),
         'latePenalty': n(v['latePenalty']),
         'pricingProductId': v['pricingProductId'],
         'description': v['description'],
@@ -923,7 +920,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
               Wrap(spacing: 12, children: [
                 fact('Due', date(x['due_at'])),
                 fact('Fee', money(x['rental_fee'])),
-                fact('Deposit', money(x['deposit_amount']))
               ]),
             Align(
                 alignment: Alignment.centerRight,
@@ -1050,7 +1046,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                       ' · ' +
                       date(r['expires_at'])),
                   rowData('Fee', money(fee['rental_fee'])),
-                  rowData('Deposit', money(fee['deposit_amount'])),
                   rowData('Due', date(fee['due_at'])),
                   Text(
                       returning
@@ -1304,7 +1299,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                   rowData('Due', date(x['due_at'])),
                   rowData('Returned', date(x['confirmed_return_at'])),
                   rowData('Rental fee', money(x['rental_fee'])),
-                  rowData('Deposit', money(x['deposit_amount'])),
                   if (fee.isNotEmpty)
                     rowData(
                         'Final charges', money(fee['final_rental_charges'])),
@@ -1341,7 +1335,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
     return col([
       title(
           'Rates & Fees',
-          'Manage product pricing, item rates, deposits, and quotes.',
+          'Manage product pricing, item rates, and quotes.',
           Wrap(spacing: 5, children: [
             OutlinedButton(
                 onPressed: () => quote(products),
@@ -1366,7 +1360,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       ]),
       panel(
           'Client rate sheet',
-          'Deposits remain separate.',
+          'Rental charges use the selected rate and any applicable overtime.',
           Column(children: [
             for (final p in products)
               card(Column(children: [
@@ -1374,7 +1368,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                     style: const TextStyle(fontWeight: FontWeight.w800)),
                 for (final r in rows(p['rate_options']))
                   rowData(s(r['label']), money(r['amount'])),
-                rowData('Deposit', money(p['deposit_amount'])),
                 rowData('Overtime/hour', money(p['overtime_rate_per_hour']))
               ]))
           ])),
@@ -1409,7 +1402,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           initial: 'HOURLY',
           options: {'HOURLY': 'Hourly', 'DAILY': 'Daily', 'FLAT': 'Flat'}),
       const Field('rentalRate', 'Rate', numeric: true),
-      const Field('deposit', 'Deposit', initial: '0', numeric: true),
       const Field('latePenalty', 'Late penalty', initial: '0', numeric: true)
     ]);
     if (v == null) return;
@@ -1418,7 +1410,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         'itemId': v['itemId'],
         'rateType': v['rateType'],
         'rentalRate': n(v['rentalRate']),
-        'deposit': n(v['deposit']),
         'latePenalty': n(v['latePenalty'])
       });
       await widget.onChanged();
@@ -1437,18 +1428,11 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           Field('id', 'ID requirement',
               initial: rules['valid_id_required'] == false ? 'false' : 'true',
               options: const {'true': 'Required', 'false': 'No'}),
-          Field('depositRequired', 'High value deposit',
-              initial: rules['high_value_deposit_required'] == false
-                  ? 'false'
-                  : 'true',
-              options: const {'true': 'Required', 'false': 'No'}),
           Field('lost', 'Lost piece fee',
               initial: s(rules['lost_piece_fee'] ?? 50), numeric: true)
         ];
     for (final x in ps) {
       final id = s(x['id']);
-      fs.add(Field('dep_' + id, s(x['name']) + ' deposit',
-          initial: s(x['deposit_amount'] ?? 0), numeric: true));
       fs.add(Field('ot_' + id, s(x['name']) + ' overtime',
           initial: s(x['overtime_rate_per_hour'] ?? 0), numeric: true));
       for (final r in rows(x['rate_options']))
@@ -1463,11 +1447,9 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       ..['opens_at'] = v['open']
       ..['closes_at'] = v['close']
       ..['valid_id_required'] = v['id'] == 'true'
-      ..['high_value_deposit_required'] = v['depositRequired'] == 'true'
       ..['lost_piece_fee'] = n(v['lost']);
     next['products'] = ps.map((x) {
       final id = s(x['id']), item = Map<String, dynamic>.from(x);
-      item['deposit_amount'] = n(v['dep_' + id]);
       item['overtime_rate_per_hour'] = n(v['ot_' + id]);
       item['rate_options'] = rows(x['rate_options']).map((r) {
         final y = Map<String, dynamic>.from(r);
@@ -1509,7 +1491,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                       rowData('Fee', money(q['rental_fee'])),
                       rowData('Overtime', money(q['overtime_fee'])),
                       rowData('Charges', money(q['rental_charge_total'])),
-                      rowData('Deposit', money(q['deposit_amount'])),
                       rowData('Collect now', money(q['total_to_collect'])),
                       rowData('Due', date(q['due_at']))
                     ]),
@@ -1558,7 +1539,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
               child: const Text('Copy report CSV'))),
       metrics([
         M('Rental fees', money(sum(recent.map((x) => x['rental_fee']))),
-            'Deposits excluded', Icons.payments, Clr.purple),
+            'Confirmed rentals', Icons.payments, Clr.purple),
         M('Rentals', recent.length.toString(), 'Confirmed', Icons.receipt,
             Clr.blue),
         M(
@@ -1611,12 +1592,19 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   }
 
   Widget settings() {
-    final b = map(workspace['settings']), users = rows(workspace['users']);
+    final b = map(workspace['settings']),
+        users = rows(workspace['users']).where((user) => const {
+              'OWNER',
+              'OPERATOR',
+              'ADMIN'
+            }.contains(s(user['role']).toUpperCase()));
     final isOwner = s(map(api.currentUser)['role']).toUpperCase() == 'OWNER';
     return col([
-      title('Settings', isOwner
-          ? 'Manage shared business details and staff accounts.'
-          : 'View shared business details. Staff access is managed by the owner.'),
+      title(
+          'Settings',
+          isOwner
+              ? 'Manage shared business details and staff accounts.'
+              : 'View shared business details. Staff access is managed by the owner.'),
       panel(
           'Business profile',
           'Shared business details and rental defaults.',
@@ -1632,39 +1620,43 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                   icon: const Icon(Icons.edit),
                   label: const Text('Edit business'))
           ])),
-      if (isOwner) panel(
-          'Workspace accounts',
-          'Customers use USER accounts. Operators use ADMIN accounts. Owners use OWNER accounts.',
-          Column(children: [
-            Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                    onPressed: addAdmin,
-                    icon: const Icon(Icons.person_add),
-                    label: const Text('Add operator'))),
-            for (final x in users)
-              ListTile(
-                  title: Text(s(x['full_name'] ?? x['name'])),
-                  subtitle: Text(s(x['email']) + ' · ' + _roleLabel(x['role'])),
-                  trailing: s(x['role']).toUpperCase() == 'OWNER' ||
-                          s(x['id']) == s(map(api.currentUser)['id'])
-                      ? null
-                      : PopupMenuButton<String>(
-                      onSelected: (_) => toggleAdmin(x),
-                      itemBuilder: (_) => [
-                            PopupMenuItem(
-                                value: 'toggle',
-                                child: Text(x['is_active'] == false
-                                    ? 'Activate'
-                                    : 'Deactivate'))
-                          ]))
-          ])) else panel(
-          'Workspace access',
-          'Customers, operators, and owners use separate sign-in accounts. Ask the owner to change staff access.',
-          const SizedBox.shrink()),
+      if (isOwner)
+        panel(
+            'Staff accounts',
+            'Owners manage access and business settings. Operators manage daily rental operations.',
+            Column(children: [
+              Align(
+                  alignment: Alignment.centerRight,
+                  child: FilledButton.icon(
+                      onPressed: addAdmin,
+                      icon: const Icon(Icons.person_add),
+                      label: const Text('Add staff account'))),
+              for (final x in users)
+                ListTile(
+                    title: Text(s(x['full_name'] ?? x['name'])),
+                    subtitle:
+                        Text(s(x['email']) + ' · ' + _roleLabel(x['role'])),
+                    trailing: s(x['role']).toUpperCase() == 'OWNER' ||
+                            s(x['id']) == s(map(api.currentUser)['id'])
+                        ? null
+                        : PopupMenuButton<String>(
+                            onSelected: (_) => toggleAdmin(x),
+                            itemBuilder: (_) => [
+                                  PopupMenuItem(
+                                      value: 'toggle',
+                                      child: Text(x['is_active'] == false
+                                          ? 'Activate'
+                                          : 'Deactivate'))
+                                ]))
+            ]))
+      else
+        panel(
+            'Workspace access',
+            'Customers, operators, and owners use separate sign-in accounts. Ask the owner to change staff access.',
+            const SizedBox.shrink()),
       panel(
           'Session',
-          'Admin session is held in memory on this device.',
+          'You are signed in to your staff account.',
           OutlinedButton.icon(
               onPressed: widget.onSignOut,
               icon: const Icon(Icons.logout),
@@ -1697,21 +1689,28 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   }
 
   Future<void> addAdmin() async {
-    final v = await form('Add operator account', [
+    final v = await form('Add staff account', [
       const Field('fullName', 'Full name'),
       const Field('email', 'Email', email: true),
-      const Field('password', 'Temp password (12+ chars)', obscure: true)
+      const Field('role', 'Role',
+          options: {'OPERATOR': 'Operator', 'OWNER': 'Owner'}),
+      const Field('passwordMode', 'Temporary password', options: {
+        'generated': 'Generate securely and email',
+        'manual': 'Enter manually'
+      }),
+      const Field('password', 'Temporary password (8+, capital, number)',
+          obscure: true),
+      const Field('confirmPassword', 'Confirm temporary password',
+          obscure: true)
     ]);
     if (v == null) return;
     await mutate(() async {
-      await api.post('/users', body: {
-        'fullName': v['fullName'],
-        'email': v['email'],
-        'password': v['password'],
-        'role': 'ADMIN'
-      });
+      await api.post('/users', body: v);
       await widget.onChanged();
-    }, ok: 'Operator account added.');
+    },
+        ok: v['passwordMode'] == 'generated'
+            ? 'Staff account created. Temporary password emailed; change required on first login.'
+            : 'Staff account created. Share the temporary password securely; change required on first login.');
   }
 
   Future<void> toggleAdmin(Map<String, dynamic> x) async {
@@ -1725,9 +1724,9 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   }
 
   String _roleLabel(dynamic role) => switch (s(role).toUpperCase()) {
-        'OWNER' => 'Owner · Super admin',
-        'ADMIN' => 'Operator · Admin',
-        _ => 'Customer · Mobile',
+        'OWNER' => 'Owner',
+        'ADMIN' || 'OPERATOR' => 'Operator',
+        _ => 'Customer',
       };
 
   Widget adminSettings() {
@@ -1736,23 +1735,23 @@ class _AdminModuleViewState extends State<AdminModuleView> {
     final active = u['is_active'] != false;
     return col([
       title(
-        'Admin settings',
-        'Manage your administrator account, appearance, and sign-in security.',
+        'Account settings',
+        'Manage your Owner or Operator account, appearance, and sign-in security.',
       ),
       panel(
-        'Administrator account',
-        'Your changes apply to this admin account only.',
+        'Staff account',
+        'Your changes apply to this account only.',
         Column(children: [
           rowData('Full name', u['name'] ?? u['full_name']),
           rowData('Email', u['email']),
-          rowData('Access role', 'Administrator'),
+          rowData('Access role', _roleLabel(u['role'])),
           rowData('Account status', active ? 'Active' : 'Inactive'),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton.icon(
               onPressed: editProfile,
               icon: const Icon(Icons.edit_outlined),
-              label: const Text('Edit admin account'),
+              label: const Text('Edit account'),
             ),
           ),
         ]),
@@ -1799,9 +1798,11 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           Column(children: [
             rowData('Name', u['name'] ?? u['full_name']),
             rowData('Email', u['email']),
-              rowData('Role', s(u['role']).toUpperCase() == 'OWNER'
-                  ? 'Owner · Super admin'
-                  : 'Operator · Admin'),
+            rowData(
+                'Role',
+                s(u['role']).toUpperCase() == 'OWNER'
+                    ? 'Owner · Super admin'
+                    : 'Operator · Admin'),
             TextButton.icon(
                 onPressed: editProfile,
                 icon: const Icon(Icons.edit),
@@ -1867,7 +1868,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         'Due',
         'Returned',
         'Fee',
-        'Deposit'
       ],
       for (final x in data)
         [
@@ -1880,7 +1880,6 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           x['due_at'],
           x['confirmed_return_at'],
           x['rental_fee'],
-          x['deposit_amount']
         ]
     ];
     await Clipboard.setData(ClipboardData(
@@ -2318,7 +2317,10 @@ class _QuickFormState extends State<QuickForm> {
     if (!key.currentState!.validate()) return;
     final v = <String, String>{...selected};
     for (final x in text.entries) {
-      v[x.key] = x.value.text.trim();
+      v[x.key] =
+          widget.fields.firstWhere((field) => field.name == x.key).obscure
+              ? x.value.text
+              : x.value.text.trim();
     }
     Navigator.pop(context, v);
   }
@@ -2331,66 +2333,89 @@ class _QuickFormState extends State<QuickForm> {
               height: MediaQuery.sizeOf(c).height * .75,
               child: Form(
                   key: key,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   child: ListView(children: [
                     for (final f in widget.fields)
-                      Padding(
-                          padding: const EdgeInsets.only(bottom: 11),
-                          child: f.options.isNotEmpty
-                              ? DropdownButtonFormField<String>(
-                                  initialValue: selected[f.name],
-                                  decoration: InputDecoration(
-                                      labelText: f.label,
-                                      border: const OutlineInputBorder()),
-                                  items: [
-                                    for (final x in f.options.entries)
-                                      DropdownMenuItem(
-                                          value: x.key,
-                                          child: Text(x.value,
-                                              overflow: TextOverflow.ellipsis))
-                                  ],
-                                  onChanged: (x) {
-                                    if (x != null)
-                                      setState(() => selected[f.name] = x);
-                                  },
-                                  validator: (x) => !f.optional &&
-                                          (x == null || x.isEmpty)
-                                      ? 'Choose ' + f.label.toLowerCase() + '.'
-                                      : null)
-                              : TextFormField(
-                                  controller: text[f.name],
-                                  obscureText: f.obscure,
-                                  keyboardType: f.numeric
-                                      ? const TextInputType.numberWithOptions(
-                                          decimal: true)
-                                      : f.email
-                                          ? TextInputType.emailAddress
-                                          : f.multiline
-                                              ? TextInputType.multiline
-                                              : TextInputType.text,
-                                  minLines: f.multiline ? 3 : 1,
-                                  maxLines: f.multiline ? 5 : 1,
-                                  decoration: InputDecoration(
-                                      labelText: f.label,
-                                      border: const OutlineInputBorder()),
-                                  validator: (x) {
-                                    final v = (x ?? '').trim();
-                                    if (!f.optional && v.isEmpty)
-                                      return 'Enter ' +
-                                          f.label.toLowerCase() +
-                                          '.';
-                                    if (f.email &&
-                                        v.isNotEmpty &&
-                                        !RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]+$')
-                                            .hasMatch(v))
-                                      return 'Enter a valid email.';
-                                    if (f.numeric &&
-                                        v.isNotEmpty &&
-                                        double.tryParse(v) == null)
-                                      return 'Enter a valid number.';
-                                    if (f.name == 'password' && v.length < 12)
-                                      return 'Use at least 12 characters.';
-                                    return null;
-                                  }))
+                      if (selected['passwordMode'] != 'generated' || !f.obscure)
+                        Padding(
+                            padding: const EdgeInsets.only(bottom: 11),
+                            child: f.options.isNotEmpty
+                                ? DropdownButtonFormField<String>(
+                                    initialValue: selected[f.name],
+                                    decoration: InputDecoration(
+                                        labelText: f.label,
+                                        border: const OutlineInputBorder()),
+                                    items: [
+                                      for (final x in f.options.entries)
+                                        DropdownMenuItem(
+                                            value: x.key,
+                                            child: Text(x.value,
+                                                overflow:
+                                                    TextOverflow.ellipsis))
+                                    ],
+                                    onChanged: (x) {
+                                      if (x != null)
+                                        setState(() => selected[f.name] = x);
+                                    },
+                                    validator: (x) =>
+                                        !f.optional && (x == null || x.isEmpty)
+                                            ? 'Choose ' +
+                                                f.label.toLowerCase() +
+                                                '.'
+                                            : null)
+                                : TextFormField(
+                                    controller: text[f.name],
+                                    inputFormatters: f.email
+                                        ? [
+                                            const LowercaseEmailFormatter(),
+                                            LengthLimitingTextInputFormatter(
+                                                254)
+                                          ]
+                                        : f.obscure
+                                            ? [
+                                                LengthLimitingTextInputFormatter(
+                                                    128)
+                                              ]
+                                            : null,
+                                    autocorrect: !f.email && !f.obscure,
+                                    obscureText: f.obscure,
+                                    keyboardType: f.numeric
+                                        ? const TextInputType.numberWithOptions(
+                                            decimal: true)
+                                        : f.email
+                                            ? TextInputType.emailAddress
+                                            : f.multiline
+                                                ? TextInputType.multiline
+                                                : TextInputType.text,
+                                    minLines: f.multiline ? 3 : 1,
+                                    maxLines: f.multiline ? 5 : 1,
+                                    decoration: InputDecoration(
+                                        labelText: f.label,
+                                        border: const OutlineInputBorder()),
+                                    validator: (x) {
+                                      final v = (x ?? '').trim();
+                                      if (!f.optional && v.isEmpty)
+                                        return 'Enter ' +
+                                            f.label.toLowerCase() +
+                                            '.';
+                                      if (f.email && v.isNotEmpty)
+                                        return AccountValidation.email(x);
+                                      if (f.name == 'fullName' && v.isNotEmpty)
+                                        return AccountValidation.name(x);
+                                      if (f.name == 'phone' && v.isNotEmpty)
+                                        return AccountValidation.phone(x,
+                                            required: !f.optional);
+                                      if (f.numeric &&
+                                          v.isNotEmpty &&
+                                          double.tryParse(v) == null)
+                                        return 'Enter a valid number.';
+                                      if (f.name == 'password')
+                                        return AccountValidation.password(x);
+                                      if (f.name == 'confirmPassword')
+                                        return AccountValidation.passwordMatch(
+                                            text['password']!.text, x);
+                                      return null;
+                                    }))
                   ]))),
           actions: [
             TextButton(

@@ -203,8 +203,6 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                           const Divider(height: 24),
                           RentalValueRow(
                               'Rental fee', _money(row['rental_fee'])),
-                          RentalValueRow('Refundable deposit',
-                              _money(row['deposit_amount'])),
                           if (fee['overtime_fee'] != null)
                             RentalValueRow(
                                 'Overtime', _money(fee['overtime_fee'])),
@@ -419,7 +417,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               const SizedBox(height: 8),
               const RentalNotice(
                   message:
-                      '1. Review the request and verify QR payment proof if provided. 2. Scan the assigned unit at the shop. 3. At handoff, scan the customer QR, verify their ID, confirm payment and deposit, and inspect the unit and accessories. The timer starts only after handoff is confirmed.'),
+                      '1. Review the request and verify QR payment proof if provided. 2. Scan the assigned unit at the shop. 3. At handoff, scan the customer QR, verify their ID and rental payment, and inspect the unit and accessories. The timer starts only after handoff is confirmed.'),
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 if (widget.page == 'Rentals')
@@ -570,8 +568,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _location = TextEditingController(text: 'Shop pickup');
   final _penalty = TextEditingController(text: '0'),
       _payment = TextEditingController(text: '0'),
-      _applied = TextEditingController(text: '0'),
-      _refund = TextEditingController(text: '0'),
       _rentalRefund = TextEditingController(text: '0');
   late Map<String, dynamic> _row;
   late String _action;
@@ -587,7 +583,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   bool _manual = false,
       _customerVerified = false,
       _paymentVerified = false,
-      _depositReceived = false,
       _accessories = false,
       _receipt = false,
       _busy = false,
@@ -635,8 +630,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
     _paymentVerified =
         _number(_row['rental_paid_amount']) >= _number(_row['rental_fee']) &&
             _row.containsKey('rental_paid_amount');
-    _depositReceived = _number(_row['deposit_collected_amount']) >=
-        _number(_row['deposit_amount']);
   }
 
   Future<void> _loadPaymentProof() async {
@@ -666,8 +659,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _location,
       _penalty,
       _payment,
-      _applied,
-      _refund,
       _rentalRefund
     ]) {
       controller.dispose();
@@ -780,10 +771,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                 RentalValueRow('Rental fee', _money(_row['rental_fee'])),
                 _check('Rental payment received and verified', _paymentVerified,
                     (value) => _paymentVerified = value),
-                RentalValueRow(
-                    'Refundable deposit', _money(_row['deposit_amount'])),
-                _check('Required refundable deposit received', _depositReceived,
-                    (value) => _depositReceived = value),
               ])),
           RentalSection(
               title: 'Equipment inspection',
@@ -956,7 +943,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                           : _action == 'prepare-delivery'
                               ? 'Mark this exact unit ready for delivery? The rental timer will remain stopped.'
                               : _action == 'payment-review'
-                                  ? 'Confirm the screenshot shows a successful transfer for the rental fee and refundable deposit, then approve the request?'
+                                  ? 'Confirm the screenshot shows a successful transfer for the rental fee, then approve the request?'
                                   : _action == 'payment-reject'
                                       ? 'Reject this payment screenshot? The customer can upload a corrected one.'
                                       : _action == 'reject-return'
@@ -991,7 +978,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             ..._bookingPayload(),
             'expectedQuote': {
               'rentalFee': _quote!['rental_fee'],
-              'depositAmount': _quote!['deposit_amount'],
               'billedMinutes': _quote!['billed_minutes']
             }
           });
@@ -1035,7 +1021,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             ..._verification.releaseCodes,
             'customerVerified': _customerVerified,
             'paymentVerified': _paymentVerified,
-            'depositReceived': _depositReceived,
             'inspection': _inspectionPayload(),
             if (_manual) 'manualReason': _reason.text.trim()
           });
@@ -1063,8 +1048,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         case 'settlement':
           payload.addAll({
             'paymentAmount': double.parse(_payment.text),
-            'depositAppliedAmount': double.parse(_applied.text),
-            'depositRefundAmount': double.parse(_refund.text),
             'rentalRefundAmount': double.parse(_rentalRefund.text),
             'notes': _notes.text
           });
@@ -1152,8 +1135,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                   : null,
               summaryValue: _quote == null
                   ? null
-                  : _money(_number(_quote!['rental_fee']) +
-                      _number(_quote!['deposit_amount'])),
+                  : _money(_number(_quote!['rental_fee'])),
               secondary: Column(mainAxisSize: MainAxisSize.min, children: [
                 if (_error.isNotEmpty || _verification.error.isNotEmpty)
                   Padding(
@@ -1253,8 +1235,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                   child: Column(children: [
                                     RentalValueRow('Rental fee',
                                         _money(_quote!['rental_fee'])),
-                                    RentalValueRow('Refundable deposit',
-                                        _money(_quote!['deposit_amount'])),
                                     RentalValueRow('Package duration',
                                         '${_quote!['billed_minutes']} minutes'),
                                   ])),
@@ -1269,7 +1249,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      Text('Expected total: ${_money(_number(_row['rental_fee']) + _number(_row['deposit_amount']))}'),
+                                      Text('Expected total: ${_money(_number(_row['rental_fee']))}'),
                                       if (_paymentProofLoading)
                                         const Padding(
                                             padding: EdgeInsets.all(24),
@@ -1322,11 +1302,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                           ],
                           if (_action == 'approve') ...[
                             const Text(
-                                'Approval holds the assigned unit. Verify any outstanding payment and deposit at handoff.'),
+                                'Approval holds the assigned unit. Verify any outstanding rental payment at handoff.'),
                             RentalValueRow(
                                 'Rental fee', _money(_row['rental_fee'])),
-                            RentalValueRow('Refundable deposit',
-                                _money(_row['deposit_amount'])),
                             _field(_notes, 'Review notes', required: false)
                           ],
                           if (_action == 'reject')
@@ -1361,10 +1339,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                             Text(
                                 'Balance ${_money(_row['balance_due'])} · Refund due ${_money(_row['refund_due'])}'),
                             _field(_payment, 'Additional payment received',
-                                numeric: true),
-                            _field(_applied, 'Deposit applied to charges',
-                                numeric: true),
-                            _field(_refund, 'Deposit refund paid',
                                 numeric: true),
                             if (_row['status'] != 'COMPLETED')
                               _field(_rentalRefund, 'Rental payment refunded',

@@ -15,7 +15,6 @@ class RentalService extends ChangeNotifier {
     required String customerName,
     required String terminalId,
     required double rateFee,
-    required double deposit,
   }) async {
     HardwareFeatures.requireEnabled();
     try {
@@ -36,7 +35,6 @@ class RentalService extends ChangeNotifier {
         hardwareConfirmed: false,
         status: 'PENDING_HARDWARE_CONFIRMATION',
         rateFee: rateFee,
-        deposit: deposit,
         createdAt: now,
         updatedAt: now,
       );

@@ -68,10 +68,11 @@ class RentalNotificationService extends ChangeNotifier {
       _initialized = false,
       _hasOlder = false,
       _disposed = false,
-      _active = true;
+      _active = true,
+      _refreshAgain = false;
   bool phoneAlertsEnabled = false, enablingPhoneAlerts = false;
   String error = '', phoneAlertError = '', audience = 'CUSTOMER';
-  Timer? _poll;
+  StreamSubscription<Map<String, dynamic>>? _rentalEvents;
   StreamSubscription<RemoteMessage>? _messages, _opened;
   StreamSubscription<String>? _tokens;
   bool get signedIn => _uid != null;
@@ -88,8 +89,11 @@ class RentalNotificationService extends ChangeNotifier {
     if (_uid == uid) return;
     _uid = uid;
     final version = ++_generation;
-    _poll?.cancel();
+    _rentalEvents?.cancel();
+    _rentalEvents = null;
+    _api.resetRentalEventStream();
     _pending = false;
+    _refreshAgain = false;
     _initialized = false;
     _hasOlder = false;
     _items.clear();
@@ -108,22 +112,47 @@ class RentalNotificationService extends ChangeNotifier {
       if (pushEnabled) await NotificationDevices.rotateForAccount(_api);
       if (_disposed || version != _generation) return;
       if (uid == null) return;
+      _startRentalEvents(version);
       await refresh();
       if (_disposed || version != _generation) return;
-      _poll = Timer.periodic(const Duration(minutes: 2), (_) {
-        if (_active) refresh();
-      });
       await _setupPush();
     });
   }
 
   void setActive(bool active) {
+    if (_active == active) return;
     _active = active;
-    if (active) refresh();
+    if (active) {
+      if (_uid != null) _startRentalEvents(_generation);
+      refresh();
+    } else {
+      _rentalEvents?.cancel();
+      _rentalEvents = null;
+    }
+  }
+
+  void _startRentalEvents(int version) {
+    if (!_active ||
+        _uid == null ||
+        _disposed ||
+        version != _generation ||
+        _rentalEvents != null) {
+      return;
+    }
+    _rentalEvents = _api.watchRentalEvents().listen((event) {
+      if (_disposed || !_active || version != _generation) return;
+      if (event['event'] == 'ready') {
+        refresh();
+      } else if (event['event'] == 'rental.changed') {
+        refresh();
+      }
+    });
   }
 
   Future<void> refresh({bool older = false}) async {
-    if (_disposed || _uid == null || _pending || older && nextCursor == null) {
+    if (_disposed || _uid == null || older && nextCursor == null) return;
+    if (_pending) {
+      if (!older) _refreshAgain = true;
       return;
     }
     final version = _generation;
@@ -165,6 +194,10 @@ class RentalNotificationService extends ChangeNotifier {
       if (!_disposed && version == _generation) {
         _pending = false;
         _notify();
+        if (_refreshAgain) {
+          _refreshAgain = false;
+          scheduleMicrotask(() => refresh());
+        }
       }
     }
   }
@@ -228,7 +261,9 @@ class RentalNotificationService extends ChangeNotifier {
     final messageAudience = message.data['audience'];
     if (messageAudience != null &&
         messageAudience.isNotEmpty &&
-        messageAudience != audience) return;
+        messageAudience != audience) {
+      return;
+    }
     final id = message.data['notification_id'];
     if (id != null) _opens.add(id);
     refresh();
@@ -285,7 +320,7 @@ class RentalNotificationService extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     _generation++;
-    _poll?.cancel();
+    _rentalEvents?.cancel();
     _messages?.cancel();
     _opened?.cancel();
     _tokens?.cancel();

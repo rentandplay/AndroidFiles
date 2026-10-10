@@ -55,7 +55,6 @@ class TransactionModel {
   final bool hardwareConfirmed;
   final String status;
   final double rateFee;
-  final double deposit;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -69,7 +68,6 @@ class TransactionModel {
     this.hardwareConfirmed = false,
     required this.status,
     required this.rateFee,
-    required this.deposit,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -85,7 +83,6 @@ class TransactionModel {
       'hardwareConfirmed': hardwareConfirmed,
       'status': status,
       'rateFee': rateFee,
-      'deposit': deposit,
       'createdAt': Timestamp.fromDate(createdAt),
       'updatedAt': Timestamp.fromDate(updatedAt),
     };
@@ -108,7 +105,6 @@ class TransactionModel {
       hardwareConfirmed: map['hardwareConfirmed'] ?? false,
       status: map['status'] ?? 'PENDING_HARDWARE_CONFIRMATION',
       rateFee: (map['rateFee'] ?? 0.0).toDouble(),
-      deposit: (map['deposit'] ?? 0.0).toDouble(),
       createdAt: parseDate(map['createdAt']),
       updatedAt: parseDate(map['updatedAt']),
     );
@@ -124,7 +120,6 @@ class TransactionModel {
     bool? hardwareConfirmed,
     String? status,
     double? rateFee,
-    double? deposit,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -138,7 +133,6 @@ class TransactionModel {
       hardwareConfirmed: hardwareConfirmed ?? this.hardwareConfirmed,
       status: status ?? this.status,
       rateFee: rateFee ?? this.rateFee,
-      deposit: deposit ?? this.deposit,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? DateTime.now(),
     );

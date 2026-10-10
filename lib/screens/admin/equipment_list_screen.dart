@@ -357,11 +357,6 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
                                     'rate_type'
                                   ])!.toLowerCase()}'),
                   ),
-                  if (item['deposit_amount'] != null)
-                    _DetailRow(
-                      label: 'Deposit',
-                      value: _money(item['deposit_amount']),
-                    ),
                   if (item['open_rentals'] != null)
                     _DetailRow(
                       label: 'Open rentals',

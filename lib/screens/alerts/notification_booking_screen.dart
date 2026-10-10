@@ -139,8 +139,6 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                             row['delivery_location']?.toString() ??
                                 'Shop pickup'),
                         RentalValueRow('Rental fee', _money(row['rental_fee'])),
-                        RentalValueRow('Refundable deposit',
-                            _money(row['deposit_amount'])),
                         RentalValueRow('Return by', _date(row['due_at'])),
                         if (row['balance_due'] != null)
                           RentalValueRow(

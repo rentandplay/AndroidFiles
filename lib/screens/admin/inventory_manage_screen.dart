@@ -18,7 +18,6 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
     final descriptionController = TextEditingController(text: item?.description ?? '');
     final rateTextController = TextEditingController(text: item?.rateText ?? '');
     final rateHourlyController = TextEditingController(text: item?.rateHourly.toString() ?? '100');
-    final depositController = TextEditingController(text: item?.deposit.toString() ?? '100');
     final specialRateController = TextEditingController(text: item?.specialRate ?? '');
     String category = item?.category ?? 'Sports';
     String status = item?.status ?? 'available';
@@ -73,24 +72,10 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
                 decoration: const InputDecoration(labelText: 'Rate Display Text (e.g. ₱150/hr)', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: rateHourlyController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Hourly Rate (₱)', border: OutlineInputBorder()),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: depositController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'Deposit (₱)', border: OutlineInputBorder()),
-                    ),
-                  ),
-                ],
+              TextField(
+                controller: rateHourlyController,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Hourly Rate (₱)', border: OutlineInputBorder()),
               ),
               const SizedBox(height: 10),
               InputDecorator(
@@ -129,7 +114,6 @@ class _InventoryManageScreenState extends State<InventoryManageScreen> {
                         : '${nameController.text.trim()} equipment rental item.',
                     rateText: rateTextController.text.trim(),
                     rateHourly: double.tryParse(rateHourlyController.text) ?? 100.0,
-                    deposit: double.tryParse(depositController.text) ?? 100.0,
                     specialRate: specialRateController.text.trim().isNotEmpty ? specialRateController.text.trim() : null,
                     imageUrl: item?.imageUrl ?? 'assets/images/logo_rent_and_play.png',
                     status: status,

@@ -24,9 +24,11 @@ class ActiveRentalsScreen extends StatefulWidget {
 class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     with WidgetsBindingObserver {
   List<RentalModel>? _rentals;
-  Timer? _poll;
+  StreamSubscription<Map<String, dynamic>>? _rentalEvents;
   bool _refreshing = false;
+  bool _refreshAgain = false;
   bool _appResumed = true;
+  String? _eventUid;
   String _error = '';
   final _cancelling = <String>{};
   final _uploadingProof = <String>{};
@@ -34,56 +36,80 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _refreshRentals();
-    _syncPolling();
   }
 
   @override
   void didUpdateWidget(covariant ActiveRentalsScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
-      _syncPolling();
+      _syncRentalEvents();
       if (widget.isActive) _refreshRentals();
     }
   }
 
-  void _syncPolling() {
-    _poll?.cancel();
-    _poll = null;
-    if (widget.isActive && _appResumed) {
-      _poll =
-          Timer.periodic(const Duration(minutes: 2), (_) => _refreshRentals());
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final uid = context.read<AuthService>().currentUser?.uid;
+    if (_eventUid != uid) {
+      _eventUid = uid;
+      _syncRentalEvents();
+      if (uid != null) _refreshRentals();
     }
+  }
+
+  void _syncRentalEvents() {
+    _rentalEvents?.cancel();
+    _rentalEvents = null;
+    if (!widget.isActive || !_appResumed || _eventUid == null) return;
+    _rentalEvents =
+        MobileApiService.instance.watchRentalEvents().listen((event) {
+      if (!mounted) return;
+      if (event['event'] == 'rental.changed') {
+        _refreshRentals();
+      } else if (event['event'] == 'ready') {
+        _refreshRentals();
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _appResumed = state == AppLifecycleState.resumed;
-    _syncPolling();
+    _syncRentalEvents();
     if (_appResumed && widget.isActive) _refreshRentals();
   }
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _rentalEvents?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   Future<void> _refreshRentals() async {
-    if (_refreshing || !mounted) return;
+    if (!mounted) return;
+    if (_refreshing) {
+      _refreshAgain = true;
+      return;
+    }
     _refreshing = true;
     try {
       final next = await MobileApiService.instance.listRentals();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _rentals = next;
           _error = '';
         });
+      }
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
       _refreshing = false;
+      if (_refreshAgain && mounted) {
+        _refreshAgain = false;
+        unawaited(_refreshRentals());
+      }
     }
   }
 
@@ -113,9 +139,10 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
       await MobileApiService.instance.cancelRental(rental.rentalId);
       if (mounted) await _refreshRentals();
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
+      }
     } finally {
       if (mounted) setState(() => _cancelling.remove(rental.rentalId));
     }
@@ -154,9 +181,10 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
         await _refreshRentals();
       }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
+      }
     } finally {
       if (mounted) setState(() => _uploadingProof.remove(rental.rentalId));
     }
@@ -228,26 +256,31 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                   ),
                           ),
                         for (final rental in open)
-                          RentalBookingCard(
-                            rental: rental,
-                            onTicket: () =>
-                                TransactionTicketDialog.show(context, rental),
-                            onUploadPaymentProof:
-                                _uploadingProof.contains(rental.rentalId)
+                          Center(
+                            child: ConstrainedBox(
+                              constraints: const BoxConstraints(maxWidth: 680),
+                              child: RentalBookingCard(
+                                rental: rental,
+                                onTicket: () => TransactionTicketDialog.show(
+                                    context, rental),
+                                onUploadPaymentProof:
+                                    _uploadingProof.contains(rental.rentalId)
+                                        ? null
+                                        : () => _uploadPaymentProof(rental),
+                                onCancel: _cancelling.contains(rental.rentalId)
                                     ? null
-                                    : () => _uploadPaymentProof(rental),
-                            onCancel: _cancelling.contains(rental.rentalId)
-                                ? null
-                                : () => _cancelBooking(rental),
-                            onReturn: () async {
-                              await Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                      builder: (_) => ReturnEquipmentScreen(
-                                          rental: rental)));
-                              if (mounted) _refreshRentals();
-                            },
-                            onRefresh: _refreshRentals,
+                                    : () => _cancelBooking(rental),
+                                onReturn: () async {
+                                  await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => ReturnEquipmentScreen(
+                                              rental: rental)));
+                                  if (mounted) _refreshRentals();
+                                },
+                                onRefresh: _refreshRentals,
+                              ),
+                            ),
                           ),
                       ]),
                 ),
@@ -331,11 +364,11 @@ class RentalBookingCard extends StatelessWidget {
                                 : 'Approved · preparing delivery',
                         rental.deliveryStatus == 'PREPARED'
                             ? isRentAndPlayPickup
-                                ? 'Pumunta sa Rent & Play sa ASRI Hotspring Resort. Ipakita ang rental QR at valid ID para makuha ang item.'
-                                : 'Your item is ready. The operator will bring it to ${rental.deliveryLocation}. Show your rental QR and a valid ID at handoff.'
+                                ? 'Pumunta sa Rent & Play sa ASRI at ipakita ang rental QR at valid ID.'
+                                : 'Ready for ${rental.deliveryLocation}. Ipakita ang rental QR at valid ID sa handoff.'
                             : isRentAndPlayPickup
-                                ? 'The operator is checking your item at Rent & Play in ASRI. Your rental timer starts when it is handed to you.'
-                                : 'The operator is preparing your item for ${rental.deliveryLocation}. Your rental timer has not started.'
+                                ? 'Inihahanda ng staff ang item. Magsisimula ang oras sa handoff.'
+                                : 'Inihahanda ang item para sa ${rental.deliveryLocation}. Hindi pa nagsisimula ang oras.'
                       )
                     : rental.isActive && rental.hasPendingReturnRequest
                         ? (
@@ -357,7 +390,7 @@ class RentalBookingCard extends StatelessWidget {
                             : rental.isAwaitingInspection
                                 ? (
                                     'Returned · inspection in progress',
-                                    'The admin is checking the equipment and final charges. No action is needed right now.'
+                                    'The admin is checking the item. No action is needed.'
                                   )
                                 : rental.isActive
                                     ? (
@@ -422,7 +455,9 @@ class RentalBookingCard extends StatelessWidget {
       if (holdEnded ||
           paymentRejected ||
           rental.isAwaitingPickup ||
-          (rental.isActive && !rental.hasPendingReturnRequest)) ...[
+          rental.hasPendingReturnRequest ||
+          rental.isAwaitingInspection ||
+          rental.isActive) ...[
         const SizedBox(height: 14),
         if (holdEnded)
           OutlinedButton.icon(
@@ -439,11 +474,16 @@ class RentalBookingCard extends StatelessWidget {
               onPressed: onTicket,
               icon: const Icon(Icons.qr_code_rounded),
               label: const Text('Show handoff QR'))
+        else if (rental.hasPendingReturnRequest || rental.isAwaitingInspection)
+          OutlinedButton.icon(
+              onPressed: onTicket,
+              icon: const Icon(Icons.qr_code_rounded),
+              label: const Text('Show rental ticket'))
         else
           FilledButton.icon(
               onPressed: onReturn,
               icon: const Icon(Icons.assignment_return_rounded),
-              label: const Text('Start return')),
+              label: const Text('Request return')),
       ],
       if (rental.canCancel)
         Align(
@@ -609,8 +649,6 @@ class _RentalPriceSummary extends StatelessWidget {
       child: Column(children: [
         Row(children: [
           amount('Rental fee', rentalMoney(rental.rateFee)),
-          const SizedBox(width: 12),
-          amount('Security deposit', rentalMoney(rental.deposit)),
         ]),
         if (rental.balanceDue > 0 && !rental.canCancel) ...[
           const SizedBox(height: 10),
@@ -657,9 +695,6 @@ class _RentalListHeader extends StatelessWidget {
             Text('$count rental${count == 1 ? '' : 's'} in progress',
                 style:
                     const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
-            const SizedBox(height: 2),
-            Text('Track each rental from request to return',
-                style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 13)),
           ]),
         ),
       ]),
@@ -694,13 +729,6 @@ class _RentalNextStep extends StatelessWidget {
         Expanded(
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('UP NEXT',
-                style: TextStyle(
-                    color: color,
-                    fontSize: 10,
-                    letterSpacing: .7,
-                    fontWeight: FontWeight.w800)),
-            const SizedBox(height: 3),
             Text(title,
                 style: const TextStyle(
                     fontSize: 15, fontWeight: FontWeight.w700, height: 1.25)),

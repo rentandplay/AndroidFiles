@@ -153,7 +153,7 @@ class ItemDetailsScreen extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: RentalActionBar(
-        label: isAvailable ? 'Choose rental options' : 'Unavailable right now',
+        label: isAvailable ? 'Rent now' : 'Unavailable right now',
         onPressed: isAvailable ? () => _continueToRental(context) : null,
       ),
       body: SingleChildScrollView(
@@ -261,8 +261,6 @@ class ItemDetailsScreen extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       RentalValueRow('Rental rate', rate),
-                      RentalValueRow('Refundable security deposit',
-                          rentalMoney(item.deposit)),
                       RentalValueRow(
                         'Late return fee',
                         '${rentalMoney(item.latePenalty)} per hour overdue',
@@ -274,19 +272,10 @@ class ItemDetailsScreen extends StatelessWidget {
                       if (item.isForSale && item.salePrice != null)
                         RentalValueRow('Also available to buy',
                             rentalMoney(item.salePrice)),
-                      const Divider(height: 24),
-                      Text(
-                        'The exact rental fee and deposit will be confirmed before you send your request.',
-                        style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 13,
-                          height: 1.4,
-                        ),
-                      ),
                       if (item.isForSale && item.salePrice != null) ...[
                         const SizedBox(height: 10),
                         Text(
-                          'This flow is for rentals. Ask the operator about buying this item.',
+                          'For purchases, ask the operator.',
                           style: TextStyle(
                             color: scheme.onSurfaceVariant,
                             fontSize: 13,

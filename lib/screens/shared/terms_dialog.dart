@@ -47,10 +47,10 @@ class TermsDialog extends StatelessWidget {
                 '• The rental timer starts when the operator hands over the item. Return it by the due time shown in My Rentals.',
               ),
               const SizedBox(height: 10),
-              _buildSectionTitle('2. ID Verification & Security Deposit'),
+              _buildSectionTitle('2. ID Verification'),
               _buildSectionText(
                 '• A valid Government or Student ID photo must be uploaded to your profile.\n'
-                '• Review the rental price and required refundable deposit shown at checkout.\n'
+                '• Review the rental price shown at checkout.\n'
                 '• The admin records payments and refunds after inspection and settlement.',
               ),
               const SizedBox(height: 10),

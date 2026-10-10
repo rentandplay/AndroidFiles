@@ -64,6 +64,9 @@ class UiApi extends MobileApiService {
   }
 
   @override
+  Future<Map<String, dynamic>> paymentInstructions() async => {};
+
+  @override
   Future<Map<String, dynamic>> rentalRecord(String id) async {
     requests.add({'rental_id': id});
     return {
@@ -73,7 +76,6 @@ class UiApi extends MobileApiService {
       'customer_id': 'c1',
       'rental_code': 'R-1024',
       'rental_fee': 150,
-      'deposit_amount': 100,
       'delivery_location': 'ASRI Hotspring Resort',
       'final_reason': 'Equipment unavailable at the selected resort.'
     };
@@ -85,7 +87,7 @@ class UiApi extends MobileApiService {
       throw const MobileApiException('Price service unavailable. Try again.');
     }
     if (pendingQuote != null) return pendingQuote!.future;
-    return {'rental_fee': 150, 'deposit_amount': 100, 'billed_minutes': 300};
+    return {'rental_fee': 150, 'billed_minutes': 300};
   }
 
   @override
@@ -103,7 +105,7 @@ class UiApi extends MobileApiService {
 
   @override
   Future<Map<String, dynamic>> adminRequest(String path,
-      {String method = 'GET', Map<String, dynamic>? body}) async {
+      {String method = 'GET', Map<String, dynamic>? body, bool forceRefresh = false}) async {
     requests.add({'path': path, ...?body});
     if (body?['transactionCode'] != 'booking-qr') {
       throw const MobileApiException('This QR belongs to another booking.');
@@ -128,7 +130,6 @@ final item = ItemModel(
     description: 'Classic stacking game',
     rateText: '₱150 / 5 hours',
     rateHourly: 30,
-    deposit: 100,
     imageUrl: 'assets/images/logo_rent_and_play.png');
 RentalModel sampleRental(String status) => RentalModel(
       rentalId: 'r1',
@@ -141,7 +142,6 @@ RentalModel sampleRental(String status) => RentalModel(
       startDate: DateTime.now(),
       dueDate: DateTime.now().add(const Duration(hours: 5)),
       rateFee: 150,
-      deposit: 100,
       paymentMethod: 'Cash',
       status: status,
       holdExpiresAt: DateTime.now().add(const Duration(minutes: 30)),
@@ -226,14 +226,14 @@ void main() {
         isNull);
     expect(find.text('₱0.00'), findsNothing);
     api.pendingQuote!.complete(
-        {'rental_fee': 150, 'deposit_amount': 100, 'billed_minutes': 300});
+        {'rental_fee': 150, 'billed_minutes': 300});
     await tester.pumpAndSettle();
     final button = find.widgetWithText(FilledButton, 'Send rental request');
     expect(tester.getBottomRight(button).dy, lessThanOrEqualTo(780));
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
     await save(tester, capture, 'android-checkout');
     await tester.scrollUntilVisible(find.text('Price summary'), 180);
-    expect(find.textContaining('minimum package duration'), findsOneWidget);
+    expect(find.textContaining('minimum package'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });
@@ -253,7 +253,6 @@ void main() {
             'item_code': 'RENT-001',
             'rental_code': 'R-123456',
             'rental_fee': 150,
-            'deposit_amount': 100
           },
           action: 'release',
           workspace: const {},
@@ -342,9 +341,13 @@ void main() {
             .onPressed,
         isNull);
     expect(find.text('₱0.00'), findsNothing);
-    await tester.scrollUntilVisible(find.text('Retry price'), 150);
+    final retryButtonFinder = find.ancestor(
+        of: find.text('Retry price'), matching: find.byType(TextButton));
+    final retryButton = tester.widget<TextButton>(retryButtonFinder);
+    expect(retryButton.onPressed, isNotNull);
     api.failQuote = false;
-    await tester.tap(find.text('Retry price'));
+    retryButton.onPressed!();
+    await tester.pump();
     await tester.pumpAndSettle();
     expect(
         tester

@@ -133,8 +133,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isAdmin =
-        ['ADMIN', 'OWNER'].contains(_currentUserModel?.role.toUpperCase());
+    final isAdmin = _currentUserModel?.isStaff == true;
 
     return Scaffold(
       appBar: AppBar(

@@ -247,8 +247,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           }
 
           final userModel = snapshot.data;
-          final role = userModel?.role.toUpperCase() ?? 'USER';
-          final isAdmin = role == 'ADMIN' || role == 'OWNER';
+          final role = userModel?.role.toUpperCase() ?? 'CUSTOMER';
+          final isAdmin = userModel?.isStaff ?? false;
           final isOwner = role == 'OWNER';
           final tabs = _settingsTabs(isAdmin);
           final selectedTab = tabs.any((tab) => tab['name'] == _selectedTab)
@@ -286,7 +286,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 // 2. Tab Content View
                 if (isAdmin && selectedTab == 'Business')
                   _buildBusinessTabCard(isDark, cardBg, cardBorder, textPrimary,
-                      textSecondary, inputFill, canEdit: isOwner)
+                      textSecondary, inputFill,
+                      canEdit: isOwner)
                 else if (selectedTab == 'Appearance')
                   _buildAppearanceTabCard(themeProvider, isDark, cardBg,
                       cardBorder, textPrimary, textSecondary)
@@ -299,15 +300,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   _buildPreferencesTabCard(
                       isDark, cardBg, cardBorder, textPrimary, textSecondary)
                 else if (!isAdmin && user == null)
-                  _buildGuestProfileCard(cardBg, cardBorder, textPrimary,
-                      textSecondary)
+                  _buildGuestProfileCard(
+                      cardBg, cardBorder, textPrimary, textSecondary)
                 else if (!isAdmin)
-                  _buildCustomerProfileCard(
-                      userModel, user, isDark, cardBg, cardBorder,
-                      textPrimary, textSecondary)
+                  _buildCustomerProfileCard(userModel, user, isDark, cardBg,
+                      cardBorder, textPrimary, textSecondary)
                 else
-                  _buildUsersAccountTabCard(userModel, user, role, isDark,
-                      cardBg, cardBorder, textPrimary, textSecondary, inputFill),
+                  _buildUsersAccountTabCard(
+                      userModel,
+                      user,
+                      role,
+                      isDark,
+                      cardBg,
+                      cardBorder,
+                      textPrimary,
+                      textSecondary,
+                      inputFill),
 
                 if (user != null) ...[
                   const SizedBox(height: 30),
@@ -360,7 +368,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color cardBorder,
     Color textPrimary,
     Color textSecondary,
-  ) => Container(
+  ) =>
+      Container(
         decoration: BoxDecoration(
           color: cardBg,
           borderRadius: BorderRadius.circular(14),
@@ -466,14 +475,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // --- BUSINESS TAB CARD ---
-  Widget _buildBusinessTabCard(
-    bool isDark,
-    Color cardBg,
-    Color cardBorder,
-    Color textPrimary,
-    Color textSecondary,
-    Color inputFill,
-    {required bool canEdit}) {
+  Widget _buildBusinessTabCard(bool isDark, Color cardBg, Color cardBorder,
+      Color textPrimary, Color textSecondary, Color inputFill,
+      {required bool canEdit}) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20.0),
@@ -700,38 +704,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           if (canEdit)
             Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                  ),
+                  onPressed: () {},
+                  child: Text('Discard changes',
+                      style: TextStyle(fontSize: 12, color: textSecondary)),
                 ),
-                onPressed: () {},
-                child: Text('Discard changes',
-                    style: TextStyle(fontSize: 12, color: textSecondary)),
-              ),
-              const SizedBox(width: 10),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF57C00),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8)),
-                  elevation: 0,
+                const SizedBox(width: 10),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFF57C00),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8)),
+                    elevation: 0,
+                  ),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content:
+                              Text('Business settings saved successfully!')),
+                    );
+                  },
+                  child: const Text('Save business settings',
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                        content: Text('Business settings saved successfully!')),
-                  );
-                },
-                child: const Text('Save business settings',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
@@ -857,10 +862,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             CircleAvatar(
               radius: 34,
-              backgroundColor: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: .1),
+              backgroundColor:
+                  Theme.of(context).colorScheme.primary.withValues(alpha: .1),
               child: Icon(Icons.person_outline_rounded,
                   size: 34, color: Theme.of(context).colorScheme.primary),
             ),
@@ -1023,8 +1026,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 fontWeight: FontWeight.w800)),
                         const SizedBox(height: 3),
                         Text('Keep your contact information up to date.',
-                            style: TextStyle(
-                                color: textSecondary, fontSize: 12)),
+                            style:
+                                TextStyle(color: textSecondary, fontSize: 12)),
                       ],
                     ),
                   ),
@@ -1127,7 +1130,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _customerDetailRow(IconData icon, String label, String value,
-      Color textPrimary, Color textSecondary) =>
+          Color textPrimary, Color textSecondary) =>
       Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1222,7 +1225,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
-              color: ['ADMIN', 'OWNER'].contains(role)
+              color: userModel?.isStaff == true
                   ? (isDark ? const Color(0xFF3B1D0E) : const Color(0xFFFFEDD5))
                   : (isDark
                       ? const Color(0xFF0F2A3F)
@@ -1232,7 +1235,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Text(
               role,
               style: TextStyle(
-                color: ['ADMIN', 'OWNER'].contains(role)
+                color: userModel?.isStaff == true
                     ? const Color(0xFFF57C00)
                     : const Color(0xFF0284C7),
                 fontWeight: FontWeight.bold,

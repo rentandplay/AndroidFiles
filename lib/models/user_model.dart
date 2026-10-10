@@ -5,7 +5,11 @@ class UserModel {
   final String name;
   final String email;
   final String phone;
-  final String role; // USER customer, ADMIN operator, or OWNER super admin
+  final String
+      role; // CUSTOMER, OPERATOR, or OWNER; legacy values are normalized.
+  final bool mustChangePassword;
+  bool get isStaff => const {'OWNER', 'OPERATOR', 'ADMIN', 'SUPER_ADMIN'}
+      .contains(role.toUpperCase());
   final String? profileImageUrl;
   final String? validIdUrl;
   final bool hasAcceptedTerms;
@@ -16,7 +20,8 @@ class UserModel {
     required this.name,
     required this.email,
     required this.phone,
-    this.role = 'user',
+    this.role = 'CUSTOMER',
+    this.mustChangePassword = false,
     this.profileImageUrl,
     this.validIdUrl,
     this.hasAcceptedTerms = false,
@@ -30,6 +35,7 @@ class UserModel {
       'email': email,
       'phone': phone,
       'role': role,
+      'mustChangePassword': mustChangePassword,
       'profileImageUrl': profileImageUrl,
       'validIdUrl': validIdUrl,
       'hasAcceptedTerms': hasAcceptedTerms,
@@ -52,7 +58,14 @@ class UserModel {
       name: map['name'] ?? map['full_name'] ?? '',
       email: map['email'] ?? '',
       phone: map['phone'] ?? '',
-      role: map['role'] ?? 'user',
+      role: switch ((map['role'] ?? 'CUSTOMER').toString().toUpperCase()) {
+        'ADMIN' || 'OPERATOR' => 'OPERATOR',
+        'SUPER_ADMIN' || 'OWNER' => 'OWNER',
+        'USER' || 'CUSTOMER' => 'CUSTOMER',
+        final value => value,
+      },
+      mustChangePassword: map['mustChangePassword'] == true ||
+          map['must_change_password'] == true,
       profileImageUrl: map['profileImageUrl'] ?? map['profile_image_url'],
       validIdUrl: map['validIdUrl'] ?? map['valid_id_url'],
       hasAcceptedTerms: map['hasAcceptedTerms'] ?? false,
@@ -66,6 +79,7 @@ class UserModel {
     String? email,
     String? phone,
     String? role,
+    bool? mustChangePassword,
     String? profileImageUrl,
     String? validIdUrl,
     bool? hasAcceptedTerms,
@@ -77,6 +91,7 @@ class UserModel {
       email: email ?? this.email,
       phone: phone ?? this.phone,
       role: role ?? this.role,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
       validIdUrl: validIdUrl ?? this.validIdUrl,
       hasAcceptedTerms: hasAcceptedTerms ?? this.hasAcceptedTerms,

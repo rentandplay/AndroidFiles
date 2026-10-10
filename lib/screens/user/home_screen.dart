@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -568,82 +570,96 @@ class HomeScreenState extends State<HomeScreen> {
       margin: margin,
       child: Padding(
         padding: const EdgeInsets.all(13),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            ClipRRect(
-              borderRadius: BorderRadius.circular(13),
-              child: Container(
-                width: 62,
-                height: 62,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? AppTheme.darkSurfaceVariant
-                    : const Color(0xFFF1F5F9),
-                child: imageItem?.buildImage(
-                      fit: BoxFit.cover,
-                      width: 62,
-                      height: 62,
-                    ) ??
-                    Icon(Icons.inventory_2_outlined,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    rental.itemName,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                        fontSize: 15, fontWeight: FontWeight.w800),
+            Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(13),
+                  child: Container(
+                    width: 62,
+                    height: 62,
+                    color: Theme.of(context).brightness == Brightness.dark
+                        ? AppTheme.darkSurfaceVariant
+                        : const Color(0xFFF1F5F9),
+                    child: imageItem?.buildImage(
+                          fit: BoxFit.cover,
+                          width: 62,
+                          height: 62,
+                        ) ??
+                        Icon(Icons.inventory_2_outlined,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant),
                   ),
-                  const SizedBox(height: 3),
-                  Text(
-                    code,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                  const SizedBox(height: 7),
-                  Text(
-                    detail,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: overdue || dueSoon
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                      color: detailColor,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: RentalStatusBadge(status: rental.normalizedStatus),
-                  ),
-                  if (rental.isActive &&
-                      rental.hasPendingReturnRequest &&
-                      dueDateIsSet) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      'Return requested · waiting for admin receipt',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        rental.itemName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 15, fontWeight: FontWeight.w800),
                       ),
-                    ),
-                  ],
-                ],
-              ),
+                      const SizedBox(height: 3),
+                      Text(
+                        code,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (!rental.isActive || !dueDateIsSet) ...[
+                        const SizedBox(height: 7),
+                        Text(
+                          detail,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: overdue || dueSoon
+                                ? FontWeight.w700
+                                : FontWeight.w500,
+                            color: detailColor,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 6),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child:
+                            RentalStatusBadge(status: rental.normalizedStatus),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
+            if (rental.isActive && dueDateIsSet) ...[
+              const SizedBox(height: 12),
+              _RentalCountdownProgress(rental: rental),
+            ],
+            if (rental.isActive &&
+                rental.hasPendingReturnRequest &&
+                dueDateIsSet) ...[
+              const SizedBox(height: 5),
+              Text(
+                'Return requested · waiting for admin receipt',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
           ],
         ),
       ),
@@ -735,4 +751,109 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
+}
+
+class _RentalCountdownProgress extends StatefulWidget {
+  const _RentalCountdownProgress({required this.rental});
+
+  final RentalModel rental;
+
+  @override
+  State<_RentalCountdownProgress> createState() =>
+      _RentalCountdownProgressState();
+}
+
+class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
+  late DateTime _now;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _now = DateTime.now();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() => _now = DateTime.now());
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  String _twoDigits(int value) => value.toString().padLeft(2, '0');
+
+  String _countdownLabel(Duration duration) {
+    final seconds = (duration.inMilliseconds.abs() + 999) ~/ 1000;
+    final days = seconds ~/ Duration.secondsPerDay;
+    final hours = (seconds ~/ Duration.secondsPerHour) % 24;
+    final minutes = (seconds ~/ Duration.secondsPerMinute) % 60;
+    final remainder = seconds % 60;
+    final clock = '${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(remainder)}';
+    return days > 0 ? '${days}d $clock' : clock;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final rental = widget.rental;
+    final remaining = rental.dueDate.difference(_now);
+    final overdue = remaining.isNegative;
+    final scheme = Theme.of(context).colorScheme;
+    final color = overdue
+        ? scheme.error
+        : remaining <= const Duration(hours: 24)
+            ? AppTheme.brandOrange
+            : scheme.primary;
+    final totalDuration = rental.dueDate.difference(rental.startDate);
+    final progress = rental.startDate.millisecondsSinceEpoch <= 0 ||
+            totalDuration.inMilliseconds <= 0
+        ? null
+        : (remaining.inMilliseconds / totalDuration.inMilliseconds)
+            .clamp(0.0, 1.0)
+            .toDouble();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.timer_outlined, size: 16, color: color),
+            const SizedBox(width: 5),
+            Text(
+              overdue ? 'Overdue by' : 'Due in',
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.onSurfaceVariant,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const Spacer(),
+            Text(
+              _countdownLabel(remaining),
+              style: TextStyle(
+                fontSize: 13,
+                color: color,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+          ],
+        ),
+        if (progress != null) ...[
+          const SizedBox(height: 7),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(6),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 6,
+              color: color,
+              backgroundColor: scheme.surfaceContainerHighest,
+              semanticsLabel: 'Rental time remaining',
+              semanticsValue: '${(progress * 100).round()} percent',
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }

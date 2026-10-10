@@ -96,7 +96,7 @@ class Esp32VerificationScreen extends StatelessWidget {
                         _buildRow('Payment Method', currentRental.paymentMethod),
                         _buildRow(
                           'Total Fee',
-                          '₱${(currentRental.rateFee + currentRental.deposit).toStringAsFixed(2)}',
+                          '₱${currentRental.rateFee.toStringAsFixed(2)}',
                         ),
                         _buildRow('Status', currentRental.status.toUpperCase(), isStatus: true),
                       ],

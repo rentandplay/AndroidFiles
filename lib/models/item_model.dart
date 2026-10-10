@@ -10,7 +10,6 @@ class ItemModel {
   final double rateHourly;
   final String? specialRate;
   final double? salePrice;
-  final double deposit;
   final double latePenalty;
   final bool isForSale;
   final String imageUrl;
@@ -27,7 +26,6 @@ class ItemModel {
     required this.rateHourly,
     this.specialRate,
     this.salePrice,
-    required this.deposit,
     this.latePenalty = 50.0,
     this.isForSale = false,
     required this.imageUrl,
@@ -111,7 +109,6 @@ class ItemModel {
       'rateHourly': rateHourly,
       'specialRate': specialRate,
       'salePrice': salePrice,
-      'deposit': deposit,
       'latePenalty': latePenalty,
       'isForSale': isForSale,
       'imageUrl': cleanImageUrl,
@@ -156,7 +153,6 @@ class ItemModel {
       salePrice: (map['sale_price'] ?? map['salePrice']) is num
           ? (map['sale_price'] ?? map['salePrice']).toDouble()
           : null,
-      deposit: (map['deposit_amount'] ?? map['deposit'] ?? 0.0).toDouble(),
       latePenalty: (map['late_penalty_rate'] ?? map['latePenalty'] ?? 50.0).toDouble(),
       isForSale: map['is_for_sale'] ?? map['isForSale'] ?? false,
       imageUrl: rawImageUrl,
@@ -177,7 +173,6 @@ class ItemModel {
     double? rateHourly,
     String? specialRate,
     double? salePrice,
-    double? deposit,
     double? latePenalty,
     bool? isForSale,
     String? imageUrl,
@@ -194,7 +189,6 @@ class ItemModel {
       rateHourly: rateHourly ?? this.rateHourly,
       specialRate: specialRate ?? this.specialRate,
       salePrice: salePrice ?? this.salePrice,
-      deposit: deposit ?? this.deposit,
       latePenalty: latePenalty ?? this.latePenalty,
       isForSale: isForSale ?? this.isForSale,
       imageUrl: imageUrl ?? this.imageUrl,
@@ -296,7 +290,6 @@ class ItemModel {
         ],
         rateHourly: 200.0,
         specialRate: '₱150 / 30 mins | ₱500 / 3 hours',
-        deposit: 200.0,
         isForSale: false,
         imageUrl: 'assets/images/Bike.png',
         status: 'available',
@@ -310,7 +303,6 @@ class ItemModel {
             'Complete set including 4 lightweight graphite paddles, 6 outdoor pickleballs, and a portable net system.',
         rateText: '₱120/hr',
         rateHourly: 120.0,
-        deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Pickleball_Set.png',
         status: 'available',
@@ -324,7 +316,6 @@ class ItemModel {
             'Includes 4 steel rackets, 6 durable shuttlecocks, and a quick-setup net for outdoor or indoor court play.',
         rateText: '₱100/hr',
         rateHourly: 100.0,
-        deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Badminton_Set.png',
         status: 'available',
@@ -339,7 +330,6 @@ class ItemModel {
         rateText: '₱50/hr, ₱200/5-hrs',
         rateHourly: 50.0,
         specialRate: '₱200 / 5 hours',
-        deposit: 50.0,
         isForSale: false,
         imageUrl: 'assets/images/Basketball.png',
         status: 'available',
@@ -354,7 +344,6 @@ class ItemModel {
         rateText: '₱50/hr, ₱200/5-hrs',
         rateHourly: 50.0,
         specialRate: '₱200 / 5 hours',
-        deposit: 50.0,
         isForSale: false,
         imageUrl: 'assets/images/Volleyball.png',
         status: 'available',
@@ -372,7 +361,6 @@ class ItemModel {
         rateHourly: 10.0,
         specialRate: '₱50 / 5 hours',
         salePrice: 150.0,
-        deposit: 50.0,
         isForSale: true,
         imageUrl: 'assets/images/Playing_Cards.png',
         status: 'available',
@@ -388,7 +376,6 @@ class ItemModel {
         rateHourly: 20.0,
         specialRate: '₱100 / 5 hours',
         salePrice: 300.0,
-        deposit: 50.0,
         isForSale: true,
         imageUrl: 'assets/images/UNO_Cards.png',
         status: 'available',
@@ -404,7 +391,6 @@ class ItemModel {
         rateHourly: 30.0,
         specialRate: '₱150 / 5 hours',
         salePrice: 450.0,
-        deposit: 100.0,
         isForSale: true,
         imageUrl: 'assets/images/Bingo.png',
         status: 'available',
@@ -422,7 +408,6 @@ class ItemModel {
         rateHourly: 30.0,
         specialRate:
             '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
-        deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Jenga.png',
         status: 'available',
@@ -438,7 +423,6 @@ class ItemModel {
         rateHourly: 30.0,
         specialRate:
             '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
-        deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Scrabble.png',
         status: 'available',
@@ -454,7 +438,6 @@ class ItemModel {
         rateHourly: 30.0,
         specialRate:
             '₱150 / 5 hrs | ₱250 Whole Stay (Lost piece penalty: ₱50/piece)',
-        deposit: 100.0,
         isForSale: false,
         imageUrl: 'assets/images/Chess.png',
         status: 'available',
@@ -470,7 +453,6 @@ class ItemModel {
             'PS4 Slim 1TB console bundled with 2 DualShock 4 wireless controllers, HDMI cable, and pre-installed top titles.',
         rateText: '₱250/hr',
         rateHourly: 250.0,
-        deposit: 300.0,
         isForSale: false,
         imageUrl: 'assets/images/PS4.png',
         status: 'available',
@@ -484,7 +466,6 @@ class ItemModel {
             'Nintendo Switch OLED console with Joy-Con controllers, dock, AC adapter, and protective carrying case.',
         rateText: '₱200/hr',
         rateHourly: 200.0,
-        deposit: 300.0,
         isForSale: false,
         imageUrl: 'assets/images/Nintendo_Switch.png',
         status: 'available',
@@ -498,8 +479,7 @@ class ItemModel {
             'PS5 Disc Edition console with DualSense wireless controller, ultra-high speed SSD, and 4K graphics support.',
         rateText: '₱120/day',
         rateHourly: 120.0,
-        specialRate: '₱120 / day (₱500 deposit)',
-        deposit: 500.0,
+        specialRate: '₱120 / day',
         isForSale: false,
         imageUrl: 'assets/images/PS4.png',
         status: 'available',
