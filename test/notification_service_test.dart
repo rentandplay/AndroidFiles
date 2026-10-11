@@ -19,6 +19,9 @@ Map<String, dynamic> event(String id) => {
     };
 
 class NotificationsApi extends MobileApiService {
+  final events = StreamController<Map<String, dynamic>>.broadcast();
+  @override
+  Stream<Map<String, dynamic>> watchRentalEvents() => events.stream;
   List<Map<String, dynamic>> incoming = [event('one')];
   bool failFetch = false, failRead = false;
   String? lastSince;
@@ -125,5 +128,41 @@ void main() {
     api.failRead = false;
     await service.markRead(['one']);
     expect(service.unreadCount, 0);
+  });
+  test(
+      'live rental events deliver mobile alerts once and reconnect resyncs missed notifications',
+      () async {
+    final api = NotificationsApi();
+    final service = RentalNotificationService(api: api, pushEnabled: false);
+    addTearDown(api.events.close);
+    addTearDown(service.dispose);
+    final alerts = <String>[];
+    final subscription = service.arrivals.listen((row) => alerts.add(row.id));
+    addTearDown(subscription.cancel);
+    service.setSession('customer');
+    await flush();
+    api.incoming = [event('two'), event('one')];
+    api.events.add({'event': 'rental.changed'});
+    await flush();
+    await flush();
+    expect(alerts, ['two']);
+    expect(service.unreadCount, 2);
+    api.events.add({'event': 'rental.changed'});
+    await flush();
+    await flush();
+    expect(alerts, ['two']);
+    service.setActive(false);
+    api.incoming = [event('three'), ...api.incoming];
+    api.events.add({'event': 'rental.changed'});
+    await flush();
+    expect(service.unreadCount, 2);
+    service.setActive(true);
+    await flush();
+    await flush();
+    api.events.add({'event': 'ready'});
+    await flush();
+    await flush();
+    expect(alerts, ['two', 'three']);
+    expect(service.unreadCount, 3);
   });
 }

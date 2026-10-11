@@ -14,9 +14,11 @@ import '../shared/transaction_ticket_dialog.dart';
 import 'return_equipment_screen.dart';
 
 class ActiveRentalsScreen extends StatefulWidget {
-  const ActiveRentalsScreen({super.key, this.onBrowse, this.isActive = true});
+  const ActiveRentalsScreen(
+      {super.key, this.onBrowse, this.isActive = true, this.api});
   final VoidCallback? onBrowse;
   final bool isActive;
+  final MobileApiService? api;
   @override
   State<ActiveRentalsScreen> createState() => _ActiveRentalsScreenState();
 }
@@ -25,17 +27,22 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     with WidgetsBindingObserver {
   List<RentalModel>? _rentals;
   StreamSubscription<Map<String, dynamic>>? _rentalEvents;
+  Timer? _rentalClock;
   bool _refreshing = false;
   bool _refreshAgain = false;
   bool _appResumed = true;
   String? _eventUid;
   String _error = '';
+  String _rentalFilter = 'All';
+  String _rentalQuery = '';
   final _cancelling = <String>{};
   final _uploadingProof = <String>{};
+  MobileApiService get _api => widget.api ?? MobileApiService.instance;
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _syncRentalClock();
   }
 
   @override
@@ -43,6 +50,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     super.didUpdateWidget(oldWidget);
     if (oldWidget.isActive != widget.isActive) {
       _syncRentalEvents();
+      _syncRentalClock();
       if (widget.isActive) _refreshRentals();
     }
   }
@@ -62,8 +70,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     _rentalEvents?.cancel();
     _rentalEvents = null;
     if (!widget.isActive || !_appResumed || _eventUid == null) return;
-    _rentalEvents =
-        MobileApiService.instance.watchRentalEvents().listen((event) {
+    _rentalEvents = _api.watchRentalEvents().listen((event) {
       if (!mounted) return;
       if (event['event'] == 'rental.changed') {
         _refreshRentals();
@@ -77,12 +84,27 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _appResumed = state == AppLifecycleState.resumed;
     _syncRentalEvents();
+    _syncRentalClock();
     if (_appResumed && widget.isActive) _refreshRentals();
+  }
+
+  void _syncRentalClock() {
+    _rentalClock?.cancel();
+    _rentalClock = null;
+    if (!widget.isActive ||
+        !_appResumed ||
+        !(_rentals ?? const <RentalModel>[]).any((rental) => rental.isActive)) {
+      return;
+    }
+    _rentalClock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
     _rentalEvents?.cancel();
+    _rentalClock?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -95,18 +117,23 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     }
     _refreshing = true;
     try {
-      final next = await MobileApiService.instance.listRentals();
+      final next = await _api.listRentals();
       if (mounted) {
         setState(() {
           _rentals = next;
           _error = '';
         });
+        _syncRentalClock();
       }
     } catch (error) {
       if (mounted) setState(() => _error = '$error');
     } finally {
       _refreshing = false;
-      if (_refreshAgain && mounted) {
+      if (_refreshAgain &&
+          mounted &&
+          widget.isActive &&
+          _appResumed &&
+          _eventUid != null) {
         _refreshAgain = false;
         unawaited(_refreshRentals());
       }
@@ -115,6 +142,69 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
 
   void _openBrowse() {
     widget.onBrowse?.call();
+  }
+
+  bool _holdEnded(RentalModel rental, DateTime now) =>
+      rental.canCancel &&
+      rental.holdExpiresAt != null &&
+      now.isAfter(rental.holdExpiresAt!);
+
+  bool _isOverdue(RentalModel rental, DateTime now) =>
+      rental.isActive &&
+      rental.dueDate.millisecondsSinceEpoch > 0 &&
+      now.isAfter(rental.dueDate);
+
+  bool _isDueSoon(RentalModel rental, DateTime now) {
+    if (!rental.isActive || rental.dueDate.millisecondsSinceEpoch <= 0) {
+      return false;
+    }
+    final remaining = rental.dueDate.difference(now);
+    return !remaining.isNegative && remaining <= const Duration(hours: 24);
+  }
+
+  bool _isReturning(RentalModel rental) =>
+      rental.hasPendingReturnRequest ||
+      rental.isAwaitingInspection ||
+      (rental.isPendingVerification &&
+          rental.normalizedStatus.contains('RETURN'));
+
+  bool _matchesRentalFilter(RentalModel rental, DateTime now) =>
+      switch (_rentalFilter) {
+        'Needs attention' => _holdEnded(rental, now) ||
+            _isOverdue(rental, now) ||
+            _isDueSoon(rental, now) ||
+            rental.hasPendingReturnRequest ||
+            (rental.paymentMethod.toUpperCase() == 'QR' &&
+                rental.paymentProofStatus == 'REJECTED'),
+        'Pickup' => rental.isAwaitingPickup,
+        'In use' => rental.isActive && !rental.hasPendingReturnRequest,
+        'Returning' => _isReturning(rental),
+        _ => true,
+      };
+
+  int _rentalPriority(RentalModel rental, DateTime now) {
+    if (_isOverdue(rental, now)) return 0;
+    if (rental.hasPendingReturnRequest) return 1;
+    if (_holdEnded(rental, now) ||
+        (rental.paymentMethod.toUpperCase() == 'QR' &&
+            rental.paymentProofStatus == 'REJECTED')) {
+      return 2;
+    }
+    if (rental.isAwaitingPickup &&
+        rental.deliveryStatus.toUpperCase() == 'PREPARED') {
+      return 3;
+    }
+    if (rental.isAwaitingPickup) return 4;
+    if (rental.isActive && rental.dueDate.millisecondsSinceEpoch > 0) {
+      final remaining = rental.dueDate.difference(now);
+      if (!remaining.isNegative && remaining <= const Duration(hours: 24)) {
+        return 5;
+      }
+    }
+    if (rental.isActive) return 6;
+    if (rental.isAwaitingInspection) return 7;
+    if (rental.isPendingAdminReview) return 8;
+    return 9;
   }
 
   Future<void> _cancelBooking(RentalModel rental) async {
@@ -136,7 +226,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     if (confirmed != true || !mounted) return;
     setState(() => _cancelling.add(rental.rentalId));
     try {
-      await MobileApiService.instance.cancelRental(rental.rentalId);
+      await _api.cancelRental(rental.rentalId);
       if (mounted) await _refreshRentals();
     } catch (error) {
       if (mounted) {
@@ -170,7 +260,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
         throw const MobileApiException('Choose a PNG or JPEG screenshot.');
       }
       setState(() => _uploadingProof.add(rental.rentalId));
-      await MobileApiService.instance.submitPaymentProof(
+      await _api.submitPaymentProof(
           rentalId: rental.rentalId,
           imageDataUrl:
               'data:image/${isPng ? 'png' : 'jpeg'};base64,${base64Encode(bytes)}',
@@ -193,8 +283,54 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthService>().currentUser;
+    final now = DateTime.now();
     final open = (_rentals ?? []).where((rental) => rental.isOpen).toList()
-      ..sort((a, b) => b.startDate.compareTo(a.startDate));
+      ..sort((a, b) {
+        final priority =
+            _rentalPriority(a, now).compareTo(_rentalPriority(b, now));
+        if (priority != 0) return priority;
+        final aDue = a.dueDate.millisecondsSinceEpoch > 0
+            ? a.dueDate.millisecondsSinceEpoch
+            : 0;
+        final bDue = b.dueDate.millisecondsSinceEpoch > 0
+            ? b.dueDate.millisecondsSinceEpoch
+            : 0;
+        if (aDue != bDue && aDue > 0 && bDue > 0) return aDue.compareTo(bDue);
+        return b.startDate.compareTo(a.startDate);
+      });
+    final query = _rentalQuery.trim().toLowerCase();
+    final visible = open
+        .where((rental) => _matchesRentalFilter(rental, now))
+        .where((rental) =>
+            query.isEmpty ||
+            [
+              rental.itemName,
+              rental.rentalCode,
+              rental.rentalId,
+              rental.itemId,
+            ].any((value) => value.toLowerCase().contains(query)))
+        .toList();
+    final overdueCount = open.where((rental) => _isOverdue(rental, now)).length;
+    final dueSoonCount = open.where((rental) => _isDueSoon(rental, now)).length;
+    final returnCount = open.where(_isReturning).length;
+    final attentionCount = open
+        .where((rental) =>
+            _holdEnded(rental, now) ||
+            _isOverdue(rental, now) ||
+            _isDueSoon(rental, now) ||
+            rental.hasPendingReturnRequest ||
+            (rental.paymentMethod.toUpperCase() == 'QR' &&
+                rental.paymentProofStatus == 'REJECTED'))
+        .length;
+    final filterCounts = <String, int>{
+      'All': open.length,
+      'Needs attention': attentionCount,
+      'Pickup': open.where((rental) => rental.isAwaitingPickup).length,
+      'In use': open
+          .where((rental) => rental.isActive && !rental.hasPendingReturnRequest)
+          .length,
+      'Returning': returnCount,
+    };
     return Scaffold(
       appBar: AppBar(title: const Text('My Rentals'), actions: [
         IconButton(
@@ -239,8 +375,57 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                           const SizedBox(height: 16),
                         ],
                         if (open.isNotEmpty) ...[
-                          _RentalListHeader(count: open.length),
+                          _RentalListHeader(
+                              count: open.length,
+                              overdueCount: overdueCount,
+                              dueSoonCount: dueSoonCount,
+                              returningCount: returnCount),
                           const SizedBox(height: 8),
+                        ],
+                        if (open.length > 1) ...[
+                          if (open.length > 3) ...[
+                            TextField(
+                                key: const ValueKey('rental-search'),
+                                onChanged: (value) =>
+                                    setState(() => _rentalQuery = value),
+                                decoration: InputDecoration(
+                                    hintText: 'Search item or rental code',
+                                    prefixIcon: const Icon(Icons.search),
+                                    suffixIcon: _rentalQuery.isEmpty
+                                        ? null
+                                        : IconButton(
+                                            tooltip: 'Clear search',
+                                            onPressed: () => setState(() {
+                                                  _rentalQuery = '';
+                                                }),
+                                            icon: const Icon(Icons.close)),
+                                    border: const OutlineInputBorder())),
+                            const SizedBox(height: 10),
+                          ],
+                          SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(children: [
+                                for (final entry in filterCounts.entries)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                        label: Text(
+                                            '${entry.key} · ${entry.value}'),
+                                        selected: _rentalFilter == entry.key,
+                                        onSelected: (_) => setState(
+                                            () => _rentalFilter = entry.key)),
+                                  ),
+                              ])),
+                          if (visible.length != open.length) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                                'Showing ${visible.length} of ${open.length} rentals',
+                                style: TextStyle(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant)),
+                          ],
+                          const SizedBox(height: 12),
                         ],
                         if (open.isEmpty && _rentals != null)
                           RentalEmptyState(
@@ -255,11 +440,23 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                     label: const Text('Browse equipment'),
                                   ),
                           ),
-                        for (final rental in open)
+                        if (visible.isEmpty && open.isNotEmpty)
+                          RentalEmptyState(
+                              title: 'No rentals match this view',
+                              message:
+                                  'Try another filter or search for an item or rental code.',
+                              action: TextButton(
+                                  onPressed: () => setState(() {
+                                        _rentalFilter = 'All';
+                                        _rentalQuery = '';
+                                      }),
+                                  child: const Text('Clear filters'))),
+                        for (final rental in visible)
                           Center(
                             child: ConstrainedBox(
                               constraints: const BoxConstraints(maxWidth: 680),
                               child: RentalBookingCard(
+                                key: ValueKey(rental.rentalId),
                                 rental: rental,
                                 onTicket: () => TransactionTicketDialog.show(
                                     context, rental),
@@ -271,11 +468,20 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                     ? null
                                     : () => _cancelBooking(rental),
                                 onReturn: () async {
+                                  final isTrackingReturn =
+                                      rental.hasPendingReturnRequest ||
+                                          rental.isAwaitingInspection ||
+                                          (rental.isPendingVerification &&
+                                              rental.normalizedStatus
+                                                  .contains('RETURN'));
                                   await Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                          builder: (_) => ReturnEquipmentScreen(
-                                              rental: rental)));
+                                          builder: (_) => isTrackingReturn
+                                              ? RentalReturnStatusScreen(
+                                                  rental: rental, api: _api)
+                                              : ReturnEquipmentScreen(
+                                                  rental: rental, api: _api)));
                                   if (mounted) _refreshRentals();
                                 },
                                 onRefresh: _refreshRentals,
@@ -307,7 +513,7 @@ class RentalBookingCard extends StatelessWidget {
       DateFormat('MMM d · h:mm a').format(value.toLocal());
 
   int _progressStep() {
-    if (rental.isAwaitingInspection) return 3;
+    if (rental.isAwaitingInspection) return 2;
     if (rental.isActive || rental.hasPendingReturnRequest) return 2;
     if (rental.isPendingVerification) {
       return rental.normalizedStatus.contains('RETURN') ? 2 : 1;
@@ -375,7 +581,9 @@ class RentalBookingCard extends StatelessWidget {
                             overdue
                                 ? 'Return request sent · overdue'
                                 : 'Return request sent',
-                            'Bring the equipment to the admin. Your rental timer stops when they receive it.'
+                            overdue
+                                ? 'Bring the equipment to the admin as soon as possible. Late charges are based on when the admin records physical receipt.'
+                                : 'Your request is recorded. The rental stays active and the timer stops when the admin physically receives the equipment.'
                           )
                         : rental.isPendingVerification
                             ? rental.normalizedStatus.contains('RETURN')
@@ -390,7 +598,7 @@ class RentalBookingCard extends StatelessWidget {
                             : rental.isAwaitingInspection
                                 ? (
                                     'Returned · inspection in progress',
-                                    'The admin is checking the item. No action is needed.'
+                                    'The rental timer stopped when the admin recorded receipt. They will inspect the item and finalize any balance.'
                                   )
                                 : rental.isActive
                                     ? (
@@ -469,17 +677,21 @@ class RentalBookingCard extends StatelessWidget {
               onPressed: onUploadPaymentProof,
               icon: const Icon(Icons.upload_file_rounded),
               label: const Text('Upload receipt'))
-        else if (rental.isAwaitingPickup)
+        else if (rental.isAwaitingPickup &&
+            rental.deliveryStatus.toUpperCase() == 'PREPARED')
           FilledButton.icon(
               onPressed: onTicket,
               icon: const Icon(Icons.qr_code_rounded),
               label: const Text('Show handoff QR'))
-        else if (rental.hasPendingReturnRequest || rental.isAwaitingInspection)
+        else if (rental.hasPendingReturnRequest ||
+            rental.isAwaitingInspection ||
+            (rental.isPendingVerification &&
+                rental.normalizedStatus.contains('RETURN')))
           OutlinedButton.icon(
-              onPressed: onTicket,
-              icon: const Icon(Icons.qr_code_rounded),
-              label: const Text('Show rental ticket'))
-        else
+              onPressed: onReturn,
+              icon: const Icon(Icons.assignment_return_outlined),
+              label: const Text('View return status'))
+        else if (rental.isActive && !rental.hasPendingReturnRequest)
           FilledButton.icon(
               onPressed: onReturn,
               icon: const Icon(Icons.assignment_return_rounded),
@@ -670,8 +882,12 @@ class _RentalPriceSummary extends StatelessWidget {
 }
 
 class _RentalListHeader extends StatelessWidget {
-  const _RentalListHeader({required this.count});
-  final int count;
+  const _RentalListHeader(
+      {required this.count,
+      required this.overdueCount,
+      required this.dueSoonCount,
+      required this.returningCount});
+  final int count, overdueCount, dueSoonCount, returningCount;
 
   @override
   Widget build(BuildContext context) {
@@ -695,6 +911,23 @@ class _RentalListHeader extends StatelessWidget {
             Text('$count rental${count == 1 ? '' : 's'} in progress',
                 style:
                     const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
+            if (overdueCount > 0 || dueSoonCount > 0 || returningCount > 0) ...[
+              const SizedBox(height: 2),
+              Text(
+                  [
+                    if (overdueCount > 0) '$overdueCount overdue',
+                    if (dueSoonCount > 0) '$dueSoonCount due soon',
+                    if (returningCount > 0) '$returningCount returning',
+                  ].join(' · '),
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: overdueCount > 0
+                          ? scheme.error
+                          : dueSoonCount > 0
+                              ? scheme.primary
+                              : scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600)),
+            ],
           ]),
         ),
       ]),
@@ -746,7 +979,7 @@ class _RentalNextStep extends StatelessWidget {
 class _RentalProgressTracker extends StatelessWidget {
   const _RentalProgressTracker({required this.step});
   final int step;
-  static const _labels = ['Request', 'Handoff', 'In use', 'Return'];
+  static const _labels = ['Request', 'Handoff', 'In use'];
 
   @override
   Widget build(BuildContext context) {
@@ -761,6 +994,7 @@ class _RentalProgressTracker extends StatelessWidget {
           child: CustomPaint(
             painter: _RentalProgressPainter(
                 step: step,
+                stepCount: _labels.length,
                 active: active,
                 track: track,
                 surface: scheme.surface),
@@ -789,10 +1023,11 @@ class _RentalProgressTracker extends StatelessWidget {
 class _RentalProgressPainter extends CustomPainter {
   const _RentalProgressPainter(
       {required this.step,
+      required this.stepCount,
       required this.active,
       required this.track,
       required this.surface});
-  final int step;
+  final int step, stepCount;
   final Color active, track, surface;
 
   @override
@@ -801,7 +1036,7 @@ class _RentalProgressPainter extends CustomPainter {
     final centerY = size.height / 2;
     final startX = radius;
     final endX = size.width - radius;
-    final spacing = (endX - startX) / 3;
+    final spacing = (endX - startX) / (stepCount - 1);
     final basePaint = Paint()
       ..color = track
       ..strokeWidth = 3
@@ -815,7 +1050,7 @@ class _RentalProgressPainter extends CustomPainter {
       canvas.drawLine(Offset(startX, centerY),
           Offset(startX + spacing * step, centerY), activePaint);
     }
-    for (var index = 0; index < 4; index++) {
+    for (var index = 0; index < stepCount; index++) {
       final center = Offset(startX + spacing * index, centerY);
       if (index == step) {
         canvas.drawCircle(
@@ -851,6 +1086,7 @@ class _RentalProgressPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _RentalProgressPainter oldDelegate) =>
       oldDelegate.step != step ||
+      oldDelegate.stepCount != stepCount ||
       oldDelegate.active != active ||
       oldDelegate.track != track ||
       oldDelegate.surface != surface;

@@ -27,6 +27,7 @@ class UiApi extends MobileApiService {
   Completer<Map<String, dynamic>>? pendingQuote;
   bool failQuote = false, failTicket = false;
   final requests = <Map<String, dynamic>>[];
+  Map<String, dynamic>? returnRecord;
   @override
   Future<Map<String, dynamic>> notifications(
           {String? before, String? since}) async =>
@@ -69,6 +70,7 @@ class UiApi extends MobileApiService {
   @override
   Future<Map<String, dynamic>> rentalRecord(String id) async {
     requests.add({'rental_id': id});
+    if (returnRecord != null) return Map<String, dynamic>.from(returnRecord!);
     return {
       'id': id,
       'status': 'REJECTED',
@@ -80,6 +82,35 @@ class UiApi extends MobileApiService {
       'final_reason': 'Equipment unavailable at the selected resort.'
     };
   }
+
+  @override
+  Future<void> requestReturn({
+    required String rentalId,
+    required String condition,
+    required String notes,
+  }) async {
+    requests.add({
+      'return_request': rentalId,
+      'condition': condition,
+      'notes': notes,
+    });
+    returnRecord = {
+      'id': rentalId,
+      'status': 'ACTIVE',
+      'item_name': 'Jenga',
+      'customer_id': 'c1',
+      'rental_code': 'R-123456',
+      'rental_fee': 150,
+      'due_at': DateTime.now()
+          .add(const Duration(hours: 1))
+          .toUtc()
+          .toIso8601String(),
+      'latest_return_request_status': 'PENDING_ADMIN_APPROVAL',
+    };
+  }
+
+  @override
+  Stream<Map<String, dynamic>> watchRentalEvents() => const Stream.empty();
 
   @override
   Future<Map<String, dynamic>> quoteRental(String id, int minutes) async {
@@ -96,7 +127,8 @@ class UiApi extends MobileApiService {
       throw const MobileApiException('Ticket service unavailable.');
     }
     return {
-      'status': 'PENDING_ADMIN_APPROVAL',
+      'status': 'APPROVED',
+      'delivery_status': 'PREPARED',
       'rental_code': 'R-123456',
       'hold_expires_at':
           DateTime.now().add(const Duration(minutes: 15)).toIso8601String()
@@ -105,7 +137,9 @@ class UiApi extends MobileApiService {
 
   @override
   Future<Map<String, dynamic>> adminRequest(String path,
-      {String method = 'GET', Map<String, dynamic>? body, bool forceRefresh = false}) async {
+      {String method = 'GET',
+      Map<String, dynamic>? body,
+      bool forceRefresh = false}) async {
     requests.add({'path': path, ...?body});
     if (body?['transactionCode'] != 'booking-qr') {
       throw const MobileApiException('This QR belongs to another booking.');
@@ -145,6 +179,7 @@ RentalModel sampleRental(String status) => RentalModel(
       paymentMethod: 'Cash',
       status: status,
       holdExpiresAt: DateTime.now().add(const Duration(minutes: 30)),
+      deliveryStatus: status == 'APPROVED' ? 'PREPARED' : '',
       receivedAt: status == 'RETURN_PENDING_INSPECTION' ? DateTime.now() : null,
     );
 
@@ -225,8 +260,7 @@ void main() {
             .onPressed,
         isNull);
     expect(find.text('₱0.00'), findsNothing);
-    api.pendingQuote!.complete(
-        {'rental_fee': 150, 'billed_minutes': 300});
+    api.pendingQuote!.complete({'rental_fee': 150, 'billed_minutes': 300});
     await tester.pumpAndSettle();
     final button = find.widgetWithText(FilledButton, 'Send rental request');
     expect(tester.getBottomRight(button).dy, lessThanOrEqualTo(780));
@@ -238,8 +272,7 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets(
-      'release verifies the prepared rental before confirming handoff',
+  testWidgets('release verifies the prepared rental before confirming handoff',
       (tester) async {
     final api = UiApi(), capture = GlobalKey();
     await render(
@@ -265,15 +298,14 @@ void main() {
     await tester.enterText(
         find.widgetWithText(TextFormField, 'Customer rental QR'),
         'wrong-booking');
-    await tester.tap(
-        find.widgetWithText(FilledButton, 'Verify customer rental'));
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Verify customer rental'));
     await tester.pumpAndSettle();
     expect(find.text('This QR belongs to another booking.'), findsOneWidget);
     await tester.enterText(
-        find.widgetWithText(TextFormField, 'Customer rental QR'),
-        'booking-qr');
-    await tester.tap(
-        find.widgetWithText(FilledButton, 'Verify customer rental'));
+        find.widgetWithText(TextFormField, 'Customer rental QR'), 'booking-qr');
+    await tester
+        .tap(find.widgetWithText(FilledButton, 'Verify customer rental'));
     await tester.pumpAndSettle();
     expect(find.text('Rental and prepared unit verified'), findsOneWidget);
     expect(find.text('Confirm the handoff'), findsOneWidget);
@@ -359,14 +391,14 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('the ticket retries and labels a pending booking hold accurately',
+  testWidgets(
+      'the ticket retries and labels a prepared handoff hold accurately',
       (tester) async {
     final api = UiApi()..failTicket = true;
     await render(
         tester,
         Scaffold(
-            body: BookingTicket(
-                rental: sampleRental('PENDING_ADMIN_APPROVAL'), api: api)),
+            body: BookingTicket(rental: sampleRental('APPROVED'), api: api)),
         dark: true);
     await tester.pumpAndSettle();
     expect(find.text('Ticket unavailable'), findsOneWidget);
@@ -374,8 +406,91 @@ void main() {
     await tester.tap(find.text('Try again'));
     await tester.pumpAndSettle();
     expect(find.text('R-123456'), findsOneWidget);
-    expect(find.textContaining('Review hold ends'), findsOneWidget);
-    expect(find.textContaining('Pickup before'), findsNothing);
+    expect(find.textContaining('Handoff before'), findsOneWidget);
+    expect(find.textContaining('Review hold ends'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('active rentals do not show the pre-handoff ticket',
+      (tester) async {
+    final rental = sampleRental('ACTIVE')
+        .copyWith(latestReturnRequestStatus: 'PENDING_ADMIN_APPROVAL');
+    await render(
+        tester,
+        Scaffold(
+            body: SingleChildScrollView(
+                child: RentalBookingCard(rental: rental))));
+    await tester.pumpAndSettle();
+    expect(find.text('Show rental ticket'), findsNothing);
+    expect(find.text('Show handoff QR'), findsNothing);
+    expect(find.text('Return request sent'), findsOneWidget);
+    expect(find.text('Request'), findsOneWidget);
+    expect(find.text('Handoff'), findsOneWidget);
+    expect(find.text('In use'), findsOneWidget);
+    expect(find.text('Return'), findsNothing);
+    expect(find.textContaining('late charges are based on'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('sending a return request opens its separate progress screen',
+      (tester) async {
+    final api = UiApi();
+    await render(tester,
+        ReturnEquipmentScreen(rental: sampleRental('ACTIVE'), api: api));
+    await tester.tap(find.widgetWithText(FilledButton, 'Send return request'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Return status'), findsOneWidget);
+    expect(find.text('Request sent'), findsOneWidget);
+    expect(find.text('Receipt check'), findsOneWidget);
+    expect(find.text('Inspection'), findsOneWidget);
+    expect(find.text('Returned'), findsOneWidget);
+    expect(find.text('In use'), findsNothing);
+    expect(api.requests.any((row) => row['return_request'] == 'r1'), isTrue);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets('admin rental queue highlights and filters due items',
+      (tester) async {
+    final now = DateTime.now();
+    final rentals = [
+      {
+        'id': 'late-rental',
+        'rental_code': 'R-LATE',
+        'item_name': 'Late basketball',
+        'customer_name': 'Customer A',
+        'status': 'ACTIVE',
+        'due_at':
+            now.subtract(const Duration(minutes: 90)).toUtc().toIso8601String(),
+        'rental_fee': 50,
+      },
+      {
+        'id': 'today-rental',
+        'rental_code': 'R-TODAY',
+        'item_name': 'Due today volleyball',
+        'customer_name': 'Customer B',
+        'status': 'ACTIVE',
+        'due_at': now.add(const Duration(hours: 1)).toUtc().toIso8601String(),
+        'rental_fee': 50,
+      },
+    ];
+    await render(
+        tester,
+        Scaffold(
+            body: RentalAdminView(
+                page: 'Rentals',
+                workspace: {'transactions': rentals},
+                onChanged: () async {})));
+    await tester.pumpAndSettle();
+    expect(find.text('1 overdue · 1 due today'), findsOneWidget);
+    expect(find.text('Overdue by 2h'), findsOneWidget);
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Overdue'));
+    await tester.pumpAndSettle();
+    expect(find.text('Late basketball'), findsOneWidget);
+    expect(find.text('Due today volleyball'), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
   });

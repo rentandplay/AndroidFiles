@@ -12,9 +12,12 @@ class AdminApiException implements Exception {
 
 /// Web and Android use the same authenticated backend and transaction rules.
 class AdminFirestoreService {
-  AdminFirestoreService._();
-  static final AdminFirestoreService instance = AdminFirestoreService._();
-  final FirebaseAuth _auth = FirebaseAuth.instance;
+  AdminFirestoreService({FirebaseAuth? auth, MobileApiService? api})
+      : _auth = auth ?? FirebaseAuth.instance,
+        _api = api ?? MobileApiService.instance;
+  static final AdminFirestoreService instance = AdminFirestoreService();
+  final FirebaseAuth _auth;
+  final MobileApiService _api;
   Map<String, dynamic>? _user;
   bool get hasSession => _auth.currentUser != null;
   Map<String, dynamic>? get currentUser => _user;
@@ -34,7 +37,8 @@ class AdminFirestoreService {
 
   Future<Map<String, dynamic>> restoreAdminSession() async {
     if (_auth.currentUser == null) {
-      throw const AdminApiException('Sign in with an active operator or owner account.',
+      throw const AdminApiException(
+          'Sign in with an active operator or owner account.',
           statusCode: 401);
     }
     final result = await _remote('/auth/me');
@@ -44,7 +48,7 @@ class AdminFirestoreService {
 
   Future<void> signOut() async {
     if (_auth.currentUser != null) {
-      await NotificationDevices.unregister(MobileApiService.instance);
+      await NotificationDevices.unregister(_api);
     }
     _user = null;
     await _auth.signOut();
@@ -57,7 +61,7 @@ class AdminFirestoreService {
     bool forceRefresh = false,
   }) async {
     try {
-      return await MobileApiService.instance.adminRequest(path,
+      return await _api.adminRequest(path,
           method: method, body: body, forceRefresh: forceRefresh);
     } on MobileApiException catch (error) {
       throw AdminApiException(error.message, statusCode: error.statusCode);
@@ -71,11 +75,14 @@ class AdminFirestoreService {
   Future<Map<String, dynamic>> loadWorkspace({bool forceRefresh = false}) =>
       _remote('/mobile/admin-workspace', forceRefresh: forceRefresh);
 
+  Stream<Map<String, dynamic>> watchRentalEvents() => _api.watchRentalEvents();
+
   Map<String, dynamic> dashboardFromWorkspace(Map<String, dynamic> workspace) =>
       Map<String, dynamic>.from(workspace['_dashboard'] as Map);
   Map<String, dynamic> inventoryFromWorkspace(Map<String, dynamic> workspace) =>
       Map<String, dynamic>.from(workspace['_inventory'] as Map);
-  Future<Map<String, dynamic>> getMap(String path, {bool forceRefresh = false}) =>
+  Future<Map<String, dynamic>> getMap(String path,
+          {bool forceRefresh = false}) =>
       _remote(path, forceRefresh: forceRefresh);
   Future<Map<String, dynamic>> post(String path,
           {Map<String, dynamic> body = const {}}) =>

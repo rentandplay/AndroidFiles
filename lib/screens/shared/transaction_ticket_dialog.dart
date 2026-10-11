@@ -47,15 +47,23 @@ class _BookingTicketState extends State<BookingTicket> {
             child: FutureBuilder<Map<String, dynamic>>(
               future: _ticket,
               builder: (context, snapshot) {
-                if (snapshot.hasError)
+                if (snapshot.hasError) {
+                  final alreadyHandedOff = widget.rental.isActive ||
+                      widget.rental.isAwaitingInspection ||
+                      widget.rental.hasPendingReturnRequest;
                   return RentalNotice(
                       isError: true,
-                      title: 'Ticket unavailable',
-                      message: '${snapshot.error}',
+                      title: alreadyHandedOff
+                          ? 'Handoff QR no longer available'
+                          : 'Ticket unavailable',
+                      message: alreadyHandedOff
+                          ? 'This rental has already been handed off. Use the return status on My Rentals; the admin records the return with the rental code.'
+                          : '${snapshot.error}',
                       action: TextButton.icon(
                           onPressed: _retry,
                           icon: const Icon(Icons.refresh),
                           label: const Text('Try again')));
+                }
                 if (!snapshot.hasData)
                   return const SizedBox(
                       height: 180,
@@ -65,8 +73,9 @@ class _BookingTicketState extends State<BookingTicket> {
                     widget.rental.normalizedStatus;
                 final expiry = DateTime.tryParse(
                     data['hold_expires_at']?.toString() ?? '');
-                final expired =
-                    expiry != null && DateTime.now().isAfter(expiry);
+                final expired = status == 'APPROVED' &&
+                    expiry != null &&
+                    DateTime.now().isAfter(expiry);
                 final image = data['image_data_url']?.toString() ?? '';
                 final code =
                     data['rental_code']?.toString() ?? widget.rental.rentalCode;
@@ -79,7 +88,9 @@ class _BookingTicketState extends State<BookingTicket> {
                   const SizedBox(height: 10),
                   RentalStatusBadge(status: status),
                   const SizedBox(height: 16),
-                  if (!expired && image.startsWith('data:image/png;base64,'))
+                  if (status == 'APPROVED' &&
+                      !expired &&
+                      image.startsWith('data:image/png;base64,'))
                     ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 270),
                         child: AspectRatio(

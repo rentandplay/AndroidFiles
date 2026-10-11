@@ -29,6 +29,50 @@ String _date(dynamic value) {
           .format(date.toUtc().add(const Duration(hours: 8)));
 }
 
+DateTime? _dueAt(Map<String, dynamic> row) {
+  final raw = _text(row['due_at']).trim();
+  if (raw.isEmpty) return null;
+  final zoned = RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(raw)
+      ? raw
+      : raw.replaceFirst(' ', 'T') + '+08:00';
+  return DateTime.tryParse(zoned)?.toUtc();
+}
+
+bool _isOverdue(Map<String, dynamic> row, DateTime now) {
+  final due = _dueAt(row);
+  return row['status'] == 'ACTIVE' && due != null && due.isBefore(now.toUtc());
+}
+
+bool _isDueToday(Map<String, dynamic> row, DateTime now) {
+  final due = _dueAt(row);
+  return row['status'] == 'ACTIVE' &&
+      due != null &&
+      !due.isBefore(now.toUtc()) &&
+      DateUtils.isSameDay(due.toLocal(), now);
+}
+
+int _rentalPriority(Map<String, dynamic> row, DateTime now,
+    {required bool returnsPage}) {
+  final status = _text(row['status']);
+  final requested =
+      row['latest_return_request_status'] == 'PENDING_ADMIN_APPROVAL';
+  if (returnsPage) {
+    if (status == 'RETURN_PENDING_INSPECTION') return 0;
+    if (status == 'ACTIVE' && requested) return 1;
+    if (_isOverdue(row, now)) return 2;
+    if (_isDueToday(row, now)) return 3;
+    return 4;
+  }
+  if (status == 'PENDING_ADMIN_APPROVAL') return 0;
+  if (status == 'ACTIVE' && requested) return 1;
+  if (status == 'PENDING_VERIFICATION') return 2;
+  if (_isOverdue(row, now)) return 3;
+  if (status == 'RETURN_PENDING_INSPECTION') return 4;
+  if (_isDueToday(row, now)) return 5;
+  if (status == 'APPROVED') return 6;
+  return 7;
+}
+
 class RentalAdminView extends StatefulWidget {
   const RentalAdminView(
       {super.key,
@@ -51,11 +95,13 @@ class RentalAdminView extends StatefulWidget {
 class _RentalAdminViewState extends State<RentalAdminView> {
   String _query = '', _stage = 'All';
   final _api = MobileApiService.instance;
+  Timer? _rentalClock;
 
   @override
   void initState() {
     super.initState();
     _scheduleRequestedScan();
+    _syncRentalClock();
   }
 
   @override
@@ -64,6 +110,22 @@ class _RentalAdminViewState extends State<RentalAdminView> {
     if (widget.scanRequestId != oldWidget.scanRequestId) {
       _scheduleRequestedScan();
     }
+    if (widget.page != oldWidget.page) _syncRentalClock();
+  }
+
+  void _syncRentalClock() {
+    _rentalClock?.cancel();
+    _rentalClock = null;
+    if (!['Rentals', 'Returns'].contains(widget.page)) return;
+    _rentalClock = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _rentalClock?.cancel();
+    super.dispose();
   }
 
   void _scheduleRequestedScan() {
@@ -233,7 +295,8 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                 _text(returnRequest['reported_condition'])
                                         .isEmpty
                                     ? 'Not recorded'
-                                    : _text(returnRequest['reported_condition'])),
+                                    : _text(
+                                        returnRequest['reported_condition'])),
                             if (_text(returnRequest['notes']).isNotEmpty)
                               Padding(
                                   padding:
@@ -273,26 +336,26 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                   TextButton(
                       onPressed: () => Navigator.pop(c),
                       child: const Text('Close')),
-                          if (row['status'] == 'PENDING_ADMIN_APPROVAL') ...[
+                  if (row['status'] == 'PENDING_ADMIN_APPROVAL') ...[
                     TextButton(
                         onPressed: () => open('reject'),
-                                child: const Text('Reject request')),
-                            if (row['payment_method'] != 'QR')
-                              FilledButton(
-                                  onPressed: () => open('approve'),
-                                  child: const Text('Approve rental request'))
-                            else if (row['payment_proof_status'] ==
-                                'PENDING_REVIEW') ...[
-                              TextButton(
-                                  onPressed: () => open('payment-reject'),
-                                  child: const Text('Reject payment proof')),
-                              FilledButton(
-                                  onPressed: () => open('payment-review'),
-                                  child: const Text('Review payment screenshot'))
-                            ] else
-                              const Padding(
-                                  padding: EdgeInsets.all(8),
-                                  child: Text('Waiting for payment screenshot')),
+                        child: const Text('Reject request')),
+                    if (row['payment_method'] != 'QR')
+                      FilledButton(
+                          onPressed: () => open('approve'),
+                          child: const Text('Approve rental request'))
+                    else if (row['payment_proof_status'] ==
+                        'PENDING_REVIEW') ...[
+                      TextButton(
+                          onPressed: () => open('payment-reject'),
+                          child: const Text('Reject payment proof')),
+                      FilledButton(
+                          onPressed: () => open('payment-review'),
+                          child: const Text('Review payment screenshot'))
+                    ] else
+                      const Padding(
+                          padding: EdgeInsets.all(8),
+                          child: Text('Waiting for payment screenshot')),
                   ],
                   if (row['status'] == 'APPROVED') ...[
                     TextButton(
@@ -300,27 +363,26 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                         child: const Text('Change unit')),
                     TextButton(
                         onPressed: () => open('reject'),
-                                child: const Text('Cancel request')),
+                        child: const Text('Cancel request')),
                     FilledButton(
-                                onPressed: () => open(
-                                    row['delivery_status'] == 'PREPARED'
-                                        ? 'release'
-                                        : 'prepare-delivery'),
-                                child: Text(row['delivery_status'] == 'PREPARED'
-                                    ? 'Confirm resort handoff'
-                                    : 'Prepare for delivery'))
+                        onPressed: () => open(
+                            row['delivery_status'] == 'PREPARED'
+                                ? 'release'
+                                : 'prepare-delivery'),
+                        child: Text(row['delivery_status'] == 'PREPARED'
+                            ? 'Confirm resort handoff'
+                            : 'Prepare for delivery'))
                   ],
-                  if (row['status'] == 'ACTIVE')
-                    ...[
-                      if (row['latest_return_request_status'] ==
-                          'PENDING_ADMIN_APPROVAL')
-                        TextButton(
-                            onPressed: () => open('reject-return'),
-                            child: const Text('Reject return request')),
-                      FilledButton(
-                          onPressed: () => open('receipt'),
-                          child: const Text('Record physical receipt')),
-                    ],
+                  if (row['status'] == 'ACTIVE') ...[
+                    if (row['latest_return_request_status'] ==
+                        'PENDING_ADMIN_APPROVAL')
+                      TextButton(
+                          onPressed: () => open('reject-return'),
+                          child: const Text('Reject return request')),
+                    FilledButton(
+                        onPressed: () => open('receipt'),
+                        child: const Text('Record physical receipt')),
+                  ],
                   if (row['status'] == 'RETURN_PENDING_INSPECTION')
                     FilledButton(
                         onPressed: () => open('complete-return'),
@@ -334,15 +396,25 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                 ]));
   }
 
+  bool _matchesStage(Map<String, dynamic> row, DateTime now) {
+    if (_stage == 'All') return true;
+    if (_stage == 'Overdue') return _isOverdue(row, now);
+    if (_stage == 'Due today') return _isDueToday(row, now);
+    if (_stage == 'Return requested') {
+      return row['status'] == 'ACTIVE' &&
+          row['latest_return_request_status'] == 'PENDING_ADMIN_APPROVAL';
+    }
+    return _stage == rentalStatusLabel(_text(row['status']));
+  }
+
   String? _nextAction(Map<String, dynamic> row) => switch (row['status']) {
         'PENDING_ADMIN_APPROVAL' => row['payment_method'] == 'QR'
             ? (row['payment_proof_status'] == 'PENDING_REVIEW'
                 ? 'payment-review'
                 : null)
             : 'approve',
-        'APPROVED' => row['delivery_status'] == 'PREPARED'
-            ? 'release'
-            : 'prepare-delivery',
+        'APPROVED' =>
+          row['delivery_status'] == 'PREPARED' ? 'release' : 'prepare-delivery',
         'ACTIVE' => 'receipt',
         'RETURN_PENDING_INSPECTION' => 'complete-return',
         _ => null,
@@ -382,6 +454,16 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   @override
   Widget build(BuildContext context) {
     final all = _rows(widget.workspace['transactions']);
+    final now = DateTime.now();
+    final active = all.where((row) => row['status'] == 'ACTIVE').toList();
+    final overdueCount = active.where((row) => _isOverdue(row, now)).length;
+    final dueTodayCount = active.where((row) => _isDueToday(row, now)).length;
+    final returnRequestedCount = active
+        .where((row) =>
+            row['latest_return_request_status'] == 'PENDING_ADMIN_APPROVAL')
+        .length;
+    final inspectionCount =
+        all.where((row) => row['status'] == 'RETURN_PENDING_INSPECTION').length;
     final filtered = all.where((row) {
       final status = row['status'];
       final relevant = widget.page == 'Rentals'
@@ -397,7 +479,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                   .contains(status)
               : true;
       return relevant &&
-          (_stage == 'All' || _stage == rentalStatusLabel(_text(status))) &&
+          _matchesStage(row, now) &&
           [
             row['rental_code'],
             row['item_name'],
@@ -405,7 +487,16 @@ class _RentalAdminViewState extends State<RentalAdminView> {
             row['item_code'],
             status
           ].join(' ').toLowerCase().contains(_query.toLowerCase());
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final priority = _rentalPriority(a, now,
+                returnsPage: widget.page == 'Returns')
+            .compareTo(
+                _rentalPriority(b, now, returnsPage: widget.page == 'Returns'));
+        if (priority != 0) return priority;
+        return (_dueAt(a)?.millisecondsSinceEpoch ?? 0)
+            .compareTo(_dueAt(b)?.millisecondsSinceEpoch ?? 0);
+      });
     return RefreshIndicator(
         onRefresh: widget.onChanged,
         child: ListView(
@@ -418,6 +509,26 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               const RentalNotice(
                   message:
                       '1. Review the request and verify QR payment proof if provided. 2. Scan the assigned unit at the shop. 3. At handoff, scan the customer QR, verify their ID and rental payment, and inspect the unit and accessories. The timer starts only after handoff is confirmed.'),
+              if (widget.page != 'Transaction History' &&
+                  (overdueCount > 0 ||
+                      dueTodayCount > 0 ||
+                      returnRequestedCount > 0 ||
+                      inspectionCount > 0)) ...[
+                const SizedBox(height: 10),
+                RentalNotice(
+                    title: [
+                      if (overdueCount > 0) '$overdueCount overdue',
+                      if (dueTodayCount > 0) '$dueTodayCount due today',
+                      if (returnRequestedCount > 0)
+                        '$returnRequestedCount return requested',
+                      if (inspectionCount > 0)
+                        '$inspectionCount awaiting inspection',
+                    ].join(' · '),
+                    isError: overdueCount > 0,
+                    icon: Icons.schedule_rounded,
+                    message:
+                        'Record physical receipt when the equipment is back. Rental time and late charges, if any, stop at receipt; inspection can be completed afterward.'),
+              ],
               const SizedBox(height: 12),
               Wrap(spacing: 8, runSpacing: 8, children: [
                 if (widget.page == 'Rentals')
@@ -447,6 +558,9 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               Wrap(spacing: 6, runSpacing: 6, children: [
                 for (final stage in [
                   'All',
+                  'Due today',
+                  'Overdue',
+                  'Return requested',
                   ...all
                       .map((row) => rentalStatusLabel(_text(row['status'])))
                       .toSet()
@@ -493,8 +607,28 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                           child:
                               RentalStatusBadge(status: _text(row['status']))),
                       const SizedBox(height: 12),
-                      if (row['status'] == 'ACTIVE')
+                      if (row['status'] == 'ACTIVE') ...[
                         RentalValueRow('Return by', _date(row['due_at'])),
+                        if (_isOverdue(row, now) ||
+                            _isDueToday(row, now) ||
+                            row['latest_return_request_status'] ==
+                                'PENDING_ADMIN_APPROVAL')
+                          RentalNotice(
+                              title: _isOverdue(row, now)
+                                  ? 'Return requested · overdue by ${((now.toUtc().difference(_dueAt(row)!).inMinutes + 59) ~/ 60).clamp(1, 999999)}h'
+                                  : _isDueToday(row, now)
+                                      ? row['latest_return_request_status'] ==
+                                              'PENDING_ADMIN_APPROVAL'
+                                          ? 'Return requested · due today'
+                                          : 'Due today'
+                                      : 'Customer requested a return',
+                              isError: _isOverdue(row, now),
+                              icon: Icons.assignment_return_outlined,
+                              message: row['latest_return_request_status'] ==
+                                      'PENDING_ADMIN_APPROVAL'
+                                  ? 'The rental remains active until you record physical receipt. Late charges, if any, use the receipt time.'
+                                  : 'Follow up on this return. Record physical receipt when the item is back; late charges use that receipt time.')
+                      ],
                       if (['APPROVED', 'PENDING_ADMIN_APPROVAL']
                           .contains(row['status']))
                         RentalValueRow(
@@ -510,9 +644,11 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                             icon: Icons.assignment_return_outlined,
                             message: [
                               'Reported condition: ${_text(_map(row['mobile_return_request'])['reported_condition']).isEmpty ? 'Not recorded' : _text(_map(row['mobile_return_request'])['reported_condition'])}.',
-                              if (_text(_map(row['mobile_return_request'])['notes'])
+                              if (_text(_map(
+                                      row['mobile_return_request'])['notes'])
                                   .isNotEmpty)
-                                _text(_map(row['mobile_return_request'])['notes']),
+                                _text(_map(
+                                    row['mobile_return_request'])['notes']),
                             ].join(' ')),
                       ],
                       if (row['balance_due'] != null)
@@ -748,11 +884,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               subtitle:
                   'At the delivery location, scan the rental QR shown in My Rentals. Equipment was already checked at the shop.',
               child: Column(children: [
-                _qr(
-                    _transaction,
-                    _manual
-                        ? 'Printed rental code'
-                        : 'Customer rental QR'),
+                _qr(_transaction,
+                    _manual ? 'Printed rental code' : 'Customer rental QR'),
                 _manualControl()
               ])),
         if (_verification.step == 2) ...[
@@ -905,7 +1038,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       return;
     }
     if (_action == 'prepare-delivery' &&
-        (_inventory.text.trim().isEmpty || _manual && _reason.text.trim().isEmpty)) {
+        (_inventory.text.trim().isEmpty ||
+            _manual && _reason.text.trim().isEmpty)) {
       setState(() => _error = _manual
           ? 'Enter the equipment code and reason for manual verification.'
           : 'Scan the assigned equipment QR at the shop.');
@@ -917,7 +1051,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       return;
     }
     if (_action == 'payment-reject' && _reason.text.trim().isEmpty) {
-      setState(() => _error = 'Enter why the payment screenshot is being rejected.');
+      setState(
+          () => _error = 'Enter why the payment screenshot is being rejected.');
       return;
     }
     if (_action == 'receipt' && !_receipt) {
@@ -1249,7 +1384,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                     crossAxisAlignment:
                                         CrossAxisAlignment.stretch,
                                     children: [
-                                      Text('Expected total: ${_money(_number(_row['rental_fee']))}'),
+                                      Text(
+                                          'Expected total: ${_money(_number(_row['rental_fee']))}'),
                                       if (_paymentProofLoading)
                                         const Padding(
                                             padding: EdgeInsets.all(24),
@@ -1264,8 +1400,10 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                       if ((_paymentProof?['reference'] ?? '')
                                           .toString()
                                           .isNotEmpty)
-                                        Text('Transfer reference: ${_paymentProof!['reference']}'),
-                                      if ((_paymentProof?['image_data_url'] ?? '')
+                                        Text(
+                                            'Transfer reference: ${_paymentProof!['reference']}'),
+                                      if ((_paymentProof?['image_data_url'] ??
+                                              '')
                                           .toString()
                                           .startsWith('data:image/'))
                                         Padding(
@@ -1290,14 +1428,16 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                           if (_action == 'payment-reject')
                             _field(_reason, 'Why this proof is invalid'),
                           if (_action == 'reject-return')
-                            _field(_reason, 'Reason for rejecting return request'),
+                            _field(
+                                _reason, 'Reason for rejecting return request'),
                           if (_action == 'prepare-delivery') ...[
                             RentalNotice(
                                 title: 'Shop preparation',
                                 icon: Icons.inventory_2_outlined,
                                 message:
                                     'Scan the QR sticker on the exact assigned unit before loading it for ${_text(_row['delivery_location']).isEmpty ? 'delivery' : _text(_row['delivery_location'])}. This does not start the rental timer.'),
-                            _qr(_inventory, 'Assigned equipment QR at the shop'),
+                            _qr(_inventory,
+                                'Assigned equipment QR at the shop'),
                             _manualControl(),
                           ],
                           if (_action == 'approve') ...[

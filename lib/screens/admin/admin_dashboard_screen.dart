@@ -19,17 +19,26 @@ class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({
     super.key,
     required this.onSignedOut,
+    this.api,
   });
 
   final VoidCallback onSignedOut;
+  final AdminFirestoreService? api;
 
   @override
   State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  final _api = AdminFirestoreService.instance;
+class _AdminDashboardScreenState extends State<AdminDashboardScreen>
+    with WidgetsBindingObserver {
+  AdminFirestoreService get _api =>
+      widget.api ?? AdminFirestoreService.instance;
   Timer? _refreshTimer;
+  Timer? _eventRefreshTimer;
+  StreamSubscription<Map<String, dynamic>>? _rentalEvents;
+  bool _appResumed = true;
+  bool _refreshAgain = false;
+  bool _forceNextRefresh = false;
   bool _loading = true;
   bool _refreshing = false;
   bool _leaving = false;
@@ -43,12 +52,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _appResumed = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     _bootstrap();
   }
 
   @override
   void dispose() {
-    _refreshTimer?.cancel();
+    _stopLiveUpdates();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -60,7 +73,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     try {
       await _api.restoreAdminSession();
       await _loadWorkspace();
-      if (mounted && !_leaving) _startAutoRefresh();
+      if (mounted && !_leaving) _startLiveUpdates();
     } on AdminApiException catch (error) {
       if (_isAuthFailure(error)) {
         await _logout();
@@ -71,19 +84,58 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         _loading = false;
         _connectionError = error.message;
       });
+      _startLiveUpdates();
     }
   }
 
-  void _startAutoRefresh() {
-    _refreshTimer?.cancel();
-    _refreshTimer = Timer.periodic(const Duration(minutes: 2), (_) {
-      if (mounted && !_leaving) unawaited(_loadWorkspace(quiet: true));
+  void _startLiveUpdates() {
+    if (!_appResumed || _leaving || !_api.hasSession || _rentalEvents != null) {
+      return;
+    }
+    _rentalEvents = _api.watchRentalEvents().listen((event) {
+      if (!mounted || !_appResumed || _leaving) return;
+      if (event['event'] == 'ready' || event['event'] == 'rental.changed') {
+        _eventRefreshTimer?.cancel();
+        _eventRefreshTimer = Timer(const Duration(milliseconds: 180), () {
+          if (mounted && _appResumed && !_leaving) {
+            unawaited(_loadWorkspace(quiet: true));
+          }
+        });
+      }
     });
+    // A foreground recovery check also picks up non-rental inventory edits.
+    _refreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (mounted && _appResumed && !_leaving) {
+        unawaited(_loadWorkspace(quiet: true));
+      }
+    });
+  }
+
+  void _stopLiveUpdates() {
+    _refreshTimer?.cancel();
+    _eventRefreshTimer?.cancel();
+    _rentalEvents?.cancel();
+    _rentalEvents = null;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appResumed = state == AppLifecycleState.resumed;
+    _stopLiveUpdates();
+    if (_appResumed && !_leaving) {
+      _startLiveUpdates();
+      unawaited(_loadWorkspace(quiet: true));
+    }
   }
 
   Future<void> _loadWorkspace(
       {bool quiet = false, bool forceRefresh = false}) async {
-    if (_refreshing || _leaving) return;
+    if (_leaving) return;
+    if (_refreshing) {
+      _refreshAgain = true;
+      _forceNextRefresh = _forceNextRefresh || forceRefresh;
+      return;
+    }
     if (!_api.hasSession) {
       _returnToLogin();
       return;
@@ -116,6 +168,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       });
     } finally {
       _refreshing = false;
+      if (_refreshAgain && mounted && _appResumed && !_leaving) {
+        _refreshAgain = false;
+        final force = _forceNextRefresh;
+        _forceNextRefresh = false;
+        unawaited(_loadWorkspace(quiet: true, forceRefresh: force));
+      }
     }
   }
 
@@ -125,10 +183,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Future<void> _logout() async {
     if (_leaving) return;
     _leaving = true;
+    _stopLiveUpdates();
     try {
       await _api.signOut();
     } catch (error) {
       _leaving = false;
+      _startLiveUpdates();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Could not sign out: $error')),
@@ -143,6 +203,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   void _returnToLogin() {
     if (_leaving) return;
     _leaving = true;
+    _stopLiveUpdates();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) widget.onSignedOut();
     });

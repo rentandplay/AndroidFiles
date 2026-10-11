@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -39,6 +40,17 @@ class _SseClient extends http.BaseClient {
   }
 }
 
+class _OpenSseClient extends http.BaseClient {
+  final frames = StreamController<List<int>>();
+  int requests = 0;
+  @override
+  Future<http.StreamedResponse> send(http.BaseRequest request) async {
+    requests++;
+    return http.StreamedResponse(frames.stream, 200,
+        headers: {'content-type': 'text/event-stream'});
+  }
+}
+
 void main() {
   test(
       'mobile parses authenticated rental SSE frames without opening a second API connection',
@@ -54,5 +66,19 @@ void main() {
       {'event': 'ready', 'revision': 3},
       {'event': 'rental.changed', 'revision': 4, 'rentalId': 'rental-42'},
     ]);
+  });
+  test(
+      'the progress screen and notifications share a single live API connection',
+      () async {
+    final client = _OpenSseClient();
+    final api = MobileApiService(auth: _FakeAuth(_FakeUser()), client: client);
+    final progress = api.watchRentalEvents().take(2).toList();
+    final notifications = api.watchRentalEvents().take(2).toList();
+    await Future<void>.delayed(Duration.zero);
+    client.frames.add(utf8.encode('event: ready\ndata: {"revision":1}\n\n'
+        'event: rental.changed\ndata: {"revision":2,"rentalId":"r1"}\n\n'));
+    expect(await progress, await notifications);
+    expect(client.requests, 1);
+    await client.frames.close();
   });
 }
