@@ -52,7 +52,8 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
 
       // Update User Profile in Firestore (Physical ID presentation & terms acceptance)
       await authService.updateValidIdUrl(user.uid, 'physical_id_presented');
-      await authService.updateTermsAcceptance(user.uid, true);
+      await authService.updateTermsAcceptance(user.uid, true,
+          termsVersion: rentalTermsVersion);
 
       if (!mounted) return;
 

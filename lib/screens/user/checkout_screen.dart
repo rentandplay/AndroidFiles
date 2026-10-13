@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../models/rental_model.dart';
@@ -8,6 +9,8 @@ import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/rental_ui.dart';
 import 'active_rentals_screen.dart';
+
+const String mobileRentalTermsVersion = '2026-10-13-rental-v1';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key, required this.item, this.api});
@@ -24,6 +27,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _customResortController = TextEditingController();
   String _paymentMethod = 'CASH';
   bool _isSubmitting = false, _quoteLoading = true, _paymentConfirmed = false;
+  bool _acceptedRentalTerms = false;
   Map<String, dynamic>? _quote;
   Map<String, dynamic>? _paymentInstructions;
   String? _paymentProofImage, _paymentProofName;
@@ -175,10 +179,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _quoteLoading = true;
       _quoteError = '';
       _quote = null;
+      _acceptedRentalTerms = false;
     });
     try {
       final quote =
-          await _api.quoteRental(widget.item.id, _selectedDurationMinutes);
+          await _api.quoteRental(widget.item.id, _selectedDurationMinutes,
+              stockGroupId: widget.item.stockGroupId);
       if (mounted && version == _quoteVersion) {
         setState(() {
           _quote = quote;
@@ -207,18 +213,101 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   num? get _total => _baseFee;
   int get _billedMinutes =>
       (_quote?['billed_minutes'] as num?)?.toInt() ?? _selectedDurationMinutes;
+  String get _estimatedDueText {
+    final value = _quote?['due_at'];
+    final parsed = value is String ? DateTime.tryParse(value)?.toLocal() : null;
+    return parsed == null
+        ? 'Confirmed after staff hands over the item'
+        : DateFormat('EEE, MMM d, yyyy · h:mm a').format(parsed);
+  }
+
+  String get _lateRateText {
+    final rate = _quote?['overtime_rate'];
+    if (rate is! num) return 'Shown in the rental fee details';
+    final unit = (_quote?['overtime_unit_minutes'] as num?)?.toInt() ?? 60;
+    return '${rentalMoney(rate)} per started late ${unit >= 1440 ? 'day' : 'hour'}';
+  }
+
   String get _packageLength => _billedMinutes % 60 == 0
       ? '${_billedMinutes ~/ 60} hour${_billedMinutes == 60 ? '' : 's'}'
       : '$_billedMinutes minutes';
+
+  Future<void> _showRentalTerms() async {
+    if (_quote == null || _quoteLoading) return;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Rental terms for this request'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                RentalValueRow('Equipment', widget.item.name),
+                RentalValueRow(
+                    'Requested duration', _durationLabel(_selectedDurationMinutes)),
+                RentalValueRow('Billed duration', _packageLength),
+                RentalValueRow('Estimated return', _estimatedDueText),
+                RentalValueRow('Rental fee', rentalMoney(_baseFee)),
+                RentalValueRow('Late rate', _lateRateText),
+                RentalValueRow(
+                    'Handoff location',
+                    _selectedResort == 'Other / Custom Resort'
+                        ? _customResortController.text.trim()
+                        : _selectedResort),
+                RentalValueRow('Payment',
+                    _paymentMethod == 'QR' ? 'InstaPay' : 'Cash at handoff'),
+                const SizedBox(height: 12),
+                const Text(
+                  'Your request must be approved by the admin. The rental timer starts when staff verifies and hands over the equipment. The return time above is an estimate based on a handoff now; My Rentals will show the confirmed due time after handoff.',
+                  style: TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Return the same equipment and all included accessories by the confirmed due time. A return request alone does not stop the timer; staff must record receipt of the item. Late fees use the rate shown above. Damage, loss, or missing accessories may result in recorded charges after inspection.',
+                  style: TextStyle(height: 1.45),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Show one physical Government or Student ID at handoff. For InstaPay, upload the successful transfer receipt; staff must verify the payment before approving the request.',
+                  style: TextStyle(height: 1.45),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Review later')),
+          FilledButton(
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Agree to these terms')),
+        ],
+      ),
+    );
+    if (accepted == true && mounted) {
+      setState(() => _acceptedRentalTerms = true);
+    }
+  }
+
   Future<void> _submitRentalRequest() async {
+    if (!_acceptedRentalTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Review and accept the rental terms first.')));
+      return;
+    }
     if (_quote == null || !_form.currentState!.validate()) return;
     FocusScope.of(context).unfocus();
     setState(() => _isSubmitting = true);
     try {
       final user = Provider.of<AuthService>(context, listen: false).currentUser;
-      if (user == null)
+      if (user == null) {
         throw const MobileApiException(
             'Please sign in again to request equipment.');
+      }
       if (_paymentMethod == 'QR' && !_paymentConfirmed) {
         throw const MobileApiException(
             'Confirm that the InstaPay transfer succeeded.');
@@ -229,6 +318,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
       await _api.createRentalRequest(
         itemId: widget.item.id,
+        stockGroupId: widget.item.stockGroupId,
         itemName: widget.item.name,
         itemCode: widget.item.qrCode,
         durationMinutes: _selectedDurationMinutes,
@@ -243,8 +333,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         paymentReference: _paymentReferenceController.text,
         expectedQuote: {
           'rentalFee': _baseFee,
-          'billedMinutes': _quote!['billed_minutes']
+          'billedMinutes': _quote!['billed_minutes'],
+          if (_quote!['overtime_rate'] is num)
+            'overtimeRate': _quote!['overtime_rate'],
         },
+        acceptedRentalTerms: true,
+        rentalTermsVersion: mobileRentalTermsVersion,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -253,9 +347,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       Navigator.pushReplacement(context,
           MaterialPageRoute(builder: (_) => const ActiveRentalsScreen()));
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Could not send your rental request. $error')));
+        if (error is MobileApiException &&
+            error.statusCode == 409 &&
+            error.message.toLowerCase().contains('rates changed')) {
+          _loadQuote();
+        }
+      }
     } finally {
       if (mounted) setState(() => _isSubmitting = false);
     }
@@ -275,7 +375,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           label: 'Send rental request',
           busy: _isSubmitting,
           onPressed:
-              !_quoteLoading && _quote != null ? _submitRentalRequest : null,
+                  !_quoteLoading && _quote != null && _acceptedRentalTerms
+                      ? _submitRentalRequest
+                      : null,
         ),
         body: Center(
           child: ConstrainedBox(
@@ -347,7 +449,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     }),
                       ]),
                       const SizedBox(height: 14),
-                      Text('Saang resort ka naka-check in?',
+                      Text('Which resort are you staying at?',
                           style: TextStyle(
                               color: scheme.onSurfaceVariant,
                               fontSize: 13,
@@ -358,7 +460,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             _selectedResort.isEmpty ? null : _selectedResort,
                         isExpanded: true,
                         decoration: const InputDecoration(
-                            labelText: 'Piliin ang resort'),
+                            labelText: 'Select a resort'),
                         items: privateResorts
                             .map((place) => DropdownMenuItem(
                                 value: place,
@@ -366,13 +468,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     overflow: TextOverflow.ellipsis)))
                             .toList(),
                         validator: (place) => place == null || place.isEmpty
-                            ? 'Piliin kung saang resort ka naka-check in.'
+                            ? 'Select the resort where you are staying.'
                             : null,
                         onChanged: _isSubmitting
                             ? null
                             : (place) {
                                 if (place != null) {
-                                  setState(() => _selectedResort = place);
+                                  setState(() {
+                                    _selectedResort = place;
+                                    _acceptedRentalTerms = false;
+                                  });
                                 }
                               },
                       ),
@@ -380,19 +485,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         const SizedBox(height: 8),
                         const RentalNotice(
                           icon: Icons.storefront_outlined,
-                          title: 'Kunin sa Rent & Play',
+                          title: 'Pick up at Rent & Play',
                           message:
-                              'Nasa ASRI Hotspring Resort ang Rent & Play, kaya hindi na ihahatid ang item. Ipakita ang rental QR at valid ID sa staff.',
+                              'Rent & Play is located at ASRI Hotspring Resort, so your equipment will not be delivered. Show your rental QR code and a valid ID to staff.',
                         ),
                       ] else if (_selectedResort.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         RentalNotice(
                           icon: Icons.delivery_dining_outlined,
                           title: _selectedResort == 'Other / Custom Resort'
-                              ? 'Ihahatid sa resort mo'
-                              : 'Ihahatid sa $_selectedResort',
+                              ? 'Delivery to your resort'
+                              : 'Delivery to $_selectedResort',
                           message:
-                              'Ihanda ang rental QR para makumpirma ng staff ang pag-abot ng item.',
+                              'Have your rental QR code ready so staff can confirm the handoff.',
                         ),
                         if (_selectedResort == 'Other / Custom Resort') ...[
                           const SizedBox(height: 10),
@@ -402,13 +507,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             maxLength: 120,
                             textInputAction: TextInputAction.next,
                             decoration: const InputDecoration(
-                                labelText: 'Pangalan ng resort',
-                                hintText: 'Ilagay ang resort'),
+                                labelText: 'Resort name',
+                                hintText: 'Enter a resort'),
+                            onChanged: (_) => setState(
+                                () => _acceptedRentalTerms = false),
                             validator: (value) =>
                                 _selectedResort != 'Other / Custom Resort'
                                     ? null
                                     : value == null || value.trim().isEmpty
-                                        ? 'Ilagay ang pangalan ng resort.'
+                                        ? 'Enter the resort name.'
                                         : null,
                           ),
                         ],
@@ -477,6 +584,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 _paymentConfirmed = false;
                                 _paymentProofImage = null;
                                 _paymentProofName = null;
+                                _acceptedRentalTerms = false;
                               });
                             },
                     ),
@@ -577,6 +685,48 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   'I completed this InstaPay transfer')),
                         ])),
               ],
+              RentalSection(
+                title: 'Rental agreement',
+                icon: Icons.fact_check_outlined,
+                subtitle:
+                    'Confirm the terms and charges for this specific rental request.',
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    RentalValueRow(
+                        'Requested duration',
+                        _durationLabel(_selectedDurationMinutes)),
+                    RentalValueRow('Billed duration', _packageLength),
+                    RentalValueRow('Estimated return', _estimatedDueText),
+                    RentalValueRow('Rental fee', rentalMoney(_baseFee)),
+                    RentalValueRow('Late rate', _lateRateText),
+                    const SizedBox(height: 8),
+                    CheckboxListTile(
+                      contentPadding: EdgeInsets.zero,
+                      controlAffinity: ListTileControlAffinity.leading,
+                      value: _acceptedRentalTerms,
+                      onChanged: _isSubmitting || _quoteLoading || _quote == null
+                          ? null
+                          : (value) => setState(() =>
+                              _acceptedRentalTerms = value ?? false),
+                      title: const Text(
+                          'I have read and agree to the terms for this rental request.'),
+                      subtitle: const Text(
+                          'Applies to the item, duration, estimated return time, price, handoff location, and payment method shown above.'),
+                    ),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: TextButton.icon(
+                        onPressed: _isSubmitting || _quoteLoading || _quote == null
+                            ? null
+                            : _showRentalTerms,
+                        icon: const Icon(Icons.description_outlined),
+                        label: const Text('Read rental terms'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
             ]),
               ),

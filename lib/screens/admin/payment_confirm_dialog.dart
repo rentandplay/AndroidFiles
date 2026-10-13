@@ -12,7 +12,8 @@ class PaymentConfirmDialog extends StatefulWidget {
     required this.rental,
   });
 
-  static Future<bool?> show(BuildContext context, {required RentalModel rental}) {
+  static Future<bool?> show(BuildContext context,
+      {required RentalModel rental}) {
     return showDialog<bool>(
       context: context,
       builder: (context) => PaymentConfirmDialog(rental: rental),
@@ -90,17 +91,23 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
             _buildRow('Customer Name', widget.rental.customerName),
             _buildRow('Item Rented', widget.rental.itemName),
             _buildRow('Delivery Resort', widget.rental.deliveryLocation),
-            _buildRow('Terminal', widget.rental.terminalId),
+            _buildRow('Terminal', widget.rental.terminalReference),
             _buildRow('Payment Method', widget.rental.paymentMethod),
-            _buildRow('Rental Fee', '₱${widget.rental.rateFee.toStringAsFixed(2)}'),
+            _buildRow(
+                'Rental Fee', '₱${widget.rental.rateFee.toStringAsFixed(2)}'),
             const Divider(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text('Total Paid', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                const Text('Total Paid',
+                    style:
+                        TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 Text(
                   '₱${totalAmount.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Color(0xFFF57C00)),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Color(0xFFF57C00)),
                 ),
               ],
             ),
@@ -123,7 +130,8 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
                       width: 48,
                       height: 48,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(Icons.qr_code_2, size: 40, color: Color(0xFFF57C00)),
+                      errorBuilder: (_, __, ___) => const Icon(Icons.qr_code_2,
+                          size: 40, color: Color(0xFFF57C00)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -150,7 +158,8 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
                   TextButton.icon(
                     style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFFF57C00),
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                     ),
                     onPressed: () {
                       EquipmentQrLabelDialog.show(
@@ -162,7 +171,9 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
                       );
                     },
                     icon: const Icon(Icons.print_outlined, size: 18),
-                    label: const Text('Print Label', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    label: const Text('Print Label',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 12)),
                   ),
                 ],
               ),
@@ -179,14 +190,16 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
           style: ElevatedButton.styleFrom(
             backgroundColor: const Color(0xFFF57C00),
             foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
           onPressed: _isUpdating ? null : _confirmPayment,
           child: _isUpdating
               ? const SizedBox(
                   height: 18,
                   width: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                  child: CircularProgressIndicator(
+                      strokeWidth: 2, color: Colors.white),
                 )
               : const Text('Confirm Received'),
         ),
@@ -201,17 +214,24 @@ class _PaymentConfirmDialogState extends State<PaymentConfirmDialog> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+          Text(value,
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
         ],
       ),
     );
   }
 
   String _getQrCode(RentalModel rental) {
-    final matched = ItemModel.findByCode(rental.itemId) ?? ItemModel.findByCode(rental.itemName);
-    if (matched != null && matched.qrCode != null && matched.qrCode!.isNotEmpty) {
+    final matched = ItemModel.findByCode(rental.itemId) ??
+        ItemModel.findByCode(rental.itemName);
+    if (matched != null &&
+        matched.qrCode != null &&
+        matched.qrCode!.isNotEmpty) {
       return matched.qrCode!;
     }
-    return rental.itemId.isNotEmpty ? rental.itemId.toUpperCase() : 'SPORT-EQUIP-001';
+    return rental.itemId.isNotEmpty
+        ? rental.itemId.toUpperCase()
+        : 'SPORT-EQUIP-001';
   }
 }

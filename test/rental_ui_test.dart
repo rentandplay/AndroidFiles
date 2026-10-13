@@ -113,7 +113,8 @@ class UiApi extends MobileApiService {
   Stream<Map<String, dynamic>> watchRentalEvents() => const Stream.empty();
 
   @override
-  Future<Map<String, dynamic>> quoteRental(String id, int minutes) async {
+  Future<Map<String, dynamic>> quoteRental(String id, int minutes,
+      {String? stockGroupId}) async {
     if (failQuote) {
       throw const MobileApiException('Price service unavailable. Try again.');
     }

@@ -21,7 +21,8 @@ class AuthService extends ChangeNotifier {
       required String email,
       required String password,
       required String phone,
-      required String verificationToken}) async {
+      required String verificationToken,
+      required String termsVersion}) async {
     final emailAddress = email.trim().toLowerCase();
     final existingUser = currentUser;
     final user = existingUser != null &&
@@ -39,6 +40,7 @@ class AuthService extends ChangeNotifier {
         verificationToken: verificationToken,
         name: name.trim().replaceAll(RegExp(r'\s+'), ' '),
         phone: phone.trim(),
+        termsVersion: termsVersion,
       );
     } catch (_) {
       // A backend or network failure can happen after Firebase creates the
@@ -137,11 +139,15 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> updateTermsAcceptance(String uid, bool accepted) async {
+  Future<void> updateTermsAcceptance(String uid, bool accepted,
+      {String? termsVersion}) async {
     if (currentUser?.uid != uid) {
       throw const MobileApiException('Sign in to accept the rental terms.');
     }
-    await _api.profile(method: 'PATCH', body: {'hasAcceptedTerms': accepted});
+    await _api.profile(method: 'PATCH', body: {
+      'hasAcceptedTerms': accepted,
+      if (accepted && termsVersion != null) 'termsVersion': termsVersion,
+    });
     notifyListeners();
   }
 

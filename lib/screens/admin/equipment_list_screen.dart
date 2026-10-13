@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../services/admin_firestore_service.dart';
+import '../../utils/maintenance_state.dart';
+import '../../utils/record_codes.dart';
 import '../shared/equipment_qr_label_dialog.dart';
 
 class EquipmentListScreen extends StatefulWidget {
@@ -230,15 +232,19 @@ class _EquipmentDetailsSheet extends StatefulWidget {
 }
 
 class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
-  late final Future<Map<String, dynamic>> _detail;
+  late Future<Map<String, dynamic>> _detail;
   bool _loadingQr = false;
   String _qrError = '';
 
   @override
   void initState() {
     super.initState();
+    _detail = _loadDetails();
+  }
+
+  Future<Map<String, dynamic>> _loadDetails() {
     final id = widget.item['id']?.toString() ?? '';
-    _detail = id.isEmpty
+    return id.isEmpty
         ? Future.value({'item': widget.item})
         : widget.api.getMap('/inventory/${Uri.encodeComponent(id)}');
   }
@@ -261,15 +267,19 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
       );
       if (!mounted) return;
       final rawMatrix = result['matrix'];
+      final qrCode = result['code']?.toString().trim() ?? '';
+      final qrToken = result['token']?.toString().trim() ?? '';
+      if (qrCode.isEmpty || qrToken.isEmpty) {
+        throw const AdminApiException(
+            'The QR label is incomplete. Refresh and try again.');
+      }
       final qrMatrix = rawMatrix is Map
           ? rawMatrix.map((key, value) => MapEntry('$key', value))
           : null;
       await EquipmentQrLabelDialog.show(
         context,
-        qrCode: result['code']?.toString() ??
-            _first(item, ['item_code', 'qrCode', 'qr_code']) ??
-            id,
-        qrData: result['token']?.toString() ?? '',
+        qrCode: qrCode,
+        qrData: qrToken,
         qrMatrix: qrMatrix,
         itemName:
             result['name']?.toString() ?? _first(item, ['name']) ?? 'Equipment',
@@ -277,8 +287,9 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
     } on AdminApiException catch (error) {
       if (mounted) setState(() => _qrError = error.message);
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() => _qrError = 'Could not prepare the QR label: $error');
+      }
     } finally {
       if (mounted) setState(() => _loadingQr = false);
     }
@@ -300,6 +311,7 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
               _first(item, ['effective_status', 'status']) ?? 'UNKNOWN';
           final condition = _first(item, ['condition_status', 'condition']);
           final rates = snapshot.data?['rates'];
+          final maintenance = snapshot.data?['maintenance'];
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const SizedBox(
@@ -341,6 +353,18 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
                     ],
                   ),
                   const SizedBox(height: 16),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        setState(() {
+                          _detail = _loadDetails();
+                        });
+                      },
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Refresh latest details'),
+                    ),
+                  ),
                   _DetailRow(
                     label: 'Category',
                     value: _first(item, ['category']) ?? 'Uncategorized',
@@ -367,6 +391,67 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
                       label: 'Open maintenance',
                       value: item['open_maintenance'].toString(),
                     ),
+                  if (item['total_quantity'] != null)
+                    _DetailRow(
+                      label: 'Equipment stock available',
+                      value:
+                          '${item['available_quantity'] ?? 0} / ${item['total_quantity']} units',
+                    ),
+                  if (status.toUpperCase() == 'UNDER_MAINTENANCE') ...[
+                    const SizedBox(height: 12),
+                    Text(
+                      'This unit is unavailable for rental. Other healthy units of the same equipment remain available.',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ],
+                  if (maintenance is List && maintenance.isNotEmpty) ...[
+                    const SizedBox(height: 18),
+                    Text('Unit maintenance history',
+                        style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    ...maintenance.take(3).whereType<Map>().map((ticket) {
+                      final repairCost = ticket['repair_cost'];
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '${recordReference(ticket, 'maintenance')} · ${maintenanceStageLabel(ticket)}',
+                                style: theme.textTheme.labelLarge,
+                              ),
+                              const SizedBox(height: 6),
+                              Text(ticket['reason']?.toString() ??
+                                  'Equipment inspection'),
+                              const SizedBox(height: 8),
+                              _DetailRow(
+                                  label: 'Assigned staff',
+                                  value: ticket['assigned_name']?.toString() ??
+                                      'Unassigned'),
+                              _DetailRow(
+                                  label: 'Target completion',
+                                  value: ticket['target_date']?.toString() ??
+                                      'Not scheduled'),
+                              _DetailRow(
+                                  label: 'Total repair cost',
+                                  value: repairCost is num
+                                      ? _money(repairCost)
+                                      : 'Not recorded'),
+                              if (ticket['details'] != null)
+                                Text(ticket['details'].toString()),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    Text(
+                      'Manage repairs, photos and final inspections in the web Maintenance page.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                    ),
+                  ],
                   if (item['description']?.toString().trim().isNotEmpty ==
                       true) ...[
                     const SizedBox(height: 10),

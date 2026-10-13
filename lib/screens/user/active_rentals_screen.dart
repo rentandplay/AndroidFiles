@@ -570,11 +570,11 @@ class RentalBookingCard extends StatelessWidget {
                                 : 'Approved · preparing delivery',
                         rental.deliveryStatus == 'PREPARED'
                             ? isRentAndPlayPickup
-                                ? 'Pumunta sa Rent & Play sa ASRI at ipakita ang rental QR at valid ID.'
-                                : 'Ready for ${rental.deliveryLocation}. Ipakita ang rental QR at valid ID sa handoff.'
+                                ? 'Go to Rent & Play at ASRI and show your rental QR code and valid ID.'
+                                : 'Ready for ${rental.deliveryLocation}. Show your rental QR code and valid ID at handoff.'
                             : isRentAndPlayPickup
-                                ? 'Inihahanda ng staff ang item. Magsisimula ang oras sa handoff.'
-                                : 'Inihahanda ang item para sa ${rental.deliveryLocation}. Hindi pa nagsisimula ang oras.'
+                                ? 'Staff is preparing your item. Rental time starts at handoff.'
+                                : 'Staff is preparing your item for ${rental.deliveryLocation}. Rental time has not started yet.'
                       )
                     : rental.isActive && rental.hasPendingReturnRequest
                         ? (
@@ -642,8 +642,7 @@ class RentalBookingCard extends StatelessWidget {
                 style:
                     const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 4),
-            Text(
-                rental.rentalCode.isEmpty ? rental.rentalId : rental.rentalCode,
+            Text(rental.displayReference,
                 style: TextStyle(
                     fontSize: 12,
                     color: Theme.of(context).colorScheme.onSurfaceVariant)),

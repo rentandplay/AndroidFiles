@@ -12,13 +12,15 @@ import '../admin/admin_dashboard_screen.dart';
 import '../../widgets/notification_widgets.dart';
 
 class CatalogScreen extends StatefulWidget {
-  const CatalogScreen({super.key});
+  const CatalogScreen({super.key, this.initialCategory = 'All', this.api});
+  final String initialCategory;
+  final MobileApiService? api;
 
   @override
-  State<CatalogScreen> createState() => _CatalogScreenState();
+  State<CatalogScreen> createState() => CatalogScreenState();
 }
 
-class _CatalogScreenState extends State<CatalogScreen> {
+class CatalogScreenState extends State<CatalogScreen> {
   String selectedCategory = 'All';
   UserModel? _currentUserModel;
   final TextEditingController _searchController = TextEditingController();
@@ -40,6 +42,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
   @override
   void initState() {
     super.initState();
+    selectedCategory = widget.initialCategory;
     _loadCatalog();
     _loadCurrentUserModel();
   }
@@ -66,7 +69,7 @@ class _CatalogScreenState extends State<CatalogScreen> {
       _catalogError = '';
     });
     try {
-      final records = await MobileApiService.instance.catalog();
+      final records = await (widget.api ?? MobileApiService.instance).catalog();
       if (mounted) {
         setState(() {
           catalogItems = records
@@ -116,6 +119,17 @@ class _CatalogScreenState extends State<CatalogScreen> {
     setState(() {
       _searchQuery = '';
       selectedCategory = 'All';
+      _availableOnly = false;
+      _savedOnly = false;
+    });
+  }
+
+  /// Opens a category from Home without retaining an unrelated search/filter.
+  void selectCategory(String category) {
+    _searchController.clear();
+    setState(() {
+      selectedCategory = category;
+      _searchQuery = '';
       _availableOnly = false;
       _savedOnly = false;
     });
@@ -466,13 +480,15 @@ class _CatalogScreenState extends State<CatalogScreen> {
       'RENTED' || 'RESERVED_PENDING' => Colors.orange,
       _ => Colors.red,
     };
-    final statusLabel = switch (statusKey) {
-      'AVAILABLE' => 'AVAILABLE',
-      'RESERVED_PENDING' => 'ON HOLD',
-      'RENTED' => 'RENTED',
-      'UNAVAILABLE' || '' => 'UNAVAILABLE',
-      _ => statusKey.replaceAll('_', ' '),
-    };
+    final statusLabel = item.totalQuantity > 1
+        ? '${item.availableQuantity}/${item.totalQuantity} AVAILABLE'
+        : switch (statusKey) {
+            'AVAILABLE' => 'AVAILABLE',
+            'RESERVED_PENDING' => 'ON HOLD',
+            'RENTED' => 'RENTED',
+            'UNAVAILABLE' || '' => 'UNAVAILABLE',
+            _ => statusKey.replaceAll('_', ' '),
+          };
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(

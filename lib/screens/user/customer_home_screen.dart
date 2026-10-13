@@ -22,6 +22,8 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   int _selectedIndex = 0;
   late bool _isSignedIn;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
+  final GlobalKey<CatalogScreenState> _catalogKey =
+      GlobalKey<CatalogScreenState>();
   final List<Widget?> _pages = List<Widget?>.filled(5, null);
 
   static const _destinations = <NavigationDestination>[
@@ -80,8 +82,9 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             onBrowse: () => _selectPage(1),
             onViewRentals: () => _selectPage(2),
             onItemSelected: _openItem,
+            onBrowseCategory: _browseCategory,
           ),
-        1 => const CatalogScreen(),
+        1 => CatalogScreen(key: _catalogKey),
         2 => ActiveRentalsScreen(
             key: const ValueKey('customer-active-rentals'),
             onBrowse: () => _selectPage(1),
@@ -98,6 +101,15 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
     ).then((_) {
       if (mounted) _homeKey.currentState?.refresh();
     });
+  }
+
+  void _browseCategory(String category) {
+    if (_pages[1] == null) {
+      _pages[1] = CatalogScreen(key: _catalogKey, initialCategory: category);
+    } else {
+      _catalogKey.currentState?.selectCategory(category);
+    }
+    _selectPage(1);
   }
 
   void _selectPage(int index) {

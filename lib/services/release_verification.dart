@@ -86,7 +86,7 @@ class ReleaseVerification extends ChangeNotifier {
       final rental = result['rental'];
       if (rental is! Map ||
           rental['id'] != rentalId ||
-          result['booking_verified'] != true ||
+          (result['rental_verified'] ?? result['booking_verified']) != true ||
           result['delivery_prepared'] != true) {
         throw StateError('The rental QR is not ready for delivery handoff.');
       }

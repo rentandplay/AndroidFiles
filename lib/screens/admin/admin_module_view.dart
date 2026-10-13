@@ -1,3 +1,4 @@
+import '../../utils/record_codes.dart';
 import 'rental_admin_view.dart';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -499,6 +500,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
               onSelected: (v) {
                 if (v == 'edit')
                   editItem(rows(widget.inventory['categories']), item: x);
+                if (v == 'quantity') manageQuantity(x);
                 if (v == 'qr') showQr(x);
                 if (v == 'archive' || v == 'restore') itemAction(x, v);
                 if (v == 'maintenance' || v == 'complete-maintenance')
@@ -507,6 +509,8 @@ class _AdminModuleViewState extends State<AdminModuleView> {
               itemBuilder: (_) => [
                     if (x['is_active'] != false)
                       const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                    const PopupMenuItem(
+                        value: 'quantity', child: Text('Manage quantity')),
                     const PopupMenuItem(value: 'qr', child: Text('QR code')),
                     if (x['status'] == 'AVAILABLE')
                       const PopupMenuItem(
@@ -525,6 +529,8 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                   ])
         ]),
         Wrap(spacing: 12, children: [
+          fact('Available',
+              '${n(x['available_quantity']).toInt()} / ${n(x['total_quantity']).toInt()} units'),
           fact('Rate', money(x['rental_rate']) + ' ' + label(x['rate_type'])),
           fact('Condition', label(x['condition_status']))
         ])
@@ -543,6 +549,9 @@ class _AdminModuleViewState extends State<AdminModuleView> {
     }
     final v = await form(item == null ? 'Add equipment' : 'Edit equipment', [
       Field('name', 'Equipment name', initial: s(current['name'])),
+      if (item == null)
+        const Field('quantity', 'Number of physical units',
+            initial: '1', numeric: true),
       Field('categoryId', 'Category',
           initial: s(current['category_id']),
           options: {for (final x in cats) s(x['id']): s(x['name'])}),
@@ -579,6 +588,9 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           initial: s(current['description']), multiline: true, optional: true),
     ]);
     if (!mounted || v == null) return;
+    final quantity = item == null ? int.tryParse(s(v['quantity'])) : null;
+    if (item == null && (quantity == null || quantity < 1 || quantity > 50))
+      return toast('Enter a whole number from 1 to 50.');
     String? image;
     final choosePhoto = await showDialog<bool>(
         context: context,
@@ -622,6 +634,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
         'latePenalty': n(v['latePenalty']),
         'pricingProductId': v['pricingProductId'],
         'description': v['description'],
+        if (item == null) 'quantity': quantity!,
         if (image != null) 'imageData': image
       };
       if (item == null) {
@@ -633,6 +646,28 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       await widget.onInventoryRefresh();
       await widget.onChanged();
     }, ok: item == null ? 'Equipment added.' : 'Equipment saved.');
+  }
+
+  Future<void> manageQuantity(Map<String, dynamic> x) async {
+    final groupId =
+        s(x['stock_group_id']).isEmpty ? s(x['id']) : s(x['stock_group_id']);
+    final total = n(x['total_quantity']).toInt();
+    final v = await form('Manage equipment quantity', [
+      Field('quantity', 'Total physical units',
+          initial: '$total', numeric: true)
+    ]);
+    if (v == null) return;
+    final quantity = int.tryParse(s(v['quantity']));
+    if (quantity == null || quantity < 0 || quantity > 50)
+      return toast('Enter a whole number from 0 to 50.');
+    await mutate(() async {
+      final body = <String, dynamic>{'quantity': quantity};
+      if (s(x['id']) == groupId && x['updated_at'] != null)
+        body['version'] = x['updated_at'];
+      await api.post('/inventory/$groupId/quantity', body: body);
+      await widget.onInventoryRefresh();
+      await widget.onChanged();
+    }, ok: 'Equipment quantity updated.');
   }
 
   Future<void> categoryManager(List<Map<String, dynamic>> cats) async {
@@ -908,10 +943,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                             ? 'Unknown equipment'
                             : s(x['item_name']),
                         style: const TextStyle(fontWeight: FontWeight.w800)),
-                    Text(
-                        s(x['rental_code'] ?? x['id']) +
-                            ' · ' +
-                            s(x['customer_name']),
+                    Text(recordReference(x) + ' · ' + s(x['customer_name']),
                         style: const TextStyle(color: Clr.muted, fontSize: 11))
                   ])),
               badge(rentalStatus(x))
@@ -940,7 +972,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       if (open.isEmpty) return toast('No active rentals to return.');
       fs.add(Field('rentalId', 'Active rental', options: {
         for (final x in open)
-          s(x['id']): s(x['rental_code'] ?? x['id']) +
+          s(x['id']): recordReference(x) +
               ' · ' +
               s(x['item_name']) +
               ' · ' +
@@ -975,7 +1007,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           optional: true));
     }
     fs.add(Field('terminalId', 'Terminal', options: {
-      for (final x in ts) s(x['id']): s(x['terminal_code'] ?? x['id'])
+      for (final x in ts) s(x['id']): recordReference(x, 'terminal')
     }));
     fs.add(const Field('condition', 'Condition', initial: 'GOOD', options: {
       'GOOD': 'Good',
@@ -1116,6 +1148,8 @@ class _AdminModuleViewState extends State<AdminModuleView> {
     final visible = checks
         .where((x) =>
             [
+              x['request_code'],
+              x['rental_code'],
               x['id'],
               x['rental_id'],
               x['verification_code'],
@@ -1162,7 +1196,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
           Column(children: [
             for (final x in terminals)
               ListTile(
-                  title: Text(s(x['terminal_code'] ?? x['id'])),
+                  title: Text(recordReference(x, 'terminal')),
                   subtitle:
                       Text(s(x['name']) + ' · ' + date(x['last_seen_at'])),
                   trailing: badge(label(x['status'])))
@@ -1193,9 +1227,11 @@ class _AdminModuleViewState extends State<AdminModuleView> {
                 fontWeight: FontWeight.bold, fontSize: 11, color: Clr.orange)),
         Text(
             'Code ' +
+                recordReference(x, 'verification') +
+                ' · Code ' +
                 s(x['verification_code']) +
                 ' · ' +
-                s(x['terminal_code'] ?? x['terminal_id']),
+                recordReference(x, 'terminal'),
             style: const TextStyle(color: Clr.muted, fontSize: 11)),
         Text(
             'Requested ' +
@@ -1835,25 +1871,32 @@ class _AdminModuleViewState extends State<AdminModuleView> {
   }
 
   Future<void> showQr(Map<String, dynamic> x) async {
-    final code = s(x['qrCode']).isNotEmpty
-        ? s(x['qrCode'])
-        : (s(x['code']).isNotEmpty
-            ? s(x['code'])
-            : (s(x['qr_code']).isNotEmpty ? s(x['qr_code']) : s(x['id'])));
-    final name = s(x['name']).isNotEmpty
-        ? s(x['name'])
-        : (s(x['itemName']).isNotEmpty ? s(x['itemName']) : s(x['item_name']));
-    final customer = s(x['customerName']).isNotEmpty
-        ? s(x['customerName'])
-        : s(x['customer_name']);
-
-    EquipmentQrLabelDialog.show(
-      context,
-      qrCode: code.isNotEmpty ? code : 'SPORT-EQUIP-001',
-      itemName: name.isNotEmpty ? name : 'Equipment Item',
-      customerName: customer.isNotEmpty ? customer : null,
-      rentalId: s(x['rentalId']).isNotEmpty ? s(x['rentalId']) : null,
-    );
+    final id = s(x['item_id'] ?? x['itemId'] ?? x['id']);
+    if (id.isEmpty)
+      return toast('Equipment reference unavailable. Refresh and try again.');
+    try {
+      final result =
+          await api.getMap('/inventory/' + Uri.encodeComponent(id) + '/qr');
+      final code = s(result['code']), token = s(result['token']);
+      if (code.isEmpty || token.isEmpty)
+        throw StateError('Equipment QR is incomplete.');
+      if (!mounted) return;
+      await EquipmentQrLabelDialog.show(
+        context,
+        qrCode: code,
+        qrData: token,
+        qrMatrix: result['matrix'] is Map
+            ? Map<String, dynamic>.from(result['matrix'] as Map)
+            : null,
+        itemName: s(result['name']).isEmpty ? 'Equipment' : s(result['name']),
+        customerName:
+            s(x['customer_name']).isEmpty ? null : s(x['customer_name']),
+        rentalId: s(x['rental_code']).isEmpty ? null : recordReference(x),
+      );
+    } catch (error) {
+      if (mounted)
+        toast('Could not load the equipment QR. Refresh and try again.');
+    }
   }
 
   Future<void> copyCsv(List<Map<String, dynamic>> data) async {
@@ -1871,7 +1914,7 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       ],
       for (final x in data)
         [
-          x['rental_code'] ?? x['id'],
+          recordReference(x),
           x['item_name'],
           x['item_code'],
           x['customer_name'],
@@ -2069,6 +2112,8 @@ class _AdminModuleViewState extends State<AdminModuleView> {
       ]));
   String money(dynamic x) => '₱' + n(x).toStringAsFixed(2);
   String label(dynamic x) => s(x)
+      .replaceAll('BOOKING', 'RENTAL')
+      .replaceAll('BOOKED', 'REQUESTED')
       .replaceAll('_', ' ')
       .split(' ')
       .map((w) =>

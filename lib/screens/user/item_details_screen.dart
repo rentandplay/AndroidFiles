@@ -122,9 +122,12 @@ class ItemDetailsScreen extends StatelessWidget {
   }
 
   String get _availabilityLabel => switch (item.status.toUpperCase()) {
-        'AVAILABLE' => 'Available now',
+        'AVAILABLE' => item.totalQuantity > 1
+            ? '${item.availableQuantity} of ${item.totalQuantity} available'
+            : 'Available now',
         'RESERVED_PENDING' => 'Temporarily on hold',
         'RENTED' => 'Currently rented',
+        'UNDER_MAINTENANCE' => 'All units are under maintenance',
         _ => 'Unavailable right now',
       };
 
@@ -230,6 +233,17 @@ class ItemDetailsScreen extends StatelessWidget {
                           ],
                         ),
                       ),
+                      if (item.totalQuantity > 1) ...[
+                        const SizedBox(height: 8),
+                        Text(
+                          '${item.availableQuantity} of ${item.totalQuantity} units can be rented now',
+                          style: TextStyle(
+                            color: scheme.onSurfaceVariant,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

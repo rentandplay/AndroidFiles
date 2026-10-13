@@ -15,6 +15,9 @@ class ItemModel {
   final String imageUrl;
   final String status;
   final String? qrCode;
+  final String? stockGroupId;
+  final int availableQuantity;
+  final int totalQuantity;
 
   ItemModel({
     required this.id,
@@ -31,6 +34,9 @@ class ItemModel {
     required this.imageUrl,
     this.status = 'available',
     this.qrCode,
+    this.stockGroupId,
+    this.availableQuantity = 1,
+    this.totalQuantity = 1,
   });
 
   String get cleanImageUrl {
@@ -143,23 +149,27 @@ class ItemModel {
       description:
           map['description'] ?? 'Equipment rental for indoor or outdoor play.',
       rateText: map['rate_text'] ?? map['rateText'] ?? '',
-      rateOptions: ((map['rate_options'] ?? map['rateOptions']) as List? ??
-              const [])
-          .whereType<Map>()
-          .map((option) => Map<String, dynamic>.from(option))
-          .toList(growable: false),
+      rateOptions:
+          ((map['rate_options'] ?? map['rateOptions']) as List? ?? const [])
+              .whereType<Map>()
+              .map((option) => Map<String, dynamic>.from(option))
+              .toList(growable: false),
       rateHourly: (map['rental_rate'] ?? map['rateHourly'] ?? 0.0).toDouble(),
       specialRate: map['specialRate'],
       salePrice: (map['sale_price'] ?? map['salePrice']) is num
           ? (map['sale_price'] ?? map['salePrice']).toDouble()
           : null,
-      latePenalty: (map['late_penalty_rate'] ?? map['latePenalty'] ?? 50.0).toDouble(),
+      latePenalty:
+          (map['late_penalty_rate'] ?? map['latePenalty'] ?? 50.0).toDouble(),
       isForSale: map['is_for_sale'] ?? map['isForSale'] ?? false,
       imageUrl: rawImageUrl,
       status: map['can_rent'] == false && map['status'] == 'AVAILABLE'
           ? 'unavailable'
           : map['status'] ?? 'available',
-      qrCode: map['qrCode'] ?? map['item_code'] ?? map['qr_code'],
+      qrCode: map['item_code'] ?? map['qrCode'] ?? map['qr_code'],
+      stockGroupId: map['stock_group_id']?.toString(),
+      availableQuantity: (map['available_quantity'] as num?)?.toInt() ?? 1,
+      totalQuantity: (map['total_quantity'] as num?)?.toInt() ?? 1,
     );
   }
 
@@ -178,6 +188,9 @@ class ItemModel {
     String? imageUrl,
     String? status,
     String? qrCode,
+    String? stockGroupId,
+    int? availableQuantity,
+    int? totalQuantity,
   }) {
     return ItemModel(
       id: id ?? this.id,
@@ -194,6 +207,9 @@ class ItemModel {
       imageUrl: imageUrl ?? this.imageUrl,
       status: status ?? this.status,
       qrCode: qrCode ?? this.qrCode,
+      stockGroupId: stockGroupId ?? this.stockGroupId,
+      availableQuantity: availableQuantity ?? this.availableQuantity,
+      totalQuantity: totalQuantity ?? this.totalQuantity,
     );
   }
 

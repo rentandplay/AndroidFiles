@@ -26,7 +26,9 @@ class Esp32VerificationScreen extends StatelessWidget {
             .snapshots(),
         builder: (context, snapshot) {
           RentalModel currentRental = rental;
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.data() != null) {
+          if (snapshot.hasData &&
+              snapshot.data != null &&
+              snapshot.data!.data() != null) {
             currentRental = RentalModel.fromMap(
               snapshot.data!.data() as Map<String, dynamic>,
               id: snapshot.data!.id,
@@ -47,7 +49,9 @@ class Esp32VerificationScreen extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: isUnlocked ? Colors.green.shade50 : Colors.orange.shade50,
+                    color: isUnlocked
+                        ? Colors.green.shade50
+                        : Colors.orange.shade50,
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
@@ -61,7 +65,9 @@ class Esp32VerificationScreen extends StatelessWidget {
 
                 // Status Title & Subtitle
                 Text(
-                  isUnlocked ? 'Cabinet Unlocked!' : 'Awaiting Payment & Unlock',
+                  isUnlocked
+                      ? 'Cabinet Unlocked!'
+                      : 'Awaiting Payment & Unlock',
                   style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -74,7 +80,7 @@ class Esp32VerificationScreen extends StatelessWidget {
                 Text(
                   isUnlocked
                       ? 'The ESP32 Smart Cabinet door is open. Please retrieve your ${currentRental.itemName}.'
-                      : 'Your request for ${currentRental.itemName} is sent to Terminal ${currentRental.terminalId}. Admin is reviewing payment.',
+                      : 'Your request for ${currentRental.itemName} is sent to Terminal ${currentRental.terminalReference}. Admin is reviewing payment.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(color: Colors.grey, fontSize: 14),
                 ),
@@ -84,21 +90,24 @@ class Esp32VerificationScreen extends StatelessWidget {
                 // Rental Details Card
                 Card(
                   elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildRow('Rental ID', currentRental.rentalId.substring(0, 8).toUpperCase()),
+                        _buildRow('Rental ID', currentRental.displayReference),
                         _buildRow('Item Name', currentRental.itemName),
-                        _buildRow('Terminal', currentRental.terminalId),
-                        _buildRow('Payment Method', currentRental.paymentMethod),
+                        _buildRow('Terminal', currentRental.terminalReference),
+                        _buildRow(
+                            'Payment Method', currentRental.paymentMethod),
                         _buildRow(
                           'Total Fee',
                           '₱${currentRental.rateFee.toStringAsFixed(2)}',
                         ),
-                        _buildRow('Status', currentRental.status.toUpperCase(), isStatus: true),
+                        _buildRow('Status', currentRental.status.toUpperCase(),
+                            isStatus: true),
                       ],
                     ),
                   ),
@@ -121,13 +130,15 @@ class Esp32VerificationScreen extends StatelessWidget {
                     onPressed: () {
                       Navigator.pushAndRemoveUntil(
                         context,
-                        MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
+                        MaterialPageRoute(
+                            builder: (_) => const CustomerHomeScreen()),
                         (route) => false,
                       );
                     },
                     child: const Text(
                       'Back to Home Catalog',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      style:
+                          TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                     ),
                   ),
                 ),

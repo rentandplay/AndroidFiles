@@ -5,11 +5,17 @@ const rentAndPlayPickupLocation = 'Rent & Play at ASRI Hotspring Resort';
 class RentalModel {
   final String rentalId;
   final String itemId;
+  final String stockGroupId;
   final String itemName;
   final String? itemImageUrl;
   final String customerId;
   final String customerName;
   final String terminalId;
+  final String terminalCode;
+  String get displayReference =>
+      rentalCode.trim().isEmpty ? 'Not assigned' : rentalCode.trim();
+  String get terminalReference =>
+      terminalCode.trim().isEmpty ? 'Not assigned' : terminalCode.trim();
   final String deliveryLocation; // Pickup point or resort delivery location
   final DateTime startDate;
   final DateTime dueDate;
@@ -96,11 +102,13 @@ class RentalModel {
   RentalModel({
     required this.rentalId,
     required this.itemId,
+    this.stockGroupId = '',
     required this.itemName,
     this.itemImageUrl,
     required this.customerId,
     required this.customerName,
     required this.terminalId,
+    this.terminalCode = '',
     this.deliveryLocation = rentAndPlayPickupLocation,
     required this.startDate,
     required this.dueDate,
@@ -129,11 +137,13 @@ class RentalModel {
     return {
       'rentalId': rentalId,
       'itemId': itemId,
+      'stock_group_id': stockGroupId,
       'itemName': itemName,
       'item_image_url': itemImageUrl,
       'customerId': customerId,
       'customerName': customerName,
       'terminalId': terminalId,
+      if (terminalCode.isNotEmpty) 'terminal_code': terminalCode,
       'deliveryLocation': deliveryLocation,
       'startDate': Timestamp.fromDate(startDate),
       'dueDate': Timestamp.fromDate(dueDate),
@@ -190,6 +200,7 @@ class RentalModel {
     return RentalModel(
       rentalId: id ?? text(map['id'] ?? map['rentalId']),
       itemId: text(map['item_id'] ?? map['itemId']),
+      stockGroupId: text(map['stock_group_id']),
       itemName: text(map['item_name'] ?? map['itemName'], 'Equipment'),
       itemImageUrl: optionalText(
           map['item_image_url'] ?? map['image_url'] ?? map['imageUrl']),
@@ -233,6 +244,7 @@ class RentalModel {
       latestReturnRequestStatus: text(map['latest_return_request_status'] ??
           map['latestReturnRequestStatus']),
       rentalCode: text(map['rental_code']),
+      terminalCode: text(map['terminal_code'] ?? map['terminalCode']),
       holdExpiresAt: parseDate(map['hold_expires_at']),
       receivedAt: parseDate(map['received_at']),
       balanceDue: amount(map['balance_due']),
@@ -248,11 +260,13 @@ class RentalModel {
   RentalModel copyWith({
     String? rentalId,
     String? itemId,
+    String? stockGroupId,
     String? itemName,
     String? itemImageUrl,
     String? customerId,
     String? customerName,
     String? terminalId,
+    String? terminalCode,
     String? deliveryLocation,
     DateTime? startDate,
     DateTime? dueDate,
@@ -273,11 +287,16 @@ class RentalModel {
     return RentalModel(
       rentalId: rentalId ?? this.rentalId,
       itemId: itemId ?? this.itemId,
+      stockGroupId: stockGroupId ?? this.stockGroupId,
       itemName: itemName ?? this.itemName,
       itemImageUrl: itemImageUrl ?? this.itemImageUrl,
       customerId: customerId ?? this.customerId,
       customerName: customerName ?? this.customerName,
       terminalId: terminalId ?? this.terminalId,
+      terminalCode: terminalCode ??
+          (terminalId == null || terminalId == this.terminalId
+              ? this.terminalCode
+              : ''),
       deliveryLocation: deliveryLocation ?? this.deliveryLocation,
       startDate: startDate ?? this.startDate,
       dueDate: dueDate ?? this.dueDate,

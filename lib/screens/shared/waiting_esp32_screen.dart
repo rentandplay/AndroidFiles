@@ -26,7 +26,8 @@ class WaitingEsp32Screen extends StatefulWidget {
 
 class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
   bool _isProcessingSuccess = false;
-  int _secondsRemaining = 60; // 60-second countdown timer for ESP32 hardware verification
+  int _secondsRemaining =
+      60; // 60-second countdown timer for ESP32 hardware verification
   Timer? _countdownTimer;
   StreamSubscription? _connectionSub;
 
@@ -66,7 +67,8 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
     if (_isProcessingSuccess) return;
 
     final rentalService = Provider.of<RentalService>(context, listen: false);
-    await rentalService.cancelTransaction(widget.rental.rentalId, '60-second ESP32 hardware timeout');
+    await rentalService.cancelTransaction(
+        widget.rental.rentalId, '60-second ESP32 hardware timeout');
 
     if (!mounted) return;
 
@@ -87,7 +89,8 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
         ),
         actions: [
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red, foregroundColor: Colors.white),
             onPressed: () {
               Navigator.of(ctx).pop();
               Navigator.pushAndRemoveUntil(
@@ -122,6 +125,7 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
       MaterialPageRoute(
         builder: (_) => ConnectionErrorScreen(
           terminalId: widget.rental.terminalId,
+          terminalCode: widget.rental.terminalReference,
           onRetry: () {
             Navigator.pop(context);
             _handleTransactionSuccess(); // Bypass offline terminal and complete transaction locally
@@ -191,7 +195,8 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
               const Icon(Icons.check_circle, color: Colors.green, size: 28),
@@ -243,11 +248,13 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
   @override
   Widget build(BuildContext context) {
     final rentalService = Provider.of<RentalService>(context);
-    final headerColor = widget.isReturn ? Colors.red.shade700 : const Color(0xFFF57C00);
+    final headerColor =
+        widget.isReturn ? Colors.red.shade700 : const Color(0xFFF57C00);
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isReturn ? 'Return Hardware Sync' : 'Rental Hardware Sync'),
+        title: Text(
+            widget.isReturn ? 'Return Hardware Sync' : 'Rental Hardware Sync'),
         centerTitle: true,
         automaticallyImplyLeading: false,
       ),
@@ -259,12 +266,18 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
           // App listens in real-time to the Firestore transaction document.
           // When the status field transitions to RENTED or COMPLETED, or hardwareConfirmed becomes true,
           // the app triggers success navigation with haptic feedback.
-          if (snapshot.hasData && snapshot.data != null && snapshot.data!.data() != null) {
+          if (snapshot.hasData &&
+              snapshot.data != null &&
+              snapshot.data!.data() != null) {
             final data = snapshot.data!.data()!;
-            final String status = (data['status'] ?? '').toString().toUpperCase();
+            final String status =
+                (data['status'] ?? '').toString().toUpperCase();
             final bool hardwareConfirmed = data['hardwareConfirmed'] ?? false;
 
-            if (status == 'RENTED' || status == 'COMPLETED' || status == 'ACTIVE' || hardwareConfirmed) {
+            if (status == 'RENTED' ||
+                status == 'COMPLETED' ||
+                status == 'ACTIVE' ||
+                hardwareConfirmed) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 _handleTransactionSuccess();
               });
@@ -304,7 +317,8 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
                       ),
                       const SizedBox(height: 12),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(20),
@@ -327,7 +341,8 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
                 // Transaction Details Card
                 Card(
                   elevation: 2,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Column(
@@ -335,16 +350,19 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
                       children: [
                         const Text(
                           'Transaction Details',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 16),
                         ),
                         const Divider(height: 20),
                         _buildRow('Item Name', widget.rental.itemName),
-                        _buildRow('Rental ID', widget.rental.rentalId.substring(0, 8).toUpperCase()),
-                        _buildRow('Terminal ID', widget.rental.terminalId),
+                        _buildRow('Rental ID', widget.rental.displayReference),
+                        _buildRow(
+                            'Terminal code', widget.rental.terminalReference),
                         _buildRow('Customer Name', widget.rental.customerName),
                         _buildRow(
                           'Due Date',
-                          DateFormat('yyyy-MM-dd HH:mm').format(widget.rental.dueDate),
+                          DateFormat('yyyy-MM-dd HH:mm')
+                              .format(widget.rental.dueDate),
                         ),
                       ],
                     ),
@@ -362,7 +380,9 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
-                  onPressed: _isProcessingSuccess ? null : _simulatePhysicalButtonPress,
+                  onPressed: _isProcessingSuccess
+                      ? null
+                      : _simulatePhysicalButtonPress,
                   icon: Icon(Icons.touch_app, color: headerColor),
                   label: Text(
                     'Simulate ESP32 Hardware Confirmation (Demo)',
@@ -387,7 +407,9 @@ class _WaitingEsp32ScreenState extends State<WaitingEsp32Screen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(color: Colors.grey, fontSize: 13)),
-          Text(value, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Text(value,
+              style:
+                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
         ],
       ),
     );

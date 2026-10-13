@@ -4,12 +4,14 @@ import '../../services/esp32_service.dart';
 
 class ConnectionErrorScreen extends StatefulWidget {
   final String terminalId;
+  final String terminalCode;
   final VoidCallback? onRetry;
   final VoidCallback? onBack;
 
   const ConnectionErrorScreen({
     super.key,
-    this.terminalId = 'TERM-01',
+    this.terminalId = '',
+    this.terminalCode = '',
     this.onRetry,
     this.onBack,
   });
@@ -46,7 +48,8 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Terminal still offline. Please verify Wi-Fi / API connection.'),
+            content: Text(
+                'Terminal still offline. Please verify Wi-Fi / API connection.'),
             backgroundColor: Colors.red,
             duration: Duration(seconds: 3),
           ),
@@ -90,7 +93,8 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
               ),
               child: const Column(
                 children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 52),
+                  Icon(Icons.warning_amber_rounded,
+                      color: Colors.amber, size: 52),
                   SizedBox(height: 12),
                   Text(
                     'Connection Problem',
@@ -116,7 +120,8 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
             // Status Details Card
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -127,10 +132,12 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
                       children: [
                         const Text(
                           'Terminal Status',
-                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold, fontSize: 15),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
                             color: Colors.red.shade100,
                             borderRadius: BorderRadius.circular(12),
@@ -147,9 +154,12 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
                       ],
                     ),
                     const Divider(height: 20),
-                    _buildRow('Transaction Status', 'Pending Verification', isPending: true),
-                    _buildRow('Terminal ID', '${widget.terminalId} Offline'),
-                    _buildRow('Local Confirmation', 'Not allowed', isDenied: true),
+                    _buildRow('Transaction Status', 'Pending Verification',
+                        isPending: true),
+                    _buildRow('Terminal ID',
+                        '${widget.terminalCode.trim().isEmpty ? 'Not assigned' : widget.terminalCode} Offline'),
+                    _buildRow('Local Confirmation', 'Not allowed',
+                        isDenied: true),
                     _buildRow('Retry Status', 'Available', isAvailable: true),
                   ],
                 ),
@@ -169,7 +179,8 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.shield_outlined, color: Colors.amber.shade900, size: 24),
+                  Icon(Icons.shield_outlined,
+                      color: Colors.amber.shade900, size: 24),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
@@ -199,7 +210,8 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
                   ),
                   elevation: 2,
                 ),
-                onPressed: _isCheckingConnection ? null : _handleRetryConnection,
+                onPressed:
+                    _isCheckingConnection ? null : _handleRetryConnection,
                 icon: _isCheckingConnection
                     ? const SizedBox(
                         width: 20,
@@ -211,8 +223,11 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
                       )
                     : const Icon(Icons.refresh),
                 label: Text(
-                  _isCheckingConnection ? 'Testing Connection...' : 'Retry Connection',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  _isCheckingConnection
+                      ? 'Testing Connection...'
+                      : 'Retry Connection',
+                  style: const TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.bold),
                 ),
               ),
             ),
@@ -281,7 +296,9 @@ class _ConnectionErrorScreenState extends State<ConnectionErrorScreen> {
   }
 
   Widget _buildRow(String label, String value,
-      {bool isPending = false, bool isDenied = false, bool isAvailable = false}) {
+      {bool isPending = false,
+      bool isDenied = false,
+      bool isAvailable = false}) {
     Color valueColor = Colors.black87;
     if (isPending) valueColor = Colors.orange.shade800;
     if (isDenied) valueColor = Colors.red.shade800;

@@ -1,3 +1,4 @@
+import '../utils/record_codes.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -124,16 +125,26 @@ class MobileApiService {
         statusCode: 404);
   }
 
-  Future<Map<String, dynamic>> quoteRental(String itemId, int minutes) async {
-    final result = await _request('/mobile/quote',
-        method: 'POST', body: {'itemId': itemId, 'durationMinutes': minutes});
+  Future<Map<String, dynamic>> quoteRental(String itemId, int minutes,
+      {String? stockGroupId}) async {
+    final result = await _request('/mobile/quote', method: 'POST', body: {
+      'itemId': itemId,
+      if (stockGroupId != null && stockGroupId.isNotEmpty)
+        'stockGroupId': stockGroupId,
+      'durationMinutes': minutes
+    });
     return Map<String, dynamic>.from(result['quote'] as Map);
   }
 
   Future<Map<String, dynamic>> rentalTicket(String id) async {
     final result =
         await _request('/mobile/rentals/${Uri.encodeComponent(id)}/ticket');
-    return Map<String, dynamic>.from(result['ticket'] as Map);
+    try {
+      return validateRentalTicket(
+          Map<String, dynamic>.from(result['ticket'] as Map), id);
+    } on StateError catch (error) {
+      throw MobileApiException(error.message.toString());
+    }
   }
 
   Future<Map<String, dynamic>> paymentInstructions() async =>
@@ -271,12 +282,15 @@ class MobileApiService {
     required String verificationToken,
     required String name,
     required String phone,
+    required String termsVersion,
   }) =>
       _request('/mobile/registration/complete', method: 'POST', body: {
         'email': email,
         'verificationToken': verificationToken,
         'name': name,
         'phone': phone,
+        'hasAcceptedTerms': true,
+        'termsVersion': termsVersion,
       });
 
   Future<List<Map<String, dynamic>>> catalog() async {
@@ -293,6 +307,7 @@ class MobileApiService {
 
   Future<RentalModel> createRentalRequest({
     required String itemId,
+    String? stockGroupId,
     required String itemName,
     String? itemCode,
     required int durationMinutes,
@@ -300,6 +315,8 @@ class MobileApiService {
     required String paymentMethod,
     required String requestKey,
     required Map<String, dynamic> expectedQuote,
+    required bool acceptedRentalTerms,
+    required String rentalTermsVersion,
     String? paymentProofImageDataUrl,
     String? paymentReference,
   }) async {
@@ -309,11 +326,15 @@ class MobileApiService {
       method: 'POST',
       body: {
         'itemId': itemId,
+        if (stockGroupId != null && stockGroupId.isNotEmpty)
+          'stockGroupId': stockGroupId,
         'durationMinutes': durationMinutes,
         'deliveryLocation': deliveryLocation,
         'paymentMethod': paymentMethod.toUpperCase(),
         'requestKey': requestKey,
         'expectedQuote': expectedQuote,
+        'acceptedRentalTerms': acceptedRentalTerms,
+        'rentalTermsVersion': rentalTermsVersion,
         if (paymentMethod.toUpperCase() == 'QR' &&
             paymentProofImageDataUrl != null)
           'paymentProof': {

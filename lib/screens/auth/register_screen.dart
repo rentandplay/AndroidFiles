@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/account_validation.dart';
 import 'id_verification_screen.dart';
 import 'login_screen.dart';
+import '../shared/terms_dialog.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -41,6 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
+  bool _acceptedTerms = false;
   String? _emailDomainError;
 
   String get _currentEmail => _emailController.text.toLowerCase();
@@ -211,6 +213,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _handleRegister() async {
+    if (!_acceptedTerms) {
+      _showMessage('Read and accept the Terms & Conditions before signing up.',
+          isError: true);
+      return;
+    }
     if (!_formKey.currentState!.validate()) return;
     if (!_verifiedCurrentEmail) {
       _showMessage('Verify your email before creating your account.',
@@ -229,6 +236,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
         phone: _normalizedPhone(_phoneController.text),
         verificationToken: _verificationToken,
+        termsVersion: rentalTermsVersion,
       );
 
       if (!mounted) return;
@@ -259,6 +267,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _showTerms() async {
+    await TermsDialog.show(context, onAccept: () {
+      if (mounted) setState(() => _acceptedTerms = true);
+    }, onDecline: () {
+      if (mounted) setState(() => _acceptedTerms = false);
+    });
   }
 
   String _errorMessage(Object error) {
@@ -677,12 +693,75 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             : Icons.visibility),
                       )),
                   validator: (value) {
-                    if (value == null || value.isEmpty)
+                    if (value == null || value.isEmpty) {
                       return 'Confirm your password.';
-                    if (value != _passwordController.text)
+                    }
+                    if (value != _passwordController.text) {
                       return 'Passwords do not match.';
+                    }
                     return null;
                   },
+                ),
+                const SizedBox(height: 14),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Checkbox(
+                        value: _acceptedTerms,
+                        activeColor: AppTheme.brandOrange,
+                        onChanged: _isLoading
+                            ? null
+                            : (value) => setState(
+                                  () => _acceptedTerms = value ?? false,
+                                ),
+                      ),
+                      Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Wrap(
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              const Text(
+                                'I have read and agree to the ',
+                                style: TextStyle(
+                                  color: Color(0xFF475569),
+                                  fontSize: 12,
+                                  height: 1.5,
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: _isLoading ? null : _showTerms,
+                                child: const Text(
+                                  'Terms & Conditions',
+                                  style: TextStyle(
+                                    color: AppTheme.brandOrange,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ),
+                              const Text(
+                                ' before creating my account.',
+                                style: TextStyle(
+                                  color: Color(0xFF475569),
+                                  fontSize: 12,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 20),
                 SizedBox(
@@ -696,7 +775,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           borderRadius: BorderRadius.circular(14)),
                       elevation: 2,
                     ),
-                    onPressed: _isLoading ? null : _handleRegister,
+                    onPressed: _isLoading || !_acceptedTerms
+                        ? null
+                        : _handleRegister,
                     icon: _isLoading
                         ? const SizedBox(
                             height: 18,

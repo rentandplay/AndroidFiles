@@ -1,3 +1,4 @@
+import '../../utils/record_codes.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -247,7 +248,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                             children: [
                           Text(
                               '${row['customer_name']} · ${row['item_code'] ?? ''}'),
-                          Text(_text(row['rental_code'] ?? row['id'])),
+                          Text(recordReference(row)),
                           const Divider(),
                           RentalStatusBadge(status: _text(row['status'])),
                           const SizedBox(height: 12),
@@ -595,7 +596,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                       Text(_text(row['customer_name'])),
                       const SizedBox(height: 6),
                       Text(
-                          '${row['rental_code'] ?? row['id']} · ${row['item_code'] ?? ''}',
+                          '${recordReference(row)} · ${row['item_code'] ?? ''}',
                           style: TextStyle(
                               color: Theme.of(context)
                                   .colorScheme
@@ -1305,7 +1306,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                             Text(
                                 '${_row['item_name']} · ${_row['customer_name']}',
                                 style: Theme.of(context).textTheme.titleMedium),
-                            Text(_text(_row['rental_code'])),
+                            Text(recordReference(_row)),
                             const SizedBox(height: 12)
                           ],
                           if (_action == 'booking') ...[

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+const String rentalTermsVersion = '2026-10-13-v1';
+
 class TermsDialog extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback? onDecline;
@@ -10,11 +12,15 @@ class TermsDialog extends StatelessWidget {
     this.onDecline,
   });
 
-  static Future<bool?> show(BuildContext context, {required VoidCallback onAccept}) {
+  static Future<bool?> show(BuildContext context,
+      {required VoidCallback onAccept, VoidCallback? onDecline}) {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
-      builder: (context) => TermsDialog(onAccept: onAccept),
+      builder: (context) => TermsDialog(
+        onAccept: onAccept,
+        onDecline: onDecline,
+      ),
     );
   }
 
@@ -37,34 +43,33 @@ class TermsDialog extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               const Text(
-                'Welcome to Rent and Play! Please review and accept our rental terms before proceeding.',
+                'Please read these rental terms before creating your Rent & Play account.',
                 style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
               const SizedBox(height: 12),
-              _buildSectionTitle('1. Operating Hours'),
+              _buildSectionTitle('1. Account details'),
               _buildSectionText(
-                '• Confirm the delivery location and return arrangements with the operator.\n'
-                '• The rental timer starts when the operator hands over the item. Return it by the due time shown in My Rentals.',
+                'Provide accurate name and contact details, and keep your password and verification codes private. Use your account for your own rental requests.',
               ),
               const SizedBox(height: 10),
-              _buildSectionTitle('2. ID Verification'),
+              _buildSectionTitle('2. Rental requests and charges'),
               _buildSectionText(
-                '• A valid Government or Student ID photo must be uploaded to your profile.\n'
-                '• Review the rental price shown at checkout.\n'
-                '• The admin records payments and refunds after inspection and settlement.',
+                'A rental request is not confirmed until its status is approved in the app. Before submitting, review the item, rental duration, due time, rental fee, and any deposit or payment instructions shown at checkout. Late fees use the rates shown in the app.',
               ),
               const SizedBox(height: 10),
-              _buildSectionTitle('3. Damaged & Lost Items Policy'),
+              _buildSectionTitle('3. ID and handoff'),
               _buildSectionText(
-                '• The admin checks the equipment and included accessories at release and return.\n'
-                '• Late fees use the saved rental rate. Damage or missing-part charges are recorded with a reason after inspection.',
+                'Show the required physical Government or Student ID to the admin during handoff. The rental timer starts when the admin verifies and releases the equipment. Check the item and included accessories with the admin.',
               ),
               const SizedBox(height: 10),
-              _buildSectionTitle('4. Delivery & Return Verification'),
+              _buildSectionTitle('4. Return, inspection, and extra charges'),
               _buildSectionText(
-                '• Show your rental handoff QR to the operator when the item is delivered.\n'
-                '• The operator scans the equipment QR at the shop before delivery, then scans your rental QR at the resort to start the timer.\n'
-                '• On return, the admin records physical receipt to stop the timer, then completes inspection.',
+                'Return the same equipment and all included accessories by the due time. A return request alone does not stop the timer; it stops when the admin records physical receipt. The admin inspects the returned item. Late returns, damage, loss, or missing accessories may result in additional charges, which should be recorded with an inspection reason.',
+              ),
+              const SizedBox(height: 10),
+              _buildSectionTitle('5. Personal information'),
+              _buildSectionText(
+                'Your name, email, phone number, and ID verification details are used to manage your account, verify rental handoffs, and communicate about rentals and returns. Please provide only accurate information needed for these purposes.',
               ),
             ],
           ),

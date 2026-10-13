@@ -129,16 +129,16 @@ class _BookingTicketState extends State<BookingTicket> {
                       title: expired
                           ? 'This hold has ended'
                           : widget.rental.isRentAndPlayPickup
-                              ? 'Ipakita sa Rent & Play'
-                              : 'Ipakita sa delivery staff',
+                              ? 'Show this to Rent & Play'
+                              : 'Show this to delivery staff',
                       isError: expired,
                       message: expired
                           ? 'Close this ticket and refresh My Rentals to check your rental request.'
                           : status == 'PENDING_ADMIN_APPROVAL'
-                              ? 'Nire-review pa ang request. Magsisimula lang ang rental time kapag naiabot na sa iyo ang item sa ${widget.rental.customerHandoffLocation}.'
+                              ? 'Your request is still under review. Rental time starts only when staff hands the item over to you at ${widget.rental.customerHandoffLocation}.'
                               : widget.rental.isRentAndPlayPickup
-                                  ? 'Pumunta sa Rent & Play sa ASRI. Dalhin ang valid ID; i-scan ng staff ang QR kapag ibinigay na sa iyo ang item.'
-                                  : 'Dalhin ang valid ID. I-scan ng delivery staff ang QR kapag iniabot na sa iyo ang item sa ${widget.rental.customerHandoffLocation}.'),
+                                  ? 'Go to Rent & Play at ASRI. Bring a valid ID; staff will scan the QR code when they hand over your item.'
+                                  : 'Bring a valid ID. Delivery staff will scan the QR code when they hand over your item at ${widget.rental.customerHandoffLocation}.'),
                 ]));
               },
             )),

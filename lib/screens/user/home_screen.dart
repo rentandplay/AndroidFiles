@@ -9,6 +9,7 @@ import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/home_discovery.dart';
 import '../../widgets/notification_widgets.dart';
 import '../../widgets/rent_play_wordmark.dart';
 import '../../widgets/rental_ui.dart';
@@ -20,11 +21,15 @@ class HomeScreen extends StatefulWidget {
     required this.onBrowse,
     required this.onViewRentals,
     required this.onItemSelected,
+    this.onBrowseCategory,
+    this.api,
   });
 
   final VoidCallback onBrowse;
   final VoidCallback onViewRentals;
   final ValueChanged<ItemModel> onItemSelected;
+  final ValueChanged<String>? onBrowseCategory;
+  final MobileApiService? api;
 
   @override
   State<HomeScreen> createState() => HomeScreenState();
@@ -38,7 +43,10 @@ class HomeScreenState extends State<HomeScreen> {
   List<RentalModel> _rentals = [];
   bool _loading = true;
   String _rentalError = '';
+  String _catalogError = '';
   int _carouselIndex = 0;
+
+  MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
   @override
   void initState() {
@@ -61,23 +69,26 @@ class HomeScreenState extends State<HomeScreen> {
     List<ItemModel> items = [];
     List<RentalModel> rentals = [];
     var rentalError = '';
+    var catalogError = '';
 
     try {
-      final records = await MobileApiService.instance.catalog();
+      final records = await _api.catalog();
       catalogItems = records
           .map((row) => ItemModel.fromMap(row, id: row['id'].toString()))
           .toList();
-      items = catalogItems
+      final available = catalogItems
           .where((item) => item.status.toLowerCase() == 'available')
-          .take(5)
           .toList();
-    } catch (_) {
+      final featureCount = (available.length ~/ 2).clamp(1, 3).toInt();
+      items = available.take(featureCount).toList();
+    } catch (error) {
+      catalogError = '$error';
       // Keep the rental summary usable if the featured catalog cannot load.
     }
 
     if (isSignedIn) {
       try {
-        rentals = await MobileApiService.instance.listRentals();
+        rentals = await _api.listRentals();
       } catch (error) {
         rentalError = '$error';
       }
@@ -89,6 +100,7 @@ class HomeScreenState extends State<HomeScreen> {
       _featuredItems = items;
       _rentals = rentals;
       _rentalError = rentalError;
+      _catalogError = catalogError;
       _loading = false;
       if (_carouselIndex >= items.length) _carouselIndex = 0;
     });
@@ -229,22 +241,18 @@ class HomeScreenState extends State<HomeScreen> {
                     )
                   else if (activeRentals.isEmpty)
                     _buildNoRentalsCard(context),
-                  if (user != null &&
-                      !_loading &&
-                      _rentalError.isEmpty &&
-                      activeRentals.isEmpty &&
-                      currentRequests.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton.icon(
-                          onPressed: widget.onBrowse,
-                          icon: const Icon(Icons.storefront_outlined),
-                          label: const Text('Browse equipment'),
-                        ),
-                      ),
-                    ),
+                  const SizedBox(height: 8),
+                  HomeDiscovery(
+                    items: _catalogItems,
+                    featuredIds: _featuredItems.map((item) => item.id).toSet(),
+                    loading: _loading,
+                    hasError: _catalogError.isNotEmpty,
+                    onBrowse: widget.onBrowse,
+                    onCategorySelected:
+                        widget.onBrowseCategory ?? (_) => widget.onBrowse(),
+                    onItemSelected: widget.onItemSelected,
+                    onRetry: _loadHome,
+                  ),
                 ],
               ),
             ),
@@ -260,7 +268,7 @@ class HomeScreenState extends State<HomeScreen> {
     }
 
     return SizedBox(
-      height: 194,
+      height: _featureHeight(context),
       child: PageView.builder(
         controller: _carouselController,
         itemCount: _featuredItems.length,
@@ -348,8 +356,8 @@ class HomeScreenState extends State<HomeScreen> {
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: Colors.white
-                                            .withValues(alpha: .9),
+                                        color:
+                                            Colors.white.withValues(alpha: .9),
                                         fontSize: 12,
                                         height: 1.15,
                                         fontWeight: FontWeight.w600,
@@ -398,6 +406,11 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  double _featureHeight(BuildContext context) =>
+      194 *
+      (MediaQuery.textScalerOf(context).scale(14) / 14)
+          .clamp(1.0, double.infinity);
+
   Widget _buildFallbackSlide(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
         child: Material(
@@ -406,8 +419,8 @@ class HomeScreenState extends State<HomeScreen> {
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: widget.onBrowse,
-            child: SizedBox(
-              height: 194,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(minHeight: _featureHeight(context)),
               child: Padding(
                 padding: const EdgeInsets.all(20),
                 child: Row(
@@ -537,10 +550,12 @@ class HomeScreenState extends State<HomeScreen> {
     RentalModel rental, {
     EdgeInsetsGeometry margin = const EdgeInsets.fromLTRB(18, 0, 18, 10),
   }) {
-    final item = _catalogItems.where((item) => item.id == rental.itemId);
+    final item = _catalogItems.where((item) =>
+        item.id == rental.itemId ||
+        (rental.stockGroupId.isNotEmpty &&
+            item.stockGroupId == rental.stockGroupId));
     final imageItem = item.isEmpty ? null : item.first;
-    final code =
-        rental.rentalCode.isNotEmpty ? rental.rentalCode : rental.rentalId;
+    final code = rental.displayReference;
     final detail = rental.isActive
         ? _activeRentalDetail(rental)
         : rental.canCancel && rental.holdExpiresAt != null
@@ -589,9 +604,8 @@ class HomeScreenState extends State<HomeScreen> {
                           height: 62,
                         ) ??
                         Icon(Icons.inventory_2_outlined,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant),
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -693,17 +707,43 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _buildNoRentalsCard(BuildContext context) => Card(
         margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           child: Row(
             children: [
-              Icon(Icons.sports_esports_outlined,
-                  size: 32, color: Theme.of(context).colorScheme.primary),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'No active rentals right now. Requests and equipment in your care will appear here.',
-                  style: TextStyle(height: 1.35),
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(11),
                 ),
+                child: Icon(Icons.shopping_bag_outlined,
+                    size: 20, color: Theme.of(context).colorScheme.primary),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('Your next game awaits',
+                      style:
+                          TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text('No active rentals right now.',
+                      style: TextStyle(
+                          fontSize: 11,
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
+                ],
+              )),
+              IconButton(
+                tooltip: 'Browse equipment',
+                onPressed: widget.onBrowse,
+                icon: Icon(Icons.arrow_forward_rounded,
+                    size: 20, color: Theme.of(context).colorScheme.primary),
               ),
             ],
           ),
@@ -790,7 +830,8 @@ class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
     final hours = (seconds ~/ Duration.secondsPerHour) % 24;
     final minutes = (seconds ~/ Duration.secondsPerMinute) % 60;
     final remainder = seconds % 60;
-    final clock = '${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(remainder)}';
+    final clock =
+        '${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(remainder)}';
     return days > 0 ? '${days}d $clock' : clock;
   }
 

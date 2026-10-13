@@ -78,9 +78,7 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
                                 style: const TextStyle(
                                     fontSize: 22, fontWeight: FontWeight.w800)),
                             const SizedBox(height: 6),
-                            Text(widget.rental.rentalCode.isEmpty
-                                ? widget.rental.rentalId
-                                : widget.rental.rentalCode),
+                            Text(widget.rental.displayReference),
                             const Divider(height: 24),
                             RentalValueRow(
                                 'Return by',
@@ -316,9 +314,7 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
                             style: const TextStyle(
                                 fontSize: 22, fontWeight: FontWeight.w800)),
                         const SizedBox(height: 4),
-                        Text(_rental.rentalCode.isEmpty
-                            ? _rental.rentalId
-                            : _rental.rentalCode),
+                        Text(_rental.displayReference),
                         const SizedBox(height: 16),
                         RentalStatusBadge(
                             status: _rental.hasPendingReturnRequest

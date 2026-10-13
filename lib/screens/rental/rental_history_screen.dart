@@ -10,9 +10,11 @@ import '../auth/login_screen.dart';
 import '../user/catalog_screen.dart';
 
 class RentalHistoryScreen extends StatefulWidget {
-  const RentalHistoryScreen({super.key, this.isAdmin = false, this.onBrowse});
+  const RentalHistoryScreen(
+      {super.key, this.isAdmin = false, this.onBrowse, this.api});
   final bool isAdmin;
   final VoidCallback? onBrowse;
+  final MobileApiService? api;
 
   @override
   State<RentalHistoryScreen> createState() => _RentalHistoryScreenState();
@@ -23,6 +25,9 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
   final TextEditingController _searchController = TextEditingController();
   String _query = '';
   String _filter = 'All';
+  bool _compactView = true;
+
+  MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
   @override
   void initState() {
@@ -44,9 +49,9 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
 
     final List<RentalModel> records;
     if (!widget.isAdmin) {
-      records = await MobileApiService.instance.listRentals();
+      records = await _api.listRentals();
     } else {
-      final result = await MobileApiService.instance.adminRequest('/workspace');
+      final result = await _api.adminRequest('/workspace');
       records = (result['transactions'] as List)
           .whereType<Map>()
           .map((row) => RentalModel.fromMap(Map<String, dynamic>.from(row),
@@ -138,21 +143,22 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: 6),
                   Text(
-                    rental.rentalCode.isNotEmpty
-                        ? rental.rentalCode
-                        : rental.rentalId,
+                    rental.displayReference,
                     style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 12),
                   Align(
                       alignment: Alignment.centerLeft,
-                      child: RentalStatusBadge(status: rental.normalizedStatus)),
+                      child:
+                          RentalStatusBadge(status: rental.normalizedStatus)),
                   const Divider(height: 28),
                   if (widget.isAdmin)
                     RentalValueRow('Customer', rental.customerName),
                   RentalValueRow(
-                      rental.isRentAndPlayPickup ? 'Kunin sa' : 'Ihahatid sa',
+                      rental.isRentAndPlayPickup
+                          ? 'Pickup location'
+                          : 'Delivery location',
                       rental.customerHandoffLocation),
                   RentalValueRow('Rental date', _date(rental.startDate)),
                   if (rental.dueDate.millisecondsSinceEpoch > 0)
@@ -162,7 +168,8 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                   RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
                   RentalValueRow('Payment', _paymentLabel(rental)),
                   if (rental.balanceDue > 0)
-                    RentalValueRow('Balance due', rentalMoney(rental.balanceDue)),
+                    RentalValueRow(
+                        'Balance due', rentalMoney(rental.balanceDue)),
                   if (rental.refundDue > 0)
                     RentalValueRow('Refund due', rentalMoney(rental.refundDue)),
                 ],
@@ -173,11 +180,12 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
       );
 
   Widget _historyCard(RentalModel rental) {
-    final code = rental.rentalCode.isNotEmpty
-        ? rental.rentalCode
-        : rental.rentalId;
+    if (_compactView && !widget.isAdmin) return _compactHistoryCard(rental);
+    final code = rental.displayReference;
     final attention = _needsAttention(rental);
     final scheme = Theme.of(context).colorScheme;
+    final stackedStatus = MediaQuery.sizeOf(context).width < 350 ||
+        MediaQuery.textScalerOf(context).scale(16) > 19;
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       clipBehavior: Clip.antiAlias,
@@ -216,10 +224,18 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  RentalStatusBadge(status: rental.normalizedStatus),
+                  if (!stackedStatus) ...[
+                    const SizedBox(width: 8),
+                    RentalStatusBadge(status: rental.normalizedStatus),
+                  ],
                 ],
               ),
+              if (stackedStatus) ...[
+                const SizedBox(height: 10),
+                Align(
+                    alignment: Alignment.centerLeft,
+                    child: RentalStatusBadge(status: rental.normalizedStatus)),
+              ],
               const Divider(height: 26),
               Text('Rental date · ${_date(rental.startDate)}',
                   style: TextStyle(
@@ -258,20 +274,12 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                       ),
                     ),
                   ),
-                  if (rental.refundDue > 0)
-                    Text('Refund ${rentalMoney(rental.refundDue)}',
-                        style: TextStyle(
-                            color: scheme.primary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700)),
-                  if (rental.balanceDue > 0)
-                    Text('Due ${rentalMoney(rental.balanceDue)}',
-                        style: TextStyle(
-                            color: scheme.error,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700)),
                 ],
               ),
+              if (rental.refundDue > 0 || rental.balanceDue > 0) ...[
+                const SizedBox(height: 8),
+                _settlementSummary(rental),
+              ],
               const SizedBox(height: 4),
               Align(
                 alignment: Alignment.centerRight,
@@ -288,6 +296,100 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
     );
   }
 
+  Widget _compactHistoryCard(RentalModel rental) {
+    final scheme = Theme.of(context).colorScheme;
+    final day = DateFormat('MMM d, yyyy')
+        .format(rental.startDate.toUtc().add(const Duration(hours: 8)));
+    return Card(
+      key: ValueKey('history-compact-${rental.rentalId}'),
+      margin: const EdgeInsets.only(bottom: 9),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => _showDetails(rental),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child:
+              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Row(children: [
+              CircleAvatar(
+                radius: 18,
+                backgroundColor: scheme.primary.withValues(alpha: .09),
+                child: Icon(Icons.receipt_long_outlined,
+                    color: scheme.primary, size: 18),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                  child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(rental.itemName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text('${rental.displayReference} · $day',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          fontSize: 11,
+                          height: 1.3,
+                          color: scheme.onSurfaceVariant)),
+                ],
+              )),
+              const SizedBox(width: 6),
+              Icon(Icons.chevron_right_rounded,
+                  color: scheme.onSurfaceVariant, size: 20),
+            ]),
+            const SizedBox(height: 9),
+            Wrap(
+                spacing: 10,
+                runSpacing: 6,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  RentalStatusBadge(status: rental.normalizedStatus),
+                  Text('Fee ${rentalMoney(rental.rateFee)}',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.onSurfaceVariant)),
+                ]),
+            if (_needsAttention(rental)) ...[
+              const SizedBox(height: 7),
+              if (rental.balanceDue > 0 || rental.refundDue > 0)
+                _settlementSummary(rental)
+              else
+                Text(_paymentLabel(rental),
+                    style: TextStyle(
+                        color: scheme.primary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+            ],
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _settlementSummary(RentalModel rental) {
+    final scheme = Theme.of(context).colorScheme;
+    Widget amount(String label, Color color) => Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+              color: color.withValues(alpha: .07),
+              borderRadius: BorderRadius.circular(7)),
+          child: Text(label,
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w700)),
+        );
+    return Wrap(spacing: 8, runSpacing: 6, children: [
+      if (rental.balanceDue > 0)
+        amount('Due ${rentalMoney(rental.balanceDue)}', scheme.error),
+      if (rental.refundDue > 0)
+        amount('Refund ${rentalMoney(rental.refundDue)}', scheme.primary),
+    ]);
+  }
+
   Widget _amountSummary(String label, String value) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -299,7 +401,8 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                   fontSize: 11)),
           const SizedBox(height: 3),
           Text(value,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
+              style:
+                  const TextStyle(fontWeight: FontWeight.w800, fontSize: 14)),
         ],
       );
 
@@ -360,8 +463,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: TextField(
                           controller: _searchController,
-                          onChanged: (value) =>
-                              setState(() => _query = value),
+                          onChanged: (value) => setState(() => _query = value),
                           textInputAction: TextInputAction.search,
                           decoration: InputDecoration(
                             hintText: 'Search item or rental ID',
@@ -381,18 +483,42 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                       ),
                       Padding(
                         padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-                        child: Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            '${records.length} record${records.length == 1 ? '' : 's'}',
-                            style: TextStyle(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600),
-                          ),
-                        ),
+                        child: SizedBox(
+                            width: double.infinity,
+                            child: Wrap(
+                              alignment: WrapAlignment.spaceBetween,
+                              spacing: 16,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text(
+                                  '${records.length} record${records.length == 1 ? '' : 's'}',
+                                  style: TextStyle(
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600),
+                                ),
+                                MergeSemantics(
+                                    child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('Compact view',
+                                        style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600)),
+                                    const SizedBox(width: 4),
+                                    Switch.adaptive(
+                                      key: const ValueKey(
+                                          'history-compact-switch'),
+                                      value: _compactView,
+                                      onChanged: (value) =>
+                                          setState(() => _compactView = value),
+                                    ),
+                                  ],
+                                )),
+                              ],
+                            )),
                       ),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
@@ -436,7 +562,8 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                             onPressed: _openBrowse,
                                             icon: const Icon(
                                                 Icons.storefront_outlined),
-                                            label: const Text('Browse equipment'),
+                                            label:
+                                                const Text('Browse equipment'),
                                           )
                                         : TextButton(
                                             onPressed: () {
@@ -446,19 +573,19 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                                 _filter = 'All';
                                               });
                                             },
-                                            child: const Text('Clear search and filters'),
+                                            child: const Text(
+                                                'Clear search and filters'),
                                           ),
                                   ),
                                 ],
                               )
-                            : ListView(
+                            : ListView.builder(
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                                children: [
-                                  for (final rental in visible)
-                                    _historyCard(rental),
-                                ],
+                                itemCount: visible.length,
+                                itemBuilder: (context, index) =>
+                                    _historyCard(visible[index]),
                               ),
                       ),
                     ),
