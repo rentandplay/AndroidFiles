@@ -499,24 +499,30 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                       fontSize: 12,
                                       fontWeight: FontWeight.w600),
                                 ),
-                                MergeSemantics(
-                                    child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text('Compact view',
-                                        style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w600)),
-                                    const SizedBox(width: 4),
-                                    Switch.adaptive(
-                                      key: const ValueKey(
-                                          'history-compact-switch'),
-                                      value: _compactView,
-                                      onChanged: (value) =>
-                                          setState(() => _compactView = value),
+                                IconButton.filledTonal(
+                                  key: const ValueKey('history-view-toggle'),
+                                  tooltip: _compactView
+                                      ? 'Show detailed view'
+                                      : 'Show compact view',
+                                  isSelected: _compactView,
+                                  icon: const Icon(Icons.view_agenda_outlined),
+                                  selectedIcon:
+                                      const Icon(Icons.view_list_rounded),
+                                  iconSize: 20,
+                                  style: IconButton.styleFrom(
+                                    foregroundColor:
+                                        Theme.of(context).colorScheme.primary,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: .1),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(11),
                                     ),
-                                  ],
-                                )),
+                                  ),
+                                  onPressed: () => setState(
+                                      () => _compactView = !_compactView),
+                                ),
                               ],
                             )),
                       ),

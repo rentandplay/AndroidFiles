@@ -64,10 +64,11 @@ class _BookingTicketState extends State<BookingTicket> {
                           icon: const Icon(Icons.refresh),
                           label: const Text('Try again')));
                 }
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const SizedBox(
                       height: 180,
                       child: Center(child: CircularProgressIndicator()));
+                }
                 final data = snapshot.data!;
                 final status = data['status']?.toString() ??
                     widget.rental.normalizedStatus;
@@ -109,10 +110,11 @@ class _BookingTicketState extends State<BookingTicket> {
                   TextButton.icon(
                       onPressed: () async {
                         await Clipboard.setData(ClipboardData(text: code));
-                        if (context.mounted)
+                        if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(
                                   content: Text('Rental code copied.')));
+                        }
                       },
                       icon: const Icon(Icons.copy, size: 16),
                       label: const Text('Copy rental code')),

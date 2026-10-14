@@ -91,7 +91,7 @@ class UserModel {
   }) {
     return UserModel(
       uid: uid ?? this.uid,
-      accountCode: this.accountCode,
+      accountCode: accountCode,
       name: name ?? this.name,
       email: email ?? this.email,
       phone: phone ?? this.phone,

@@ -2,7 +2,7 @@
 
 ## Mobile staff counter
 
-The Android app uses the same login page for customers, operators, and owners. An active `OPERATOR` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, return inspection, and a read-only equipment list. Staff can view equipment details, check the Bluetooth printer connection and print 50 × 30 mm QR labels, open the Android print screen, or share the label PDF. Equipment editing, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out of the staff counter returns to the shared login page. Legacy `ADMIN`/`USER` roles map to Operator/Customer.
+The Android app uses the same login page for customers, operators, and owners. An active `OPERATOR` or `OWNER` account opens a focused staff counter with rental review, QR scanning, equipment handoff, return inspection, equipment details and unit maintenance. Staff can check the Bluetooth printer connection and print 50 × 30 mm QR labels, open the Android print screen, or share the label PDF. **Manage maintenance** opens the shared ticket workflow for reports, repairs, photos, assignments, cost records, inspection and retirement. Equipment setup, customer administration, rates, reports, and staff settings stay in the web admin workspace in the adjacent `RENT-AND-PLAY` project. Signing out returns to the shared login page. Legacy `ADMIN`/`USER` roles map to Operator/Customer.
 
 Rental changes refresh the staff counter immediately through the shared live event connection used by notifications and customer rental progress. The counter combines short event bursts, resyncs after reconnection or app resume, and pauses background reads. Its five-minute foreground check also catches non-rental inventory edits. See the [Firebase usage changes](../RENT-AND-PLAY/docs/development/firebase-usage-optimization.md) and run `flutter test test/live_rental_updates_test.dart test/notification_service_test.dart test/rental_events_test.dart` for the live-update regression tests.
 
@@ -18,7 +18,7 @@ Customer checkout saves an authoritative quote for the rental fee and holds the 
 
 On return, admin scans the equipment and records physical receipt. The timer stops immediately while the unit stays under inspection. Complete inspection with an explicit penalty (zero if none) to make it available or send it to maintenance. Rental payment balances are tracked separately from equipment availability. The customer can report a return, but only staff receipt stops the timer. Pending/approved bookings can be cancelled and unclaimed holds expire automatically.
 
-The **ESP32 terminal** page stays visible on standby. Android hardware actions are disabled and the backend defaults to `ENABLE_ESP32=false`. No current rental step uses the terminal.
+The web **ESP32 terminal** page, device APIs and firmware stay on standby for implementation at the end of the project. The backend defaults to `ENABLE_ESP32=false`. Android's retired direct-database hardware screens have been removed; future hardware integration must use the same authenticated backend. No current rental step uses the terminal. See [the standby plan](../RENT-AND-PLAY/docs/esp32/standby-plan.md).
 
 ## Local development without deploying
 
@@ -38,7 +38,7 @@ In an `AndroidFiles` VS Code window, use one of the included local Android launc
 
 ## Local API and manual commands
 
-The bell opens the rental notification inbox for customers, operators, and owners. New customer booking/return requests alert active `OPERATOR` and `OWNER` accounts; approval, rejection, release and return decisions alert the booking owner. Tap an update to open that booking, or use **Mark shown as read**. On Android, select **Enable phone alerts** in the inbox to grant notification permission and register background FCM alerts. Sign-out unregisters the phone, and switching accounts rotates the device token. See `../RENT-AND-PLAY/docs/architecture/rental-notifications.md` for deployment and real-device acceptance steps.
+The bell opens the rental notification inbox for customers, operators, and owners. New customer rental/return requests alert active `OPERATOR` and `OWNER` accounts; approval, rejection, release and return decisions alert the customer. Tap an update to open that rental, or use **Mark shown as read**. On Android, select **Enable phone alerts** in the inbox to grant notification permission and register background FCM alerts. Sign-out unregisters the phone, and switching accounts rotates the device token. See `../RENT-AND-PLAY/docs/architecture/rental-notifications.md` for deployment and real-device acceptance steps.
 
 The app defaults to the local Android emulator API at `http://10.0.2.2:3000/api`; the included USB launch profile uses `http://127.0.0.1:3000/api`. To test local changes:
 
@@ -49,6 +49,6 @@ The app defaults to the local Android emulator API at `http://10.0.2.2:3000/api`
 
 The backend must have its Firebase credentials configured for the same `rent-and-play` project used by the app. Local HTTP access is enabled for debug builds only; release builds continue to use HTTPS.
 
-Run `flutter test test/rental_model_test.dart` for lifecycle, receipt-time, and hardware standby checks. Build an installable test APK with `flutter build apk --debug`; its output is `build/app/outputs/flutter-apk/app-debug.apk`. Use a reachable `API_BASE_URL` when building for a local server. Grant camera permission on the test Android device and check both printed QR labels. Manual lookup requires a reason if a camera is unavailable.
+Run `flutter test` for customer requests, staff approval, lifecycle, receipt time, maintenance and shared IDs. Run `flutter analyze` for static checks. For a read-only check on a connected phone, run `flutter test -d <device-id> integration_test/local_connection_test.dart --dart-define=API_BASE_URL=http://<laptop-ip>:3000/api`; it verifies the real catalog, QR/code resolution and ESP32 standby. Build an installable test APK with `flutter build apk --debug`; its output is `build/app/outputs/flutter-apk/app-debug.apk`. Use a reachable `API_BASE_URL` when building for a local server. Grant camera permission on the test Android device and check both printed QR labels. Manual lookup requires a reason if a camera is unavailable.
 
 The full flow and local setup instructions are in the adjacent `RENT-AND-PLAY/docs/architecture/admin-rental-flow.md` and `RENT-AND-PLAY/docs/development/local-integration.md`.

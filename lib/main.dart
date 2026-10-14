@@ -4,8 +4,6 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'services/auth_service.dart';
-import 'services/esp32_service.dart';
-import 'services/rental_service.dart';
 import 'providers/theme_provider.dart';
 import 'screens/startup_router.dart';
 import 'services/notification_service.dart';
@@ -39,8 +37,6 @@ class RentAndPlayApp extends StatelessWidget {
             create: (_) => RentalNotificationService(),
             update: (_, auth, notifications) =>
                 notifications!..setSession(auth.currentUser?.uid)),
-        ChangeNotifierProvider(create: (_) => Esp32Service()),
-        ChangeNotifierProvider(create: (_) => RentalService()),
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
       ],
       child: Consumer<ThemeProvider>(

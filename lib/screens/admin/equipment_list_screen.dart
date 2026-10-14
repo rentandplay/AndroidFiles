@@ -4,16 +4,19 @@ import '../../services/admin_firestore_service.dart';
 import '../../utils/maintenance_state.dart';
 import '../../utils/record_codes.dart';
 import '../shared/equipment_qr_label_dialog.dart';
+import 'maintenance_screen.dart';
 
 class EquipmentListScreen extends StatefulWidget {
   const EquipmentListScreen({
     super.key,
     required this.items,
     required this.onRefresh,
+    this.loadItems,
   });
 
   final List<Map<String, dynamic>> items;
   final Future<void> Function() onRefresh;
+  final Future<List<Map<String, dynamic>>> Function()? loadItems;
 
   @override
   State<EquipmentListScreen> createState() => _EquipmentListScreenState();
@@ -22,9 +25,35 @@ class EquipmentListScreen extends StatefulWidget {
 class _EquipmentListScreenState extends State<EquipmentListScreen> {
   String _search = '';
   String _category = 'All';
+  late List<Map<String, dynamic>> _items;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = widget.items;
+  }
+
+  @override
+  void didUpdateWidget(covariant EquipmentListScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.items != widget.items) _items = widget.items;
+  }
+
+  Future<void> _refresh() async {
+    try {
+      await widget.onRefresh();
+      final items = await widget.loadItems?.call();
+      if (mounted && items != null) setState(() => _items = items);
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not refresh equipment. $error')));
+      }
+    }
+  }
 
   List<String> get _categories {
-    final values = widget.items
+    final values = _items
         .map((item) => item['category']?.toString().trim() ?? '')
         .where((value) => value.isNotEmpty)
         .toSet()
@@ -35,7 +64,7 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
 
   List<Map<String, dynamic>> get _visibleItems {
     final query = _search.trim().toLowerCase();
-    return widget.items.where((item) {
+    return _items.where((item) {
       final itemCategory = item['category']?.toString() ?? 'Uncategorized';
       final matchesCategory = _category == 'All' || itemCategory == _category;
       final searchable = [
@@ -58,6 +87,7 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
       builder: (_) => _EquipmentDetailsSheet(
         item: item,
         api: AdminFirestoreService.instance,
+        onMaintenanceChanged: _refresh,
       ),
     );
   }
@@ -70,7 +100,7 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
     final items = _visibleItems;
 
     return RefreshIndicator(
-      onRefresh: widget.onRefresh,
+      onRefresh: _refresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
@@ -83,7 +113,7 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
           ),
           const SizedBox(height: 4),
           Text(
-            '${widget.items.length} items · View details and print equipment labels',
+            '${_items.length} units · View details and print equipment labels',
             style: theme.textTheme.bodySmall?.copyWith(
               color: theme.colorScheme.onSurfaceVariant,
             ),
@@ -143,7 +173,7 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
                       size: 42, color: theme.colorScheme.outline),
                   const SizedBox(height: 10),
                   Text(
-                    widget.items.isEmpty
+                    _items.isEmpty
                         ? 'No equipment found.'
                         : 'No equipment matches this search.',
                     style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
@@ -222,10 +252,14 @@ class _EquipmentCard extends StatelessWidget {
 }
 
 class _EquipmentDetailsSheet extends StatefulWidget {
-  const _EquipmentDetailsSheet({required this.item, required this.api});
+  const _EquipmentDetailsSheet(
+      {required this.item,
+      required this.api,
+      required this.onMaintenanceChanged});
 
   final Map<String, dynamic> item;
   final AdminFirestoreService api;
+  final Future<void> Function() onMaintenanceChanged;
 
   @override
   State<_EquipmentDetailsSheet> createState() => _EquipmentDetailsSheetState();
@@ -246,7 +280,24 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
     final id = widget.item['id']?.toString() ?? '';
     return id.isEmpty
         ? Future.value({'item': widget.item})
-        : widget.api.getMap('/inventory/${Uri.encodeComponent(id)}');
+        : widget.api.getMap('/inventory/${Uri.encodeComponent(id)}',
+            forceRefresh: true);
+  }
+
+  Future<void> _maintenance({String? ticketId}) async {
+    await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => ticketId == null
+                ? MaintenanceEditScreen(
+                    api: widget.api, unitId: widget.item['id']?.toString())
+                : MaintenanceTicketScreen(id: ticketId, api: widget.api)));
+    if (mounted) {
+      setState(() {
+        _detail = _loadDetails();
+      });
+      await widget.onMaintenanceChanged();
+    }
   }
 
   Future<void> _printQr(Map<String, dynamic> item) async {
@@ -441,17 +492,33 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
                                       : 'Not recorded'),
                               if (ticket['details'] != null)
                                 Text(ticket['details'].toString()),
+                              TextButton.icon(
+                                onPressed: () => _maintenance(
+                                    ticketId: ticket['id'].toString()),
+                                icon: const Icon(Icons.build_outlined),
+                                label: const Text('Open maintenance ticket'),
+                              ),
                             ],
                           ),
                         ),
                       );
                     }),
                     Text(
-                      'Manage repairs, photos and final inspections in the web Maintenance page.',
+                      'Open a ticket to record repairs, photos and final inspection checks.',
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
                     ),
                   ],
+                  if (item['is_active'] != false &&
+                      ['AVAILABLE', 'UNDER_MAINTENANCE']
+                          .contains(status.toUpperCase()) &&
+                      (item['open_maintenance'] ?? 0) == 0 &&
+                      !snapshot.hasError)
+                    OutlinedButton.icon(
+                      onPressed: () => _maintenance(),
+                      icon: const Icon(Icons.build_outlined),
+                      label: const Text('Report issue for this unit'),
+                    ),
                   if (item['description']?.toString().trim().isNotEmpty ==
                       true) ...[
                     const SizedBox(height: 10),

@@ -39,16 +39,19 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       await MobileApiService.instance.requestPasswordReset(email);
       if (mounted) setState(() => _requestedEmail = email);
     } on MobileApiException catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = error.userMessage;
-          if (error.code == 'INVALID_EMAIL_DOMAIN')
+          if (error.code == 'INVALID_EMAIL_DOMAIN') {
             _emailError = error.userMessage;
+          }
         });
+      }
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         setState(() =>
             _error = 'Could not request the reset link. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _sending = false);
     }

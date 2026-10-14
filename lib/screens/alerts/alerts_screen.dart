@@ -29,18 +29,20 @@ class _AlertsScreenState extends State<AlertsScreen> {
     _fetching = true;
     try {
       final rentals = await MobileApiService.instance.listRentals();
-      if (mounted)
+      if (mounted) {
         setState(() {
           _rentals = rentals;
           _loading = false;
           _error = '';
         });
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = '$error';
           _loading = false;
         });
+      }
     } finally {
       _fetching = false;
     }
@@ -73,10 +75,12 @@ class _AlertsScreenState extends State<AlertsScreen> {
       message =
           'The admin received your equipment. The rental timer has stopped; inspection is pending.';
     }
-    if (rental.balanceDue > 0 && !rental.canCancel)
+    if (rental.balanceDue > 0 && !rental.canCancel) {
       message += '\nBalance due: ₱${rental.balanceDue.toStringAsFixed(2)}';
-    if (rental.refundDue > 0)
+    }
+    if (rental.refundDue > 0) {
       message += '\nRefund pending: ₱${rental.refundDue.toStringAsFixed(2)}';
+    }
     return Card(
         child: ListTile(
             leading: Icon(overdue ? Icons.timer_off : Icons.receipt_long,

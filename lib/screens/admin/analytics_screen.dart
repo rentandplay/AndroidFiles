@@ -275,8 +275,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen> {
                                   style: const TextStyle(fontSize: 12))))
                           .toList(),
                       onChanged: (val) {
-                        if (val != null)
+                        if (val != null) {
                           setState(() => _selectedCategory = val);
+                        }
                       },
                     ),
                   ],

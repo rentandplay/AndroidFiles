@@ -9,6 +9,8 @@
 /.idea/assetWizardSettings.xml
 .DS_Store
 /build
+/.dart_tool/
+/.flutter-plugins-dependencies
 /captures
 .externalNativeBuild
 .cxx

@@ -513,10 +513,10 @@ class RentalBookingCard extends StatelessWidget {
       DateFormat('MMM d · h:mm a').format(value.toLocal());
 
   int _progressStep() {
-    if (rental.isAwaitingInspection) return 2;
+    if (rental.isAwaitingInspection) return 3;
     if (rental.isActive || rental.hasPendingReturnRequest) return 2;
     if (rental.isPendingVerification) {
-      return rental.normalizedStatus.contains('RETURN') ? 2 : 1;
+      return rental.normalizedStatus.contains('RETURN') ? 3 : 1;
     }
     if (rental.isAwaitingPickup) return 1;
     return 0;
@@ -985,15 +985,16 @@ class _RentalProgressTracker extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final active = scheme.primary;
     final track = scheme.outline.withValues(alpha: .45);
+    final labels = step == 3 ? [..._labels, 'Return'] : _labels;
     return Semantics(
-      label: 'Rental progress: ${_labels[step]} stage',
+      label: 'Rental progress: ${labels[step]} stage',
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         SizedBox(
           height: 18,
           child: CustomPaint(
             painter: _RentalProgressPainter(
                 step: step,
-                stepCount: _labels.length,
+                stepCount: labels.length,
                 active: active,
                 track: track,
                 surface: scheme.surface),
@@ -1001,9 +1002,9 @@ class _RentalProgressTracker extends StatelessWidget {
         ),
         const SizedBox(height: 5),
         Row(children: [
-          for (var index = 0; index < _labels.length; index++)
+          for (var index = 0; index < labels.length; index++)
             Expanded(
-              child: Text(_labels[index],
+              child: Text(labels[index],
                   textAlign: TextAlign.center,
                   maxLines: 2,
                   style: TextStyle(

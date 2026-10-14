@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -513,10 +512,10 @@ class _EquipmentQrLabelDialogState extends State<EquipmentQrLabelDialog> {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: printerStatusColor.withOpacity(.08),
+                color: printerStatusColor.withValues(alpha: .08),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: printerStatusColor.withOpacity(.25),
+                  color: printerStatusColor.withValues(alpha: .25),
                 ),
               ),
               child: Row(

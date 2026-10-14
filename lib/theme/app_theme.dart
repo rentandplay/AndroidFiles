@@ -30,7 +30,6 @@ class AppTheme {
       primaryColor: brandOrange,
       scaffoldBackgroundColor: lightBg,
       cardColor: lightSurface,
-      dialogBackgroundColor: lightSurface,
       dividerColor: lightBorder,
       colorScheme: const ColorScheme.light(
         primary: brandOrange,
@@ -39,8 +38,6 @@ class AppTheme {
         onSurface: lightTextPrimary,
         onSurfaceVariant: lightTextSecondary,
         outline: lightBorder,
-        background: lightBg,
-        onBackground: lightTextPrimary,
       ),
       appBarTheme: const AppBarTheme(
         centerTitle: true,
@@ -136,7 +133,6 @@ class AppTheme {
       primaryColor: brandOrange,
       scaffoldBackgroundColor: darkBg,
       cardColor: darkSurface,
-      dialogBackgroundColor: darkSurface,
       dividerColor: darkBorder,
       colorScheme: const ColorScheme.dark(
         primary: brandOrange,
@@ -145,8 +141,6 @@ class AppTheme {
         onSurface: darkTextPrimary,
         onSurfaceVariant: darkTextSecondary,
         outline: darkBorder,
-        background: darkBg,
-        onBackground: darkTextPrimary,
       ),
       appBarTheme: const AppBarTheme(
         centerTitle: true,

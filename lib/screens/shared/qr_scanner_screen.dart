@@ -94,9 +94,10 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             .where((rental) => rental.isActive && rental.itemId == record['id'])
             .toList();
         if (!mounted) return;
-        if (matches.length != 1)
+        if (matches.length != 1) {
           throw const MobileApiException(
               'No active rental for this unit belongs to your account.');
+        }
         Navigator.pushReplacement(
             context,
             MaterialPageRoute(

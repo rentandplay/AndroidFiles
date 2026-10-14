@@ -11,7 +11,6 @@
         "cupertino_icons",
         "firebase_auth",
         "firebase_core",
-        "firebase_database",
         "firebase_messaging",
         "firebase_storage",
         "flutter",
@@ -29,7 +28,8 @@
         "firebase_auth_platform_interface",
         "firebase_core_platform_interface",
         "flutter_lints",
-        "flutter_test"
+        "flutter_test",
+        "integration_test"
       ]
     },
     {
@@ -78,6 +78,17 @@
         "stream_channel",
         "test_api",
         "vector_math"
+      ]
+    },
+    {
+      "name": "integration_test",
+      "version": "0.0.0",
+      "dependencies": [
+        "flutter",
+        "flutter_driver",
+        "flutter_test",
+        "path",
+        "vm_service"
       ]
     },
     {
@@ -194,17 +205,6 @@
         "firebase_core_platform_interface",
         "firebase_storage_platform_interface",
         "firebase_storage_web",
-        "flutter"
-      ]
-    },
-    {
-      "name": "firebase_database",
-      "version": "11.3.10",
-      "dependencies": [
-        "firebase_core",
-        "firebase_core_platform_interface",
-        "firebase_database_platform_interface",
-        "firebase_database_web",
         "flutter"
       ]
     },
@@ -372,6 +372,26 @@
         "stream_channel",
         "string_scanner",
         "term_glyph"
+      ]
+    },
+    {
+      "name": "vm_service",
+      "version": "15.3.0",
+      "dependencies": []
+    },
+    {
+      "name": "flutter_driver",
+      "version": "0.0.0",
+      "dependencies": [
+        "file",
+        "flutter",
+        "flutter_test",
+        "fuchsia_remote_debug_protocol",
+        "matcher",
+        "meta",
+        "path",
+        "vm_service",
+        "webdriver"
       ]
     },
     {
@@ -614,30 +634,6 @@
       ]
     },
     {
-      "name": "firebase_database_web",
-      "version": "0.2.6+16",
-      "dependencies": [
-        "collection",
-        "firebase_core",
-        "firebase_core_web",
-        "firebase_database_platform_interface",
-        "flutter",
-        "flutter_web_plugins"
-      ]
-    },
-    {
-      "name": "firebase_database_platform_interface",
-      "version": "0.2.6+10",
-      "dependencies": [
-        "_flutterfire_internals",
-        "collection",
-        "firebase_core",
-        "flutter",
-        "meta",
-        "plugin_platform_interface"
-      ]
-    },
-    {
       "name": "cloud_firestore_web",
       "version": "4.4.12",
       "dependencies": [
@@ -779,6 +775,33 @@
       ]
     },
     {
+      "name": "webdriver",
+      "version": "3.1.0",
+      "dependencies": [
+        "matcher",
+        "path",
+        "stack_trace",
+        "sync_http"
+      ]
+    },
+    {
+      "name": "fuchsia_remote_debug_protocol",
+      "version": "0.0.0",
+      "dependencies": [
+        "meta",
+        "process",
+        "vm_service"
+      ]
+    },
+    {
+      "name": "file",
+      "version": "7.0.1",
+      "dependencies": [
+        "meta",
+        "path"
+      ]
+    },
+    {
       "name": "petitparser",
       "version": "7.1.0",
       "dependencies": [
@@ -876,14 +899,30 @@
       ]
     },
     {
-      "name": "vm_service",
-      "version": "15.3.0",
+      "name": "sync_http",
+      "version": "0.3.1",
       "dependencies": []
     },
     {
       "name": "ffi",
       "version": "2.2.0",
       "dependencies": []
+    },
+    {
+      "name": "process",
+      "version": "5.0.6",
+      "dependencies": [
+        "file",
+        "path",
+        "platform"
+      ]
+    },
+    {
+      "name": "platform",
+      "version": "3.2.0",
+      "dependencies": [
+        "meta"
+      ]
     }
   ],
   "configVersion": 1

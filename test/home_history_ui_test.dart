@@ -24,17 +24,25 @@ import 'package:rent_and_play_app/widgets/home_discovery.dart';
 import 'widget_test.dart' show SignedOutAuth;
 
 class _Customer extends Fake implements User {
+  _Customer([this.id = 'customer']);
+  final String id;
   @override
-  String get uid => 'customer';
+  String get uid => id;
   @override
   String get displayName => 'Jhon Saberon';
 }
 
 class _CustomerAuth extends AuthService {
+  User? _user = _Customer();
   @override
-  User get currentUser => _Customer();
+  User? get currentUser => _user;
   @override
   Future<UserModel?> getCurrentUserModel() async => null;
+
+  void changeUser(String? id) {
+    _user = id == null ? null : _Customer(id);
+    notifyListeners();
+  }
 }
 
 class _HomeApi extends MobileApiService {
@@ -115,6 +123,8 @@ void main() {
   Future<GlobalKey> render(WidgetTester tester, Widget screen,
       {bool dark = false,
       bool history = false,
+      bool browse = false,
+      AuthService? auth,
       double width = 360,
       double scale = 1}) async {
     tester.view.physicalSize = Size(width, 800);
@@ -126,7 +136,7 @@ void main() {
     await tester.pumpWidget(RepaintBoundary(
       key: capture,
       child: ChangeNotifierProvider<AuthService>(
-        create: (_) => _CustomerAuth(),
+        create: (_) => auth ?? _CustomerAuth(),
         child: MaterialApp(
           debugShowCheckedModeBanner: false,
           theme: theme.copyWith(
@@ -156,19 +166,26 @@ void main() {
                 .copyWith(textScaler: TextScaler.linear(scale)),
             child: child!,
           ),
-          home: Scaffold(
-            body: screen,
-            bottomNavigationBar: NavigationBar(
-              height: 72,
-              selectedIndex: history ? 3 : 0,
-              destinations: _destinations,
-            ),
-          ),
+          home: Consumer<AuthService>(
+              builder: (context, service, _) => Scaffold(
+                    body: screen,
+                    bottomNavigationBar: service.currentUser == null
+                        ? null
+                        : NavigationBar(
+                            height: 72,
+                            selectedIndex: history
+                                ? 3
+                                : browse
+                                    ? 1
+                                    : 0,
+                            destinations: _destinations,
+                          ),
+                  )),
         ),
       ),
     ));
     await tester.pumpAndSettle();
-    final imageContext = tester.element(find.byType(NavigationBar));
+    final imageContext = tester.element(find.byType(Scaffold).first);
     await tester.runAsync(() async {
       for (final image in ItemModel.getInitialCatalog()
           .map((item) => item.cleanImageUrl)
@@ -326,6 +343,82 @@ void main() {
   });
 
   testWidgets(
+      'Browse gates Saved by account and clears stale Saved filters on sign-out',
+      (tester) async {
+    final auth = _CustomerAuth()..changeUser(null);
+    final source = ItemModel.getInitialCatalog();
+    final api = _HomeApi()
+      ..items = [
+        source.firstWhere((item) => item.name == 'Badminton Set').toMap(),
+        source.firstWhere((item) => item.name == 'Bicycle').toMap(),
+        {
+          ...source.firstWhere((item) => item.name == 'Jenga').toMap(),
+          'status': 'unavailable',
+          'available_quantity': 0
+        },
+      ];
+    final capture =
+        await render(tester, CatalogScreen(api: api), auth: auth, browse: true);
+    final available = find.byKey(const ValueKey('catalog-available-filter'));
+    final saved = find.byKey(const ValueKey('catalog-saved-filter'));
+    expect(saved, findsNothing);
+    expect(find.byTooltip('Save item'), findsNothing);
+    expect(find.byTooltip('Remove from saved'), findsNothing);
+    await tester.tap(available);
+    await tester.pumpAndSettle();
+    expect(find.text('2 items'), findsOneWidget);
+    await save(tester, capture, 'browse-guest-light');
+
+    auth.changeUser('customer');
+    await tester.pumpAndSettle();
+    expect(find.text('Saved (0)'), findsOneWidget);
+    await tester.tap(find.byTooltip('Save item').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Saved (1)'), findsOneWidget);
+    await tester.tap(saved);
+    await tester.pumpAndSettle();
+    expect(find.text('1 item'), findsOneWidget);
+    await save(tester, capture, 'browse-saved-light');
+
+    auth.changeUser('another-customer');
+    await tester.pumpAndSettle();
+    expect(find.text('Saved (0)'), findsOneWidget);
+    expect(find.text('2 items'), findsOneWidget);
+    expect(find.byTooltip('Remove from saved'), findsNothing);
+    await tester.tap(find.byTooltip('Save item').first);
+    await tester.pumpAndSettle();
+    await tester.tap(saved);
+    await tester.pumpAndSettle();
+    expect(find.text('1 item'), findsOneWidget);
+
+    auth.changeUser(null);
+    await tester.pumpAndSettle();
+    expect(saved, findsNothing);
+    expect(find.byTooltip('Save item'), findsNothing);
+    expect(find.byTooltip('Remove from saved'), findsNothing);
+    expect(find.text('2 items'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Browse selected filters and saved cards fit narrow screens with large text',
+      (tester) async {
+    final capture = await render(tester, CatalogScreen(api: _HomeApi()),
+        browse: true, dark: true, width: 320, scale: 1.4);
+    await tester.tap(find.byKey(const ValueKey('catalog-available-filter')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Save item').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('catalog-saved-filter')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 item'), findsOneWidget);
+    expect(find.text('Saved (1)'), findsOneWidget);
+    expect(find.byTooltip('Remove from saved'), findsOneWidget);
+    await save(tester, capture, 'browse-saved-dark-large-text');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
       'History defaults to compact, opens full details, and keeps search across view changes',
       (tester) async {
     final api = _HomeApi()
@@ -336,8 +429,10 @@ void main() {
       ];
     final capture =
         await render(tester, RentalHistoryScreen(api: api), history: true);
-    final toggle = find.byKey(const ValueKey('history-compact-switch'));
-    expect(tester.widget<Switch>(toggle).value, isTrue);
+    final toggle = find.byKey(const ValueKey('history-view-toggle'));
+    expect(tester.widget<IconButton>(toggle).isSelected, isTrue);
+    expect(find.text('Compact view'), findsNothing);
+    expect(find.byTooltip('Show detailed view'), findsOneWidget);
     expect(
         tester.getSize(find.byKey(const ValueKey('history-compact-4'))).height,
         lessThan(165));
@@ -354,7 +449,8 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(toggle);
     await tester.pumpAndSettle();
-    expect(tester.widget<Switch>(toggle).value, isFalse);
+    expect(tester.widget<IconButton>(toggle).isSelected, isFalse);
+    expect(find.byTooltip('Show compact view'), findsOneWidget);
     expect(find.text('View details  ›'), findsOneWidget);
     expect(find.text('Basketball'), findsNothing);
     expect(find.text('Due ₱960.00'), findsOneWidget);
@@ -365,7 +461,7 @@ void main() {
     final dark = await render(tester, RentalHistoryScreen(api: api),
         history: true, dark: true, width: 320, scale: 1.4);
     await save(tester, dark, 'history-compact-dark-large-text');
-    await tester.tap(find.byKey(const ValueKey('history-compact-switch')));
+    await tester.tap(find.byKey(const ValueKey('history-view-toggle')));
     await tester.pumpAndSettle();
     await save(tester, dark, 'history-expanded-dark-large-text');
     expect(tester.takeException(), isNull);

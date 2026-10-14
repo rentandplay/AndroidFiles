@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../services/admin_firestore_service.dart';
 import '../../widgets/notification_widgets.dart';
 import 'equipment_list_screen.dart';
+import 'maintenance_screen.dart';
 import 'rental_admin_view.dart';
 import '../profile/profile_screen.dart';
 
@@ -14,7 +15,7 @@ import '../profile/profile_screen.dart';
 /// inventory editing, customer, rate, report, and account administration lives
 /// in the web workspace. This screen keeps the mobile tools needed at the
 /// counter: review rentals, scan QR codes, hand off equipment, and process
-/// returns.
+/// returns and unit maintenance.
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({
     super.key,
@@ -256,6 +257,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           body: EquipmentListScreen(
             items: _rows(_workspace['items']),
             onRefresh: _refresh,
+            loadItems: () async =>
+                _rows((await _api.getMap('/mobile/admin-workspace'))['items']),
           ),
         ),
       ),
@@ -304,6 +307,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       ),
     );
     if (kind != null && mounted) _requestScan(kind);
+  }
+
+  void _openMaintenance() {
+    Navigator.of(context).push<void>(MaterialPageRoute<void>(
+      builder: (_) =>
+          MaintenanceScreen(api: _api, onChanged: _refreshAfterChange),
+    ));
   }
 
   Widget _buildCurrentPage(Map<String, dynamic> user, bool isDark) {
@@ -519,11 +529,17 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
           ),
           const SizedBox(height: 12),
           Text(
-            'Browse equipment and print labels here. For inventory setup, reports, rates, and staff settings, use the web admin workspace.',
+            'Browse equipment, print labels, and manage repairs here. For inventory setup, reports, rates, and staff settings, use the web admin workspace.',
             style: TextStyle(
               color: _AdminColors.getMuted(isDark),
               fontSize: 12,
             ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _openMaintenance,
+            icon: const Icon(Icons.build_outlined),
+            label: const Text('Manage maintenance'),
           ),
         ],
       ),

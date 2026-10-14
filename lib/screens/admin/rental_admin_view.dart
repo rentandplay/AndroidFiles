@@ -22,7 +22,7 @@ String _date(dynamic value) {
   final raw = _text(value);
   final zoned = RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(raw)
       ? raw
-      : raw.replaceFirst(' ', 'T') + '+08:00';
+      : '${raw.replaceFirst(' ', 'T')}+08:00';
   final date = DateTime.tryParse(zoned);
   return date == null
       ? 'Set at physical release'
@@ -35,7 +35,7 @@ DateTime? _dueAt(Map<String, dynamic> row) {
   if (raw.isEmpty) return null;
   final zoned = RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(raw)
       ? raw
-      : raw.replaceFirst(' ', 'T') + '+08:00';
+      : '${raw.replaceFirst(' ', 'T')}+08:00';
   return DateTime.tryParse(zoned)?.toUtc();
 }
 
@@ -184,9 +184,10 @@ class _RentalAdminViewState extends State<RentalAdminView> {
         _details(row, code: code);
       }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
+      }
     }
   }
 
@@ -221,9 +222,10 @@ class _RentalAdminViewState extends State<RentalAdminView> {
           });
       if (mounted) _details(_map(result['rental']));
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
+      }
     }
   }
 
@@ -446,9 +448,10 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                         child: const Text('Close'))
                   ]));
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text('$error')));
+      }
     }
   }
 
@@ -616,7 +619,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                 'PENDING_ADMIN_APPROVAL')
                           RentalNotice(
                               title: _isOverdue(row, now)
-                                  ? 'Return requested · overdue by ${((now.toUtc().difference(_dueAt(row)!).inMinutes + 59) ~/ 60).clamp(1, 999999)}h'
+                                  ? '${row['latest_return_request_status'] == 'PENDING_ADMIN_APPROVAL' ? 'Return requested · overdue by' : 'Overdue by'} ${((now.toUtc().difference(_dueAt(row)!).inMinutes + 59) ~/ 60).clamp(1, 999999)}h'
                                   : _isDueToday(row, now)
                                       ? row['latest_return_request_status'] ==
                                               'PENDING_ADMIN_APPROVAL'
@@ -739,8 +742,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             body: payload));
     _verification.addListener(_verificationChanged);
     _transaction.addListener(() {
-      if (_action == 'release')
+      if (_action == 'release') {
         _verification.updateTransaction(_transaction.text);
+      }
     });
     _inventory.addListener(() {
       if (_action == 'release') _verification.updateInventory(_inventory.text);
@@ -753,16 +757,18 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
     });
     _minutes.addListener(() {
       _quoteVersion++;
-      if (mounted)
+      if (mounted) {
         setState(() {
           _quote = null;
           _previewing = false;
         });
+      }
     });
     if (_action == 'release') _transaction.text = widget.scannedCode ?? '';
     if (_action == 'receipt') _inventory.text = widget.scannedCode ?? '';
-    if (_action == 'prepare-delivery')
+    if (_action == 'prepare-delivery') {
       _inventory.text = widget.scannedCode ?? '';
+    }
     if (_action == 'payment-review') _loadPaymentProof();
     _paymentVerified =
         _number(_row['rental_paid_amount']) >= _number(_row['rental_fee']) &&
@@ -826,16 +832,19 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               maxLines: controller == _notes ? 3 : 1,
               decoration: InputDecoration(labelText: label),
               validator: (value) {
-                if (required && (value?.trim().isEmpty ?? true))
+                if (required && (value?.trim().isEmpty ?? true)) {
                   return 'This field is required';
+                }
                 if (controller == _minutes &&
                     (int.tryParse(value ?? '') == null ||
-                        int.parse(value!) <= 0))
+                        int.parse(value!) <= 0)) {
                   return 'Enter a positive whole number of minutes';
+                }
                 if (numeric &&
                     (double.tryParse(value ?? '') == null ||
-                        double.parse(value!) < 0))
+                        double.parse(value!) < 0)) {
                   return 'Enter a nonnegative amount';
+                }
                 return null;
               }));
   Widget _check(String label, bool value, ValueChanged<bool> change) =>
@@ -942,8 +951,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                 ? null
                 : (value) => setState(() {
                       _condition = value!;
-                      if (['DAMAGED', 'NEEDS_INSPECTION'].contains(value))
+                      if (['DAMAGED', 'NEEDS_INSPECTION'].contains(value)) {
                         _result = 'UNDER_MAINTENANCE';
+                      }
                     })),
         if (!release)
           DropdownButtonFormField<String>(
@@ -1012,14 +1022,17 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
     try {
       final result = await _api.adminRequest('/pricing/quote',
           method: 'POST', body: _bookingPayload());
-      if (mounted && version == _quoteVersion)
+      if (mounted && version == _quoteVersion) {
         setState(() => _quote = _map(result['quote']));
+      }
     } catch (error) {
-      if (mounted && version == _quoteVersion)
+      if (mounted && version == _quoteVersion) {
         setState(() => _error = '$error');
+      }
     } finally {
-      if (mounted && version == _quoteVersion)
+      if (mounted && version == _quoteVersion) {
         setState(() => _previewing = false);
+      }
     }
   }
 
@@ -1208,11 +1221,12 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         Navigator.pop(context, true);
       }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = '$error';
           _busy = false;
         });
+      }
     }
   }
 
@@ -1260,8 +1274,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               busy: _busy || _verification.busy || _previewing,
               onPressed: _action == 'release' && _verification.step < 2
                   ? () {
-                      if (_form.currentState!.validate())
+                      if (_form.currentState!.validate()) {
                         _verification.verify();
+                      }
                     }
                   : _action == 'booking' && _quote == null
                       ? _preview

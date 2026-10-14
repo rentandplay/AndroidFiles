@@ -29,6 +29,7 @@ class CatalogScreenState extends State<CatalogScreen> {
   bool _savedOnly = false;
   bool _availableFirst = true;
   final Set<String> _savedItemIds = {};
+  String? _savedOwnerId;
   List<ItemModel> catalogItems = [];
   bool _catalogLoading = true;
   String _catalogError = "";
@@ -44,8 +45,21 @@ class CatalogScreenState extends State<CatalogScreen> {
     super.initState();
     selectedCategory = widget.initialCategory;
     _loadCatalog();
-    _loadCurrentUserModel();
   }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final userId = context.watch<AuthService>().currentUser?.uid;
+    if (_savedOwnerId == userId) return;
+    _savedOwnerId = userId;
+    _savedItemIds.clear();
+    _savedOnly = false;
+    _currentUserModel = null;
+    if (userId != null) _loadCurrentUserModel();
+  }
+
+  bool get _canSave => _savedOwnerId != null;
 
   @override
   void dispose() {
@@ -56,8 +70,12 @@ class CatalogScreenState extends State<CatalogScreen> {
   Future<void> _loadCurrentUserModel() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
+      final userId = authService.currentUser?.uid;
+      if (userId == null) return;
       final userModel = await authService.getCurrentUserModel();
-      if (mounted) setState(() => _currentUserModel = userModel);
+      if (mounted && _savedOwnerId == userId) {
+        setState(() => _currentUserModel = userModel);
+      }
     } catch (_) {
       // Keep customer-facing navigation available if the profile is unavailable.
     }
@@ -97,7 +115,9 @@ class CatalogScreenState extends State<CatalogScreen> {
       if (_availableOnly && item.status.toLowerCase() != 'available') {
         return false;
       }
-      if (_savedOnly && !_savedItemIds.contains(item.id)) return false;
+      if (_canSave && _savedOnly && !_savedItemIds.contains(item.id)) {
+        return false;
+      }
       if (query.isEmpty) return true;
       return '${item.name} ${item.category} ${item.description} ${item.rateText}'
           .toLowerCase()
@@ -142,11 +162,56 @@ class CatalogScreenState extends State<CatalogScreen> {
     );
   }
 
+  void _toggleSaved(ItemModel item) {
+    final userId = context.read<AuthService>().currentUser?.uid;
+    if (userId == null || userId != _savedOwnerId) return;
+    setState(() {
+      if (!_savedItemIds.remove(item.id)) _savedItemIds.add(item.id);
+    });
+  }
+
+  Widget _filterChip({
+    required String id,
+    required String label,
+    required IconData icon,
+    required bool selected,
+    required ValueChanged<bool> onSelected,
+  }) {
+    final scheme = Theme.of(context).colorScheme;
+    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
+    return FilterChip(
+      key: ValueKey(id),
+      selected: selected,
+      showCheckmark: false,
+      avatar: Icon(icon, size: 18, color: foreground),
+      label: Text(label),
+      labelStyle: TextStyle(
+          color: foreground, fontSize: 12, fontWeight: FontWeight.w600),
+      backgroundColor: scheme.surface,
+      selectedColor: scheme.primary.withValues(alpha: .1),
+      side: BorderSide(
+          color: selected
+              ? scheme.primary.withValues(alpha: .35)
+              : scheme.outline),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      onSelected: onSelected,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textScale = (MediaQuery.textScalerOf(context).scale(15) / 15)
+        .clamp(1.0, double.infinity);
+    final width = MediaQuery.sizeOf(context).width;
+    final gridColumns = width >= 760
+        ? 3
+        : width < 350 && textScale > 1.2
+            ? 1
+            : 2;
     final isAdmin = _currentUserModel?.isStaff == true;
 
     return Scaffold(
@@ -364,22 +429,29 @@ class CatalogScreenState extends State<CatalogScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
                 child: Row(
                   children: [
-                    FilterChip(
+                    _filterChip(
+                      id: 'catalog-available-filter',
                       selected: _availableOnly,
-                      avatar: const Icon(Icons.check_circle_outline, size: 17),
-                      label: const Text('Available only'),
+                      icon: _availableOnly
+                          ? Icons.check_circle_rounded
+                          : Icons.check_circle_outline,
+                      label: 'Available only',
                       onSelected: (selected) =>
                           setState(() => _availableOnly = selected),
                     ),
-                    const SizedBox(width: 8),
-                    FilterChip(
-                      selected: _savedOnly,
-                      avatar:
-                          const Icon(Icons.favorite_border_rounded, size: 17),
-                      label: Text('Saved (${_savedItemIds.length})'),
-                      onSelected: (selected) =>
-                          setState(() => _savedOnly = selected),
-                    ),
+                    if (user != null) ...[
+                      const SizedBox(width: 8),
+                      _filterChip(
+                        id: 'catalog-saved-filter',
+                        selected: _savedOnly,
+                        icon: _savedOnly
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        label: 'Saved (${_savedItemIds.length})',
+                        onSelected: (selected) =>
+                            setState(() => _savedOnly = selected),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -447,15 +519,9 @@ class CatalogScreenState extends State<CatalogScreen> {
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
                 sliver: SliverGrid(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount:
-                        MediaQuery.sizeOf(context).width >= 760 ? 3 : 2,
-                    childAspectRatio: MediaQuery.sizeOf(context).width < 350
-                        ? 0.50
-                        : MediaQuery.sizeOf(context).width < 420
-                            ? 0.54
-                            : MediaQuery.sizeOf(context).width >= 760
-                                ? 0.74
-                                : 0.64,
+                    crossAxisCount: gridColumns,
+                    mainAxisExtent:
+                        120 + (gridColumns == 1 ? 150 : 160) * textScale,
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 14,
                   ),
@@ -518,56 +584,63 @@ class CatalogScreenState extends State<CatalogScreen> {
                   child: item.buildImage(fit: BoxFit.contain, height: 120),
                 ),
                 Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: statusColor.withValues(alpha: .92),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      statusLabel,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .2,
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: Material(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surface
-                        .withValues(alpha: .94),
-                    shape: const CircleBorder(),
-                    child: IconButton(
-                      tooltip: isSaved ? 'Remove from saved' : 'Save item',
-                      visualDensity: VisualDensity.compact,
-                      onPressed: () => setState(() {
-                        if (isSaved) {
-                          _savedItemIds.remove(item.id);
-                        } else {
-                          _savedItemIds.add(item.id);
-                        }
-                      }),
-                      icon: Icon(
-                        isSaved
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        color: isSaved
-                            ? Theme.of(context).colorScheme.primary
-                            : Theme.of(context).colorScheme.onSurfaceVariant,
-                        size: 20,
-                      ),
-                    ),
-                  ),
+                  top: 8,
+                  left: 8,
+                  right: 8,
+                  child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (_canSave) ...[
+                          Material(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .surface
+                                .withValues(alpha: .94),
+                            shape: const CircleBorder(),
+                            child: IconButton(
+                              key: ValueKey('catalog-save-${item.id}'),
+                              tooltip:
+                                  isSaved ? 'Remove from saved' : 'Save item',
+                              visualDensity: VisualDensity.compact,
+                              onPressed: () => _toggleSaved(item),
+                              icon: Icon(
+                                  isSaved
+                                      ? Icons.favorite_rounded
+                                      : Icons.favorite_border_rounded,
+                                  color: isSaved
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                  size: 20),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        if (!_canSave) const Spacer(),
+                        Flexible(
+                            flex: 4,
+                            child: Tooltip(
+                              message: statusLabel,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withValues(alpha: .92),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(statusLabel,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: .2)),
+                              ),
+                            )),
+                      ]),
                 ),
               ],
             ),
@@ -590,6 +663,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                     const SizedBox(height: 5),
                     Text(
                       item.category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
                         fontSize: 12,
@@ -613,7 +688,9 @@ class CatalogScreenState extends State<CatalogScreen> {
                     const SizedBox(height: 10),
                     SizedBox(
                       width: double.infinity,
-                      height: 40,
+                      height: 40 *
+                          (MediaQuery.textScalerOf(context).scale(13) / 13)
+                              .clamp(1.0, double.infinity),
                       child: ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppTheme.brandOrangeLight,

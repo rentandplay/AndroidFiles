@@ -10,7 +10,7 @@ String rentalStatusLabel(String status) => switch (status.toUpperCase()) {
       'PENDING_ADMIN_APPROVAL' || 'PENDING_ESP32_RENT' => 'Awaiting review',
       'APPROVED' => 'Approved · awaiting handoff',
       'ACTIVE' || 'RENTED' => 'In use',
-      'RETURN_REQUESTED' => 'Return request sent',
+      'RETURN_REQUESTED' => 'Return requested',
       'RETURN_PENDING_INSPECTION' => 'Inspection pending',
       'PENDING_VERIFICATION' => 'Handoff awaiting confirmation',
       'PENDING_RETURN_VERIFICATION' ||

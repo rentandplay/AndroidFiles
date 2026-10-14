@@ -127,8 +127,9 @@ class ItemModel {
     final lower = value.toLowerCase();
     if (lower.contains('sport')) return 'Sports';
     if (lower.contains('board')) return 'Board Games';
-    if (lower.contains('tech') || lower.contains('gaming'))
+    if (lower.contains('tech') || lower.contains('gaming')) {
       return 'Tech Rentals';
+    }
     if (lower.contains('card')) return 'Cards';
     return value;
   }
@@ -223,8 +224,9 @@ class ItemModel {
     // Direct match on ID or qrCode
     for (var item in items) {
       if (item.id.toLowerCase() == cleanCode) return item;
-      if (item.qrCode != null && item.qrCode!.toLowerCase() == cleanCode)
+      if (item.qrCode != null && item.qrCode!.toLowerCase() == cleanCode) {
         return item;
+      }
     }
 
     // Exact label aliases mapping from rent-play-qr-labels

@@ -179,7 +179,7 @@ class RentalModel {
       if (value is! String || value.isEmpty) return null;
       final zoned = RegExp(r'(Z|[+-]\d\d:\d\d)$').hasMatch(value)
           ? value
-          : value.replaceFirst(' ', 'T') + '+08:00';
+          : '${value.replaceFirst(' ', 'T')}+08:00';
       return DateTime.tryParse(zoned);
     }
 
@@ -311,12 +311,12 @@ class RentalModel {
       conditionNotes: conditionNotes ?? this.conditionNotes,
       latestReturnRequestStatus:
           latestReturnRequestStatus ?? this.latestReturnRequestStatus,
-      rentalCode: this.rentalCode,
-      holdExpiresAt: this.holdExpiresAt,
-      receivedAt: this.receivedAt,
-      balanceDue: this.balanceDue,
-      refundDue: this.refundDue,
-      paymentStatus: this.paymentStatus,
+      rentalCode: rentalCode,
+      holdExpiresAt: holdExpiresAt,
+      receivedAt: receivedAt,
+      balanceDue: balanceDue,
+      refundDue: refundDue,
+      paymentStatus: paymentStatus,
       paymentProofStatus: paymentProofStatus ?? this.paymentProofStatus,
       paymentProofReference:
           paymentProofReference ?? this.paymentProofReference,

@@ -265,6 +265,12 @@ void main() {
     await tester.pumpAndSettle();
     final button = find.widgetWithText(FilledButton, 'Send rental request');
     expect(tester.getBottomRight(button).dy, lessThanOrEqualTo(780));
+    expect(tester.widget<FilledButton>(button).onPressed, isNull);
+    final agreement = find.widgetWithText(CheckboxListTile,
+        'I have read and agree to the terms for this rental request.');
+    await tester.ensureVisible(agreement);
+    await tester.tap(agreement);
+    await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
     await save(tester, capture, 'android-checkout');
     await tester.scrollUntilVisible(find.text('Price summary'), 180);
@@ -382,6 +388,11 @@ void main() {
     retryButton.onPressed!();
     await tester.pump();
     await tester.pumpAndSettle();
+    final agreement = find.widgetWithText(CheckboxListTile,
+        'I have read and agree to the terms for this rental request.');
+    await tester.ensureVisible(agreement);
+    await tester.tap(agreement);
+    await tester.pumpAndSettle();
     expect(
         tester
             .widget<FilledButton>(
@@ -487,7 +498,14 @@ void main() {
                 onChanged: () async {})));
     await tester.pumpAndSettle();
     expect(find.text('1 overdue · 1 due today'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Overdue by 2h'), 150,
+        scrollable: find
+            .descendant(
+                of: find.byType(RentalAdminView),
+                matching: find.byType(Scrollable))
+            .first);
     expect(find.text('Overdue by 2h'), findsOneWidget);
+    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Overdue'));
     await tester.tap(find.widgetWithText(ChoiceChip, 'Overdue'));
     await tester.pumpAndSettle();
     expect(find.text('Late basketball'), findsOneWidget);

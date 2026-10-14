@@ -110,6 +110,12 @@
       "languageVersion": "3.7"
     },
     {
+      "name": "file",
+      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/file-7.0.1",
+      "packageUri": "lib/",
+      "languageVersion": "3.0"
+    },
+    {
       "name": "file_selector_linux",
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/file_selector_linux-0.9.4+1",
       "packageUri": "lib/",
@@ -170,24 +176,6 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "firebase_database",
-      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_database-11.3.10",
-      "packageUri": "lib/",
-      "languageVersion": "3.2"
-    },
-    {
-      "name": "firebase_database_platform_interface",
-      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_database_platform_interface-0.2.6+10",
-      "packageUri": "lib/",
-      "languageVersion": "3.2"
-    },
-    {
-      "name": "firebase_database_web",
-      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_database_web-0.2.6+16",
-      "packageUri": "lib/",
-      "languageVersion": "3.4"
-    },
-    {
       "name": "firebase_messaging",
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/firebase_messaging-15.2.10",
       "packageUri": "lib/",
@@ -230,6 +218,12 @@
       "languageVersion": "3.11"
     },
     {
+      "name": "flutter_driver",
+      "rootUri": "file:///C:/flutter/packages/flutter_driver",
+      "packageUri": "lib/",
+      "languageVersion": "3.11"
+    },
+    {
       "name": "flutter_lints",
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/flutter_lints-5.0.0",
       "packageUri": "lib/",
@@ -250,6 +244,12 @@
     {
       "name": "flutter_web_plugins",
       "rootUri": "file:///C:/flutter/packages/flutter_web_plugins",
+      "packageUri": "lib/",
+      "languageVersion": "3.11"
+    },
+    {
+      "name": "fuchsia_remote_debug_protocol",
+      "rootUri": "file:///C:/flutter/packages/fuchsia_remote_debug_protocol",
       "packageUri": "lib/",
       "languageVersion": "3.11"
     },
@@ -356,6 +356,12 @@
       "languageVersion": "3.6"
     },
     {
+      "name": "integration_test",
+      "rootUri": "file:///C:/flutter/packages/integration_test",
+      "packageUri": "lib/",
+      "languageVersion": "3.11"
+    },
+    {
       "name": "intl",
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/intl-0.20.3",
       "packageUri": "lib/",
@@ -452,6 +458,12 @@
       "languageVersion": "3.13"
     },
     {
+      "name": "platform",
+      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/platform-3.2.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.10"
+    },
+    {
       "name": "plugin_platform_interface",
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/plugin_platform_interface-2.1.8",
       "packageUri": "lib/",
@@ -468,6 +480,12 @@
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/printing-5.15.1",
       "packageUri": "lib/",
       "languageVersion": "3.12"
+    },
+    {
+      "name": "process",
+      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/process-5.0.6",
+      "packageUri": "lib/",
+      "languageVersion": "3.5"
     },
     {
       "name": "provider",
@@ -518,6 +536,12 @@
       "languageVersion": "3.1"
     },
     {
+      "name": "sync_http",
+      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/sync_http-0.3.1",
+      "packageUri": "lib/",
+      "languageVersion": "2.12"
+    },
+    {
       "name": "term_glyph",
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/term_glyph-1.2.2",
       "packageUri": "lib/",
@@ -552,6 +576,12 @@
       "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/web-1.1.1",
       "packageUri": "lib/",
       "languageVersion": "3.4"
+    },
+    {
+      "name": "webdriver",
+      "rootUri": "file:///C:/Users/requi/AppData/Local/Pub/Cache/hosted/pub.dev/webdriver-3.1.0",
+      "packageUri": "lib/",
+      "languageVersion": "3.1"
     },
     {
       "name": "xml",
