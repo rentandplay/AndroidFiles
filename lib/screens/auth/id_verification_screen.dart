@@ -50,8 +50,8 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
         throw Exception('User is not authenticated.');
       }
 
-      // Update User Profile in Firestore (Physical ID presentation & terms acceptance)
-      await authService.updateValidIdUrl(user.uid, 'physical_id_presented');
+      // Staff verify the actual physical ID at handoff.
+      await authService.acknowledgeIdRequirement(user.uid);
       await authService.updateTermsAcceptance(user.uid, true,
           termsVersion: rentalTermsVersion);
 
@@ -106,7 +106,8 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
             const SizedBox(height: 6),
             const Text(
               'Review our rental policies and physical ID requirement to proceed with equipment rentals.',
-              style: TextStyle(color: Colors.black87, fontSize: 13, height: 1.4),
+              style:
+                  TextStyle(color: Colors.black87, fontSize: 13, height: 1.4),
             ),
             const SizedBox(height: 20),
 
@@ -121,7 +122,8 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.badge_outlined, color: Colors.blue.shade800, size: 28),
+                  Icon(Icons.badge_outlined,
+                      color: Colors.blue.shade800, size: 28),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -156,7 +158,8 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
             // Terms & Conditions Card
             Card(
               elevation: 2,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16)),
               child: Padding(
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
@@ -176,7 +179,8 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                           child: Wrap(
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
-                              const Text('I have read and accept the ', style: TextStyle(fontSize: 13)),
+                              const Text('I have read and accept the ',
+                                  style: TextStyle(fontSize: 13)),
                               GestureDetector(
                                 onTap: _showTermsDialog,
                                 child: Text(
@@ -213,16 +217,19 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                   ),
                   elevation: 2,
                 ),
-                onPressed: (_acceptedTerms && !_isSubmitting) ? _handleSubmit : null,
+                onPressed:
+                    (_acceptedTerms && !_isSubmitting) ? _handleSubmit : null,
                 child: _isSubmitting
                     ? const SizedBox(
                         height: 20,
                         width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Colors.white),
                       )
                     : const Text(
                         'Continue to Catalog',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        style: TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.bold),
                       ),
               ),
             ),

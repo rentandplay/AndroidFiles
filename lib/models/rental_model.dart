@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-const rentAndPlayPickupLocation = 'Rent & Play at ASRI Hotspring Resort';
+const rentAndPlayPickupLocation =
+    'Rent & Play · Lakewoods Subdivision, Los Baños, Laguna';
 
 class RentalModel {
   final String rentalId;
@@ -39,21 +40,31 @@ class RentalModel {
   final String paymentProofReference;
   final String paymentProofNote;
   final String deliveryStatus;
+  final String fulfillmentMode;
+  final DateTime? scheduledStartAt;
+  final Map<String, dynamic> extensionRequest;
   bool get isAwaitingPickup => normalizedStatus == 'APPROVED';
   bool get isRentAndPlayPickup {
+    if (fulfillmentMode.toUpperCase() == 'SHOP_HANDOVER') return true;
+    if (fulfillmentMode.toUpperCase() == 'DELIVERY') return false;
     final location = deliveryLocation.trim().toLowerCase();
     return location.isEmpty ||
         location == 'shop pickup' ||
-        location.startsWith('asri hotspring resort') ||
+        location.startsWith('rent & play · lakewoods') ||
+        location.startsWith('rent & play at asri hotspring resort') ||
         location.startsWith(rentAndPlayPickupLocation.toLowerCase());
   }
 
   String get customerHandoffLocation => isRentAndPlayPickup
-      ? 'Rent & Play · ASRI Hotspring Resort'
-      : deliveryLocation;
+      ? rentAndPlayPickupLocation
+      : deliveryLocation.trim().isEmpty
+          ? 'Delivery location not recorded'
+          : deliveryLocation;
   bool get isAwaitingInspection =>
       normalizedStatus == 'RETURN_PENDING_INSPECTION';
-  bool get canCancel => isPendingAdminReview || isAwaitingPickup;
+  bool get canCancel =>
+      (isPendingAdminReview || isAwaitingPickup) &&
+      !const ['OUT_FOR_DELIVERY', 'DELIVERY_FAILED'].contains(deliveryStatus);
 
   String get normalizedStatus => status.trim().toUpperCase();
   bool get isActive =>
@@ -76,10 +87,27 @@ class RentalModel {
       isAwaitingInspection;
 
   String get statusLabel {
+    if (isAwaitingPickup && deliveryStatus == 'OUT_FOR_DELIVERY') {
+      return 'On the way · Lakewood';
+    }
+    if (isAwaitingPickup && deliveryStatus == 'DELIVERY_FAILED') {
+      return 'Delivery needs attention';
+    }
+    if (isAwaitingPickup &&
+        scheduledStartAt != null &&
+        deliveryStatus == 'NOT_PREPARED') {
+      return 'Scheduled';
+    }
     if (isActive && hasPendingReturnRequest) return 'Return pending receipt';
     switch (normalizedStatus) {
       case 'APPROVED':
-        return 'Approved · preparing delivery';
+        return isRentAndPlayPickup
+            ? (deliveryStatus == 'PREPARED'
+                ? 'Ready for shop handover'
+                : 'Approved · preparing your item')
+            : (deliveryStatus == 'PREPARED'
+                ? 'Ready for delivery'
+                : 'Approved · preparing delivery');
       case 'RETURN_PENDING_INSPECTION':
         return 'Received · inspection pending';
       case 'ACTIVE':
@@ -131,6 +159,9 @@ class RentalModel {
     this.paymentProofReference = '',
     this.paymentProofNote = '',
     this.deliveryStatus = '',
+    this.fulfillmentMode = '',
+    this.scheduledStartAt,
+    this.extensionRequest = const {},
   });
 
   Map<String, dynamic> toMap() {
@@ -169,6 +200,9 @@ class RentalModel {
       'payment_proof_reference': paymentProofReference,
       'payment_proof_note': paymentProofNote,
       'delivery_status': deliveryStatus,
+      'fulfillment_mode': fulfillmentMode,
+      'scheduled_start_at': scheduledStartAt?.toUtc().toIso8601String(),
+      'extension_request': extensionRequest,
     };
   }
 
@@ -197,6 +231,8 @@ class RentalModel {
     final returned = map['return_condition'];
     final fee =
         map['fee_breakdown'] is Map ? map['fee_breakdown'] as Map : const {};
+    final fulfillment =
+        text(map['fulfillment_mode'] ?? map['fulfillmentMode']).toUpperCase();
     return RentalModel(
       rentalId: id ?? text(map['id'] ?? map['rentalId']),
       itemId: text(map['item_id'] ?? map['itemId']),
@@ -210,7 +246,7 @@ class RentalModel {
       terminalId: text(map['terminal_id'] ?? map['terminalId']),
       deliveryLocation: text(
           map['delivery_location'] ?? map['deliveryLocation'] ?? map['resort'],
-          rentAndPlayPickupLocation),
+          fulfillment == 'DELIVERY' ? '' : rentAndPlayPickupLocation),
       startDate: parseDate(map['confirmed_rental_at'] ??
               map['start_at'] ??
               map['startDate'] ??
@@ -254,6 +290,11 @@ class RentalModel {
       paymentProofReference: text(map['payment_proof_reference']),
       paymentProofNote: text(map['payment_proof_note']),
       deliveryStatus: text(map['delivery_status']),
+      fulfillmentMode: fulfillment,
+      scheduledStartAt: parseDate(map['scheduled_start_at']),
+      extensionRequest: map['extension_request'] is Map
+          ? Map<String, dynamic>.from(map['extension_request'])
+          : const {},
     );
   }
 
@@ -283,6 +324,9 @@ class RentalModel {
     String? paymentProofReference,
     String? paymentProofNote,
     String? deliveryStatus,
+    String? fulfillmentMode,
+    DateTime? scheduledStartAt,
+    Map<String, dynamic>? extensionRequest,
   }) {
     return RentalModel(
       rentalId: rentalId ?? this.rentalId,
@@ -322,6 +366,9 @@ class RentalModel {
           paymentProofReference ?? this.paymentProofReference,
       paymentProofNote: paymentProofNote ?? this.paymentProofNote,
       deliveryStatus: deliveryStatus ?? this.deliveryStatus,
+      fulfillmentMode: fulfillmentMode ?? this.fulfillmentMode,
+      scheduledStartAt: scheduledStartAt ?? this.scheduledStartAt,
+      extensionRequest: extensionRequest ?? this.extensionRequest,
     );
   }
 }

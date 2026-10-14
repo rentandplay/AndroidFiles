@@ -10,6 +10,8 @@ import '../auth/login_screen.dart';
 import 'item_details_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
 import '../../widgets/notification_widgets.dart';
+import '../../widgets/mobile_controls.dart';
+import '../../utils/catalog_price.dart';
 
 class CatalogScreen extends StatefulWidget {
   const CatalogScreen({super.key, this.initialCategory = 'All', this.api});
@@ -177,24 +179,11 @@ class CatalogScreenState extends State<CatalogScreen> {
     required bool selected,
     required ValueChanged<bool> onSelected,
   }) {
-    final scheme = Theme.of(context).colorScheme;
-    final foreground = selected ? scheme.primary : scheme.onSurfaceVariant;
-    return FilterChip(
+    return MobileFilterChip(
       key: ValueKey(id),
       selected: selected,
-      showCheckmark: false,
-      avatar: Icon(icon, size: 18, color: foreground),
-      label: Text(label),
-      labelStyle: TextStyle(
-          color: foreground, fontSize: 12, fontWeight: FontWeight.w600),
-      backgroundColor: scheme.surface,
-      selectedColor: scheme.primary.withValues(alpha: .1),
-      side: BorderSide(
-          color: selected
-              ? scheme.primary.withValues(alpha: .35)
-              : scheme.outline),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      icon: icon,
+      label: label,
       onSelected: onSelected,
     );
   }
@@ -204,6 +193,7 @@ class CatalogScreenState extends State<CatalogScreen> {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
     final textScale = (MediaQuery.textScalerOf(context).scale(15) / 15)
         .clamp(1.0, double.infinity);
     final width = MediaQuery.sizeOf(context).width;
@@ -300,6 +290,7 @@ class CatalogScreenState extends State<CatalogScreen> {
       body: RefreshIndicator(
         onRefresh: _loadCatalog,
         child: CustomScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             if (_catalogLoading)
@@ -321,32 +312,49 @@ class CatalogScreenState extends State<CatalogScreen> {
               ),
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: (value) => setState(() => _searchQuery = value),
-                  textInputAction: TextInputAction.search,
-                  decoration: InputDecoration(
-                    hintText: 'Search equipment or category',
-                    prefixIcon: const Icon(Icons.search_rounded),
-                    suffixIcon: _searchQuery.isEmpty
-                        ? null
-                        : IconButton(
-                            tooltip: 'Clear search',
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() => _searchQuery = '');
-                            },
-                            icon: const Icon(Icons.close_rounded),
-                          ),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                child: Row(children: [
+                  Expanded(
+                      child: MobileSearchField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(() => _searchQuery = value),
+                    hintText: 'Search equipment',
+                  )),
+                  const SizedBox(width: 8),
+                  Material(
+                    color: scheme.surface,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: scheme.outline)),
+                    child: SizedBox(
+                        width: 48,
+                        height: 48,
+                        child: PopupMenuButton<String>(
+                          tooltip: 'Sort equipment',
+                          icon: Icon(Icons.sort_rounded,
+                              size: 20, color: scheme.onSurfaceVariant),
+                          initialValue: _availableFirst ? 'available' : 'name',
+                          onSelected: (value) => setState(
+                              () => _availableFirst = value == 'available'),
+                          itemBuilder: (_) => [
+                            CheckedPopupMenuItem(
+                                value: 'available',
+                                checked: _availableFirst,
+                                child: const Text('Available first')),
+                            CheckedPopupMenuItem(
+                                value: 'name',
+                                checked: !_availableFirst,
+                                child: const Text('Name A–Z')),
+                          ],
+                        )),
                   ),
-                ),
+                ]),
               ),
             ),
             SliverToBoxAdapter(
               child: Container(
-                height: 56,
-                padding: const EdgeInsets.symmetric(vertical: 7),
+                height: 48 + (textScale - 1) * 16,
+                padding: const EdgeInsets.symmetric(vertical: 2),
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -354,43 +362,13 @@ class CatalogScreenState extends State<CatalogScreen> {
                   itemBuilder: (context, index) {
                     final category = categories[index];
                     final isSelected = selectedCategory == category;
-                    final isDark =
-                        Theme.of(context).brightness == Brightness.dark;
                     return Padding(
                       padding: const EdgeInsets.only(right: 9),
-                      child: ChoiceChip(
-                        label: Text(category),
-                        avatar: isSelected
-                            ? const Icon(Icons.check_rounded, size: 17)
-                            : null,
+                      child: MobileCategoryChip(
+                        label: category,
                         selected: isSelected,
-                        selectedColor: AppTheme.brandOrange,
-                        backgroundColor:
-                            isDark ? AppTheme.darkSurface : Colors.white,
-                        side: BorderSide(
-                          color: isDark
-                              ? AppTheme.darkBorder
-                              : const Color(0xFFE2E8F0),
-                        ),
-                        showCheckmark: false,
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        labelStyle: TextStyle(
-                          color: isSelected
-                              ? Colors.white
-                              : (isDark
-                                  ? AppTheme.darkTextPrimary
-                                  : AppTheme.lightTextPrimary),
-                          fontWeight:
-                              isSelected ? FontWeight.w700 : FontWeight.w500,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        onSelected: (selected) {
-                          if (selected) {
-                            setState(() => selectedCategory = category);
-                          }
-                        },
+                        onSelected: () =>
+                            setState(() => selectedCategory = category),
                       ),
                     );
                   },
@@ -398,35 +376,9 @@ class CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
             SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 12, 2),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${filteredItems.length} item${filteredItems.length == 1 ? '' : 's'}',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                    TextButton.icon(
-                      onPressed: () =>
-                          setState(() => _availableFirst = !_availableFirst),
-                      icon: const Icon(Icons.sort_rounded, size: 18),
-                      label: Text(
-                          _availableFirst ? 'Available first' : 'Name A–Z'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
                 child: Row(
                   children: [
                     _filterChip(
@@ -456,6 +408,16 @@ class CatalogScreenState extends State<CatalogScreen> {
                 ),
               ),
             ),
+            SliverToBoxAdapter(
+                child: Padding(
+              padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
+              child: Text(
+                  '${filteredItems.length} item${filteredItems.length == 1 ? '' : 's'}',
+                  style: TextStyle(
+                      color: scheme.onSurfaceVariant,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600)),
+            )),
             if (filteredItems.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: false,
@@ -520,8 +482,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                 sliver: SliverGrid(
                   gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: gridColumns,
-                    mainAxisExtent:
-                        120 + (gridColumns == 1 ? 150 : 160) * textScale,
+                    mainAxisExtent: 110 + 160 * textScale,
                     crossAxisSpacing: 14,
                     mainAxisSpacing: 14,
                   ),
@@ -539,34 +500,33 @@ class CatalogScreenState extends State<CatalogScreen> {
 
   Widget _buildItemCard(ItemModel item) {
     final isSaved = _savedItemIds.contains(item.id);
-
+    final scheme = Theme.of(context).colorScheme;
+    final textScaler = MediaQuery.textScalerOf(context);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusKey = item.status.toUpperCase();
     final statusColor = switch (statusKey) {
-      'AVAILABLE' => Colors.green,
-      'RENTED' || 'RESERVED_PENDING' => Colors.orange,
-      _ => Colors.red,
+      'AVAILABLE' => isDark ? const Color(0xFF89D5B8) : const Color(0xFF216F56),
+      'RENTED' || 'RESERVED_PENDING' => mobileAccentText(context),
+      _ => scheme.onSurfaceVariant,
     };
     final statusLabel = item.totalQuantity > 1
-        ? '${item.availableQuantity}/${item.totalQuantity} AVAILABLE'
+        ? '${item.availableQuantity}/${item.totalQuantity} available'
         : switch (statusKey) {
-            'AVAILABLE' => 'AVAILABLE',
-            'RESERVED_PENDING' => 'ON HOLD',
-            'RENTED' => 'RENTED',
-            'UNAVAILABLE' || '' => 'UNAVAILABLE',
-            _ => statusKey.replaceAll('_', ' '),
+            'AVAILABLE' => 'Available',
+            'RESERVED_PENDING' => 'On hold',
+            'RENTED' => 'Rented',
+            'UNDER_MAINTENANCE' => 'Maintenance',
+            'UNDER_INSPECTION' => 'Inspection',
+            _ => 'Unavailable',
           };
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Card(
       clipBehavior: Clip.antiAlias,
-      elevation: isDark ? 0 : 2,
-      shadowColor: const Color(0x1A0F172A),
+      elevation: 0,
       margin: EdgeInsets.zero,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-        side: BorderSide(
-          color: isDark ? AppTheme.darkBorder : const Color(0xFFE8ECF1),
-        ),
+        borderRadius: BorderRadius.circular(18),
+        side: BorderSide(color: scheme.outline),
       ),
       child: InkWell(
         onTap: () => _openItemDetails(item),
@@ -576,12 +536,12 @@ class CatalogScreenState extends State<CatalogScreen> {
             Stack(
               children: [
                 Container(
-                  height: 120,
+                  height: 110,
                   width: double.infinity,
                   color: isDark
                       ? AppTheme.darkSurfaceVariant
                       : const Color(0xFFF3F5F7),
-                  child: item.buildImage(fit: BoxFit.contain, height: 120),
+                  child: item.buildImage(fit: BoxFit.contain, height: 110),
                 ),
                 Positioned(
                   top: 8,
@@ -627,14 +587,16 @@ class CatalogScreenState extends State<CatalogScreen> {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 6),
                                 decoration: BoxDecoration(
-                                  color: statusColor.withValues(alpha: .92),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: scheme.surface.withValues(alpha: .96),
+                                  border: Border.all(
+                                      color: statusColor.withValues(alpha: .2)),
+                                  borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text(statusLabel,
                                     maxLines: 2,
                                     overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                        color: Colors.white,
+                                    style: TextStyle(
+                                        color: statusColor,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
                                         letterSpacing: .2)),
@@ -650,17 +612,20 @@ class CatalogScreenState extends State<CatalogScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      item.name,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w800,
-                        fontSize: 15,
-                        height: 1.15,
-                      ),
-                    ),
-                    const SizedBox(height: 5),
+                    ConstrainedBox(
+                        constraints: BoxConstraints(
+                            minHeight: textScaler.scale(14) * 1.25 * 2),
+                        child: Text(
+                          item.name,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            height: 1.25,
+                          ),
+                        )),
+                    const SizedBox(height: 4),
                     Text(
                       item.category,
                       maxLines: 1,
@@ -670,42 +635,47 @@ class CatalogScreenState extends State<CatalogScreen> {
                         fontSize: 12,
                       ),
                     ),
-                    const Spacer(),
+                    const SizedBox(height: 8),
                     Tooltip(
                       message: item.rateText,
                       child: Text(
-                        item.rateText,
+                        catalogPriceLabel(item),
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: Theme.of(context).colorScheme.primary,
+                          color: mobileAccentText(context),
                           fontWeight: FontWeight.w700,
                           fontSize: 12,
                           height: 1.15,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 10),
+                    const Spacer(),
                     SizedBox(
                       width: double.infinity,
                       height: 40 *
                           (MediaQuery.textScalerOf(context).scale(13) / 13)
                               .clamp(1.0, double.infinity),
-                      child: ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.brandOrangeLight,
-                          foregroundColor: Colors.white,
+                      child: TextButton(
+                        style: TextButton.styleFrom(
+                          foregroundColor: mobileAccentText(context),
                           padding: EdgeInsets.zero,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
                         onPressed: () => _openItemDetails(item),
-                        child: Text(
-                          'View details',
-                          style: const TextStyle(
-                              fontSize: 13, fontWeight: FontWeight.w700),
-                        ),
+                        child: Row(children: [
+                          const Expanded(
+                              child: Text('View details',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700))),
+                          const SizedBox(width: 4),
+                          const Icon(Icons.arrow_forward_rounded, size: 16),
+                        ]),
                       ),
                     ),
                   ],

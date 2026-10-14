@@ -75,6 +75,10 @@ class MainActivity : FlutterActivity() {
     private var pendingWriteLength = 0
     private var writePending = false
     private var printResult: MethodChannel.Result? = null
+    private var printFinishTimer: Runnable? = null
+    private var paperOut = false
+    private var headHot = false
+    private var printerWarning = ""
     private var writeTimeout: Runnable? = null
     private var flowTimeout: Runnable? = null
     private val notificationLock = Any()
@@ -103,7 +107,7 @@ class MainActivity : FlutterActivity() {
                         discoverPrinters(result)
                     }
                     "getPrinterStatus" -> result.success(
-                        mapOf("connected" to (activeGatt != null && isPrinterConnected)),
+                        mapOf("connected" to (activeGatt != null && isPrinterConnected), "name" to if (isPrinterConnected) printerName else "Printer", "printing" to (printResult != null), "progress" to (printBytes?.let { if (it.isEmpty()) 0 else printOffset * 100 / it.size } ?: 0), "paperOut" to paperOut, "headHot" to headHot, "warning" to printerWarning),
                     )
                     "connectPrinter" -> {
                         val id = call.argument<String>("id")
@@ -122,6 +126,16 @@ class MainActivity : FlutterActivity() {
                         } else {
                             withBluetoothPermissions(result) {
                                 printEquipmentLabel(code, name, matrix, result)
+                            }
+                        }
+                    }
+                    "printRentalReceipt" -> {
+                        val lines = call.argument<List<Map<String, Any?>>>("lines")
+                        if (lines == null || call.argument<String>("paperMode") != "continuous") {
+                            result.error("invalid_receipt", "Use a continuous paper roll and a valid rental receipt.", null)
+                        } else {
+                            withBluetoothPermissions(result) {
+                                queuePrint(result) { bitmapPrintJob(ThermalReceiptRaster.render(lines)) }
                             }
                         }
                     }
@@ -272,6 +286,8 @@ class MainActivity : FlutterActivity() {
 
     @SuppressLint("MissingPermission")
     private fun connectPrinter(address: String, result: MethodChannel.Result) {
+        if (printResult != null) { result.error("printer_busy", "Wait for the current printer job to finish.", null); return }
+
         val adapter = bluetoothAdapter()
         if (adapter == null || !adapter.isEnabled) {
             result.error("bluetooth_off", "Turn on Bluetooth before connecting to the printer.", null)
@@ -448,6 +464,7 @@ class MainActivity : FlutterActivity() {
     ) {
         if (gatt !== activeGatt || characteristic.uuid != RX_UUID) return
         val flowStates = mutableListOf<Int>()
+        val statuses = mutableListOf<Int>()
         synchronized(notificationLock) {
             notificationBuffer += value
             while (notificationBuffer.size >= 2) {
@@ -476,13 +493,30 @@ class MainActivity : FlutterActivity() {
                     notificationBuffer = notificationBuffer.copyOfRange(1, notificationBuffer.size)
                     continue
                 }
+                val payload = notificationBuffer.copyOfRange(6, frameLength - 2)
+                if (crc8(payload) != (notificationBuffer[frameLength - 2].toInt() and 0xff)) {
+                    notificationBuffer = notificationBuffer.copyOfRange(frameLength, notificationBuffer.size)
+                    continue
+                }
                 val opcode = notificationBuffer[2].toInt() and 0xff
                 if (opcode == 0xae) flowStates.add(notificationBuffer[6].toInt() and 0xff)
+                if (opcode == 0xa3) statuses.add(notificationBuffer[6].toInt() and 0xff)
                 notificationBuffer = notificationBuffer.copyOfRange(frameLength, notificationBuffer.size)
             }
         }
+        statuses.forEach { code -> mainHandler.post {
+            if (gatt !== activeGatt) return@post
+            when (code) {
+                0x00 -> { paperOut = false; headHot = false; printerWarning = "" }
+                0x01, 0x09 -> { paperOut = true; printerWarning = "The printer is out of paper. Load the roll and check partial output before retrying." }
+                0x04, 0xd2 -> { headHot = true; printerWarning = "The print head is too hot. Let it cool before retrying." }
+                0x08 -> { printerWarning = "The printer reports low power." }
+            }
+            if ((paperOut || headHot) && printResult != null) failPrint(printerWarning)
+        } }
         flowStates.forEach { state ->
             mainHandler.post {
+                if (gatt !== activeGatt) return@post
                 flowPaused = state == 0x10
                 if (!flowPaused) {
                     flowTimeout?.let(mainHandler::removeCallbacks)
@@ -522,6 +556,9 @@ class MainActivity : FlutterActivity() {
 
     @SuppressLint("MissingPermission")
     private fun disconnectPrinter() {
+        paperOut = false
+        headHot = false
+        printerWarning = ""
         connectTimeout?.let(mainHandler::removeCallbacks)
         connectTimeout = null
         connectResult?.error("connection_cancelled", "The printer connection was replaced.", null)
@@ -537,25 +574,23 @@ class MainActivity : FlutterActivity() {
         synchronized(notificationLock) { notificationBuffer = byteArrayOf() }
     }
 
-    private fun printEquipmentLabel(
-        code: String,
-        name: String,
-        matrix: Map<String, Any?>,
-        result: MethodChannel.Result,
-    ) {
+    private fun printEquipmentLabel(code: String, name: String, matrix: Map<String, Any?>, result: MethodChannel.Result) =
+        queuePrint(result) { createMx10PrintJob(code, name, matrix) }
+
+    private fun queuePrint(result: MethodChannel.Result, prepare: () -> ByteArray) {
         val gatt = activeGatt
         if (gatt == null || !isPrinterConnected || txCharacteristic == null) {
             result.error("printer_disconnected", "Connect the printer before printing.", null)
             return
         }
         if (printResult != null) {
-            result.error("printer_busy", "Wait for the current label to finish printing.", null)
+            result.error("printer_busy", "Wait for the current printer job to finish.", null)
             return
         }
         printResult = result
         printExecutor.execute {
             try {
-                val job = createMx10PrintJob(code, name, matrix)
+                val job = prepare()
                 mainHandler.post {
                     if (printResult === result) {
                         printBytes = job
@@ -665,8 +700,17 @@ class MainActivity : FlutterActivity() {
 
     private fun finishPrint() {
         val result = printResult ?: return
-        clearPrintState()
-        result.success(null)
+        if (printFinishTimer != null) return
+        val timer = Runnable {
+            printFinishTimer = null
+            if (printResult !== result) return@Runnable
+            if (flowPaused) { armFlowTimeout(); return@Runnable }
+            if (!isPrinterConnected) { failPrint("Bluetooth disconnected before printing finished."); return@Runnable }
+            clearPrintState()
+            result.success(null)
+        }
+        printFinishTimer = timer
+        mainHandler.postDelayed(timer, 6100L)
     }
 
     private fun failPrint(message: String) {
@@ -676,6 +720,8 @@ class MainActivity : FlutterActivity() {
     }
 
     private fun clearPrintState() {
+        printFinishTimer?.let(mainHandler::removeCallbacks)
+        printFinishTimer = null
         writeTimeout?.let(mainHandler::removeCallbacks)
         flowTimeout?.let(mainHandler::removeCallbacks)
         writeTimeout = null
@@ -758,10 +804,16 @@ class MainActivity : FlutterActivity() {
         canvas.drawText(shortName, 230f, 61f, namePaint)
         canvas.drawText("RENT & PLAY", 230f, 93f, brandPaint)
 
-        val pixels = IntArray(PRINTER_WIDTH * PRINTER_HEIGHT)
-        bitmap.getPixels(pixels, 0, PRINTER_WIDTH, 0, 0, PRINTER_WIDTH, PRINTER_HEIGHT)
-        val rows = ArrayList<ByteArray>(PRINTER_HEIGHT)
-        for (y in 0 until PRINTER_HEIGHT) {
+        return bitmapPrintJob(bitmap)
+    }
+
+    private fun bitmapPrintJob(bitmap: Bitmap): ByteArray {
+        require(bitmap.width == PRINTER_WIDTH && bitmap.height in 1..8192) { "Invalid print image dimensions." }
+        val height = bitmap.height
+        val pixels = IntArray(PRINTER_WIDTH * height)
+        bitmap.getPixels(pixels, 0, PRINTER_WIDTH, 0, 0, PRINTER_WIDTH, height)
+        val rows = ArrayList<ByteArray>(height)
+        for (y in 0 until height) {
             val packed = ByteArray(PRINTER_WIDTH / 8)
             for (x in 0 until PRINTER_WIDTH) {
                 val color = pixels[y * PRINTER_WIDTH + x]

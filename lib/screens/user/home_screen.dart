@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/home_discovery.dart';
+import '../../utils/catalog_price.dart';
 import '../../widgets/notification_widgets.dart';
 import '../../widgets/rent_play_wordmark.dart';
 import '../../widgets/rental_ui.dart';
@@ -163,11 +164,13 @@ class HomeScreenState extends State<HomeScreen> {
             child: RefreshIndicator(
               onRefresh: _loadHome,
               child: ListView(
+                keyboardDismissBehavior:
+                    ScrollViewKeyboardDismissBehavior.onDrag,
                 physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.fromLTRB(0, 8, 0, 28),
                 children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 18),
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -180,6 +183,7 @@ class HomeScreenState extends State<HomeScreen> {
                               .headlineSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w800,
+                                fontSize: 22,
                                 letterSpacing: -.45,
                               ),
                         ),
@@ -189,7 +193,8 @@ class HomeScreenState extends State<HomeScreen> {
                           style: Theme.of(context)
                               .textTheme
                               .bodyMedium
-                              ?.copyWith(color: scheme.onSurfaceVariant),
+                              ?.copyWith(
+                                  color: scheme.onSurfaceVariant, fontSize: 13),
                         ),
                       ],
                     ),
@@ -310,7 +315,7 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(20, 18, 8, 14),
+                        padding: const EdgeInsets.fromLTRB(18, 14, 8, 12),
                         child: Row(
                           children: [
                             Expanded(
@@ -343,7 +348,7 @@ class HomeScreenState extends State<HomeScreen> {
                                     overflow: TextOverflow.ellipsis,
                                     style: const TextStyle(
                                       color: Colors.white,
-                                      fontSize: 20,
+                                      fontSize: 19,
                                       height: 1.05,
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -352,7 +357,7 @@ class HomeScreenState extends State<HomeScreen> {
                                   Tooltip(
                                     message: item.rateText,
                                     child: Text(
-                                      item.rateText,
+                                      catalogPriceLabel(item),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
@@ -388,7 +393,7 @@ class HomeScreenState extends State<HomeScreen> {
                               flex: 5,
                               child: item.buildImage(
                                 fit: BoxFit.contain,
-                                height: 150,
+                                height: 136,
                                 width: 145,
                               ),
                             ),
@@ -407,7 +412,7 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   double _featureHeight(BuildContext context) =>
-      194 *
+      170 *
       (MediaQuery.textScalerOf(context).scale(14) / 14)
           .clamp(1.0, double.infinity);
 
@@ -434,7 +439,7 @@ class HomeScreenState extends State<HomeScreen> {
                             'Ready for a fun day?',
                             style: TextStyle(
                               color: Colors.white,
-                              fontSize: 22,
+                              fontSize: 20,
                               fontWeight: FontWeight.w800,
                             ),
                           ),

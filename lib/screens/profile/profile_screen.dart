@@ -9,6 +9,7 @@ import '../../models/user_model.dart';
 import '../../providers/theme_provider.dart';
 import '../auth/login_screen.dart';
 import '../../widgets/notification_widgets.dart';
+import '../../widgets/mobile_controls.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -43,11 +44,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = false;
   Uint8List? _imageBytes;
   String? _profileImageUrl;
+  late Future<UserModel?> _profileFuture;
+  String? _profileUserId;
 
   @override
   void initState() {
     super.initState();
-    _loadUserData();
+    _profileUserId = context.read<AuthService>().currentUser?.uid;
+    _profileFuture = _loadUserData();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final userId = Provider.of<AuthService>(context).currentUser?.uid;
+    if (userId == _profileUserId) return;
+    _profileUserId = userId;
+    _isEditing = false;
+    _isLoading = false;
+    _imageBytes = null;
+    _profileImageUrl = null;
+    _nameController.clear();
+    _phoneController.clear();
+    _profileFuture = _loadUserData();
   }
 
   @override
@@ -62,19 +81,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _loadUserData() async {
+  Future<UserModel?> _loadUserData() async {
     final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUser;
+    final requestedUserId = user?.uid;
     final userModel = await authService.getCurrentUserModel();
-    if (userModel != null && mounted) {
+    if (mounted && requestedUserId == _profileUserId) {
       setState(() {
-        _nameController.text = userModel.name;
-        _phoneController.text = userModel.phone;
-        _profileImageUrl = userModel.profileImageUrl != null &&
-                userModel.profileImageUrl!.startsWith('http')
+        _nameController.text = userModel?.name.trim().isNotEmpty == true
+            ? userModel!.name.trim()
+            : user?.displayName ?? '';
+        _phoneController.text = userModel?.phone ?? '';
+        _profileImageUrl = userModel?.profileImageUrl != null &&
+                userModel!.profileImageUrl!.startsWith('http')
             ? userModel.profileImageUrl
             : null;
       });
     }
+    return userModel;
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -125,6 +149,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _saveProfile() async {
+    if (_isLoading) return;
+    FocusScope.of(context).unfocus();
     final name = _nameController.text.trim();
     if (name.length < 2) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -136,15 +162,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
       final user = authService.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
 
-      await authService.updateCustomerProfile(
+      final updatedProfile = await authService.updateCustomerProfile(
         name: name,
         phone: _phoneController.text,
       );
 
-      if (!mounted) return;
+      if (!mounted || updatedProfile.uid != _profileUserId) return;
       setState(() {
+        _nameController.text = updatedProfile.name;
+        _phoneController.text = updatedProfile.phone;
+        _profileFuture = SynchronousFuture<UserModel?>(updatedProfile);
         _isEditing = false;
         _isLoading = false;
       });
@@ -239,11 +271,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ],
             )
           : null,
+      bottomNavigationBar: user == null
+          ? null
+          : SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: OutlinedButton.icon(
+                  key: const ValueKey('profile-sign-out'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Theme.of(context).colorScheme.error,
+                    backgroundColor: cardBg,
+                    minimumSize: const Size.fromHeight(48),
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 16),
+                    side: BorderSide(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .error
+                            .withValues(alpha: .35)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed:
+                      _isLoading ? null : () => _confirmSignOut(authService),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: const Text('Sign out',
+                      style:
+                          TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+              ),
+            ),
       body: FutureBuilder<UserModel?>(
-        future: authService.getCurrentUserModel(),
+        future: _profileFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.person_outline_rounded,
+                        size: 32, color: textSecondary),
+                    const SizedBox(height: 12),
+                    Text('Could not load your profile.',
+                        style: TextStyle(color: textPrimary),
+                        textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    FilledButton.tonalIcon(
+                      onPressed: () =>
+                          setState(() => _profileFuture = _loadUserData()),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Try again'),
+                    ),
+                  ],
+                ),
+              ),
+            );
           }
 
           final userModel = snapshot.data;
@@ -256,7 +344,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               : (isAdmin ? 'Business' : 'My profile');
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16.0),
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -281,7 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ],
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 14),
 
                 // 2. Tab Content View
                 if (isAdmin && selectedTab == 'Business')
@@ -316,29 +405,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       textPrimary,
                       textSecondary,
                       inputFill),
-
-                if (user != null) ...[
-                  const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.red,
-                        side: const BorderSide(color: Colors.red),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12)),
-                      ),
-                      onPressed: _isLoading
-                          ? null
-                          : () => _confirmSignOut(authService),
-                      icon: const Icon(Icons.logout, size: 20),
-                      label: const Text('Sign out',
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 15)),
-                    ),
-                  ),
-                ],
               ],
             ),
           );
@@ -431,42 +497,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
             final icon = tab['icon'] as IconData;
             final isSelected = selectedTab == name;
 
-            return GestureDetector(
-              onTap: () => setState(() => _selectedTab = name),
-              child: Container(
+            return TextButton.icon(
+              onPressed: () => setState(() => _selectedTab = name),
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 48),
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? (isDark
-                          ? const Color(0xFF332015)
-                          : const Color(0xFFFEF3EA))
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      icon,
-                      size: 16,
-                      color:
-                          isSelected ? const Color(0xFFF57C00) : textSecondary,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      name,
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight:
-                            isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected
-                            ? const Color(0xFFF57C00)
-                            : textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                foregroundColor:
+                    isSelected ? mobileAccentText(context) : textSecondary,
+                backgroundColor: isSelected
+                    ? (isDark
+                        ? const Color(0xFF332015)
+                        : const Color(0xFFFEF3EA))
+                    : Colors.transparent,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10)),
               ),
+              icon: Icon(icon, size: 16),
+              label: Text(name,
+                  style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500)),
             );
           }).toList(),
         ),
@@ -902,232 +954,218 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color textPrimary,
     Color textSecondary,
   ) {
-    final name = userModel?.name.trim().isNotEmpty == true
-        ? userModel!.name.trim()
-        : (user?.displayName?.toString().trim().isNotEmpty == true
-            ? user.displayName.toString().trim()
-            : 'Customer');
-    final email = userModel?.email.trim().isNotEmpty == true
-        ? userModel!.email.trim()
-        : user?.email?.toString() ?? '';
+    final name = _profileValue(userModel?.name.trim().isNotEmpty == true
+        ? userModel!.name
+        : user?.displayName?.toString());
+    final email = _profileValue(userModel?.email.trim().isNotEmpty == true
+        ? userModel!.email
+        : user?.email?.toString());
     final avatarImage = _imageBytes != null
         ? MemoryImage(_imageBytes!) as ImageProvider
         : _profileImageUrl != null
             ? NetworkImage(_profileImageUrl!) as ImageProvider
             : null;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: cardBorder),
-          ),
-          child: Column(
+    return Container(
+      key: const ValueKey('customer-profile-card'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  CircleAvatar(
-                    radius: 44,
-                    backgroundColor: isDark
-                        ? const Color(0xFF1E2C42)
-                        : const Color(0xFFF1F5F9),
-                    backgroundImage: avatarImage,
-                    child: avatarImage == null
-                        ? Icon(Icons.person_rounded,
-                            size: 48, color: textSecondary)
-                        : null,
-                  ),
-                  Positioned(
-                    right: -3,
-                    bottom: -3,
-                    child: Material(
-                      color: Theme.of(context).colorScheme.primary,
-                      shape: const CircleBorder(),
-                      child: IconButton(
-                        tooltip: 'Change profile photo',
-                        onPressed: _isLoading ? null : _pickAndUploadImage,
-                        icon: _isLoading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.camera_alt_outlined,
-                                color: Colors.white, size: 18),
+              Tooltip(
+                message: 'Change profile photo',
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(32),
+                    onTap: _isLoading ? null : _pickAndUploadImage,
+                    child: SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: Stack(
+                        children: [
+                          Center(
+                            child: CircleAvatar(
+                              radius: 28,
+                              backgroundColor: isDark
+                                  ? const Color(0xFF1E2C42)
+                                  : const Color(0xFFF1F5F9),
+                              backgroundImage: avatarImage,
+                              child: avatarImage == null
+                                  ? Icon(Icons.person_rounded,
+                                      size: 32, color: textSecondary)
+                                  : null,
+                            ),
+                          ),
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color: mobileAccentText(context),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: cardBg, width: 2),
+                              ),
+                              child: _isLoading
+                                  ? Padding(
+                                      padding: const EdgeInsets.all(6),
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: isDark
+                                              ? const Color(0xFF0F172A)
+                                              : Colors.white),
+                                    )
+                                  : Icon(Icons.camera_alt_outlined,
+                                      size: 14,
+                                      color: isDark
+                                          ? const Color(0xFF0F172A)
+                                          : Colors.white),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(name,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                      color: textPrimary,
-                      fontSize: 21,
-                      fontWeight: FontWeight.w800)),
-              if (email.isNotEmpty) ...[
-                const SizedBox(height: 4),
-                Text(email,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: textSecondary, fontSize: 13)),
-              ],
-              const SizedBox(height: 10),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: .1),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  'CUSTOMER ACCOUNT',
-                  style: TextStyle(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: .5,
-                  ),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 14),
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: cardBorder),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Personal details',
-                            style: TextStyle(
-                                color: textPrimary,
-                                fontSize: 17,
-                                fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 3),
-                        Text('Keep your contact information up to date.',
-                            style:
-                                TextStyle(color: textSecondary, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  if (!_isEditing)
-                    IconButton.filledTonal(
-                      tooltip: 'Edit personal details',
-                      onPressed: () => setState(() => _isEditing = true),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              if (_isEditing) ...[
-                TextField(
-                  controller: _nameController,
-                  enabled: !_isLoading,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  maxLength: 150,
-                  decoration: const InputDecoration(
-                    labelText: 'Full name',
-                    prefixIcon: Icon(Icons.person_outline),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                TextField(
-                  controller: _phoneController,
-                  enabled: !_isLoading,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.done,
-                  maxLength: 40,
-                  decoration: const InputDecoration(
-                    labelText: 'Phone number (optional)',
-                    hintText: 'e.g. 0917 123 4567',
-                    prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: OutlinedButton(
-                        onPressed: _isLoading
-                            ? null
-                            : () => setState(() {
-                                  _nameController.text = userModel?.name ??
-                                      user?.displayName?.toString() ??
-                                      '';
-                                  _phoneController.text =
-                                      userModel?.phone ?? '';
-                                  _isEditing = false;
-                                }),
-                        child: const Text('Cancel'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _isLoading ? null : _saveProfile,
-                        icon: _isLoading
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white),
-                              )
-                            : const Icon(Icons.check_rounded),
-                        label: const Text('Save changes'),
-                      ),
-                    ),
+                    Text(name,
+                        style: TextStyle(
+                            color:
+                                name == 'Not set' ? textSecondary : textPrimary,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 4),
+                    Text(email,
+                        style: TextStyle(
+                            color: textSecondary, fontSize: 12, height: 1.35)),
                   ],
                 ),
-              ] else ...[
-                _customerDetailRow(Icons.person_outline, 'Full name', name,
-                    textPrimary, textSecondary),
-                const SizedBox(height: 12),
-                _customerDetailRow(
-                    Icons.phone_outlined,
-                    'Phone number',
-                    userModel?.phone.trim().isNotEmpty == true
-                        ? userModel!.phone.trim()
-                        : 'Add a number for handoff updates',
-                    textPrimary,
-                    textSecondary),
-                if (userModel?.createdAt != null) ...[
-                  const SizedBox(height: 12),
-                  _customerDetailRow(
-                      Icons.calendar_month_outlined,
-                      'Member since',
-                      DateFormat('MMMM yyyy').format(userModel!.createdAt!),
-                      textPrimary,
-                      textSecondary),
-                ],
+              ),
+              if (!_isEditing) ...[
+                const SizedBox(width: 4),
+                IconButton(
+                  key: const ValueKey('profile-edit'),
+                  tooltip: 'Edit profile',
+                  onPressed: _isLoading
+                      ? null
+                      : () => setState(() => _isEditing = true),
+                  color: mobileAccentText(context),
+                  icon: const Icon(Icons.edit_outlined, size: 20),
+                ),
               ],
             ],
           ),
-        ),
-      ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, color: cardBorder),
+          ),
+          if (_isEditing) ...[
+            TextField(
+              controller: _nameController,
+              enabled: !_isLoading,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.next,
+              maxLength: 150,
+              decoration: const InputDecoration(
+                  labelText: 'Full name',
+                  prefixIcon: Icon(Icons.person_outline)),
+            ),
+            const SizedBox(height: 6),
+            TextField(
+              controller: _phoneController,
+              enabled: !_isLoading,
+              keyboardType: TextInputType.phone,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => FocusScope.of(context).unfocus(),
+              maxLength: 40,
+              decoration: const InputDecoration(
+                  labelText: 'Phone number (optional)',
+                  hintText: 'e.g. 0917 123 4567',
+                  prefixIcon: Icon(Icons.phone_outlined)),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(48),
+                        foregroundColor: textPrimary),
+                    onPressed: _isLoading
+                        ? null
+                        : () => setState(() {
+                              _nameController.text =
+                                  userModel?.name.trim().isNotEmpty == true
+                                      ? userModel!.name
+                                      : user?.displayName?.toString() ?? '';
+                              _phoneController.text = userModel?.phone ?? '';
+                              _isEditing = false;
+                            }),
+                    child: const Text('Cancel'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48),
+                      backgroundColor: mobileAccentText(context),
+                      foregroundColor:
+                          isDark ? const Color(0xFF0F172A) : Colors.white,
+                    ),
+                    onPressed: _isLoading ? null : _saveProfile,
+                    icon: _isLoading
+                        ? SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isDark
+                                    ? const Color(0xFF0F172A)
+                                    : Colors.white))
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save'),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            _customerDetailRow(Icons.phone_outlined, 'Phone number',
+                _profileValue(userModel?.phone), textPrimary, textSecondary),
+            const SizedBox(height: 14),
+            _customerDetailRow(
+              Icons.calendar_month_outlined,
+              'Member since',
+              userModel?.createdAt == null
+                  ? 'Not set'
+                  : DateFormat('MMMM yyyy', 'en').format(userModel!.createdAt!),
+              textPrimary,
+              textSecondary,
+            ),
+          ],
+        ],
+      ),
     );
   }
+
+  String _profileValue(String? value) =>
+      value?.trim().isNotEmpty == true ? value!.trim() : 'Not set';
 
   Widget _customerDetailRow(IconData icon, String label, String value,
           Color textPrimary, Color textSecondary) =>
@@ -1142,11 +1180,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 Text(label,
                     style: TextStyle(color: textSecondary, fontSize: 12)),
-                const SizedBox(height: 2),
+                const SizedBox(height: 3),
                 Text(value,
                     style: TextStyle(
-                        color: textPrimary,
-                        fontSize: 15,
+                        color: value == 'Not set' ? textSecondary : textPrimary,
+                        fontSize: 14,
                         fontWeight: FontWeight.w600)),
               ],
             ),

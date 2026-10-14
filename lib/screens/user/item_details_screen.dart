@@ -104,7 +104,7 @@ class ItemDetailsScreen extends StatelessWidget {
     if (!context.mounted) return;
 
     if (userModel == null ||
-        userModel.validIdUrl?.trim().isNotEmpty != true ||
+        !userModel.hasAcknowledgedIdRequirement ||
         !userModel.hasAcceptedTerms) {
       await Navigator.push(
         context,
@@ -156,8 +156,10 @@ class ItemDetailsScreen extends StatelessWidget {
         ],
       ),
       bottomNavigationBar: RentalActionBar(
-        label: isAvailable ? 'Rent now' : 'Unavailable right now',
-        onPressed: isAvailable ? () => _continueToRental(context) : null,
+        label: isAvailable
+            ? 'Rent now or schedule'
+            : 'Check scheduled availability',
+        onPressed: () => _continueToRental(context),
       ),
       body: SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,

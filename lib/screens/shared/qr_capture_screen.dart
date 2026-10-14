@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../../services/scanner_camera_session.dart';
 
 class QrCaptureScreen extends StatefulWidget {
   const QrCaptureScreen({super.key, required this.title});
@@ -11,31 +12,37 @@ class QrCaptureScreen extends StatefulWidget {
 
 class _QrCaptureScreenState extends State<QrCaptureScreen>
     with WidgetsBindingObserver {
-  final _controller =
-      MobileScannerController(formats: const [BarcodeFormat.qrCode]);
+  late final ScannerCameraSession _camera;
+  MobileScannerController get _controller => _camera.controller;
   bool _done = false;
   @override
   void initState() {
     super.initState();
+    _camera = ScannerCameraSession(onError: () {
+      if (mounted && !_done) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Could not change the camera. Retry or use the printed code.')));
+      }
+    });
     WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _camera.lifecycle(WidgetsBinding.instance.lifecycleState ??
+            AppLifecycleState.resumed);
+      }
+    });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_controller.value.isInitialized || _done) return;
-    if (state == AppLifecycleState.resumed && _controller.value.error == null) {
-      _controller.start();
-    } else if (state == AppLifecycleState.inactive ||
-        state == AppLifecycleState.paused ||
-        state == AppLifecycleState.hidden) {
-      _controller.stop();
-    }
+    if (!_done) _camera.lifecycle(state);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _controller.dispose();
+    _camera.dispose();
     super.dispose();
   }
 
@@ -48,16 +55,22 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                   tooltip: value.torchState == TorchState.on
                       ? 'Turn flash off'
                       : 'Turn flash on',
-                  onPressed: value.torchState == TorchState.unavailable
+                  onPressed: !value.isRunning ||
+                          value.torchState == TorchState.unavailable
                       ? null
-                      : _controller.toggleTorch,
+                      : _camera.toggleTorch,
                   icon: Icon(value.torchState == TorchState.on
                       ? Icons.flash_on
                       : Icons.flash_off))),
-          IconButton(
-              tooltip: 'Switch camera',
-              onPressed: _controller.switchCamera,
-              icon: const Icon(Icons.cameraswitch_outlined)),
+          ValueListenableBuilder<MobileScannerState>(
+              valueListenable: _controller,
+              builder: (context, value, _) => IconButton(
+                  tooltip: 'Switch camera',
+                  onPressed:
+                      value.isRunning && (value.availableCameras ?? 2) > 1
+                          ? _camera.switchCamera
+                          : null,
+                  icon: const Icon(Icons.cameraswitch_outlined))),
         ]),
         body: Column(children: [
           Expanded(child: LayoutBuilder(builder: (context, size) {
@@ -90,7 +103,7 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
-                      onPressed: _controller.start,
+                      onPressed: _camera.resume,
                       icon: const Icon(Icons.refresh),
                       label: const Text('Retry camera')),
                 ]),
@@ -124,7 +137,7 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                   final value = barcode.rawValue?.trim();
                   if (value != null && value.isNotEmpty) {
                     _done = true;
-                    await _controller.stop();
+                    await _camera.pause();
                     if (context.mounted) Navigator.pop(context, value);
                     break;
                   }

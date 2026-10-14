@@ -6,6 +6,7 @@ import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/rental_ui.dart';
+import '../../widgets/mobile_controls.dart';
 import '../auth/login_screen.dart';
 import '../user/catalog_screen.dart';
 
@@ -26,6 +27,9 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
   String _query = '';
   String _filter = 'All';
   bool _compactView = true;
+  String? _nextCursor;
+  bool _loadingMore = false;
+  List<RentalModel> _loadedRecords = [];
 
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
@@ -50,9 +54,11 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
     final List<RentalModel> records;
     if (!widget.isAdmin) {
       records = await _api.listRentals();
+      _nextCursor = _api.nextRentalCursor;
     } else {
-      final result = await _api.adminRequest('/workspace');
-      records = (result['transactions'] as List)
+      final result = await _api.adminRequest('/records/rentals?limit=50');
+      _nextCursor = result['nextCursor'] as String?;
+      records = (result['records'] as List)
           .whereType<Map>()
           .map((row) => RentalModel.fromMap(Map<String, dynamic>.from(row),
               id: row['id'].toString()))
@@ -63,7 +69,47 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
         ? records
         : records.where((rental) => !rental.isOpen).toList();
     history.sort((a, b) => b.startDate.compareTo(a.startDate));
+    _loadedRecords = history;
     return history;
+  }
+
+  Future<void> _loadMore() async {
+    if (_nextCursor == null || _loadingMore) return;
+    setState(() => _loadingMore = true);
+    try {
+      final List<RentalModel> more;
+      if (widget.isAdmin) {
+        final result = await _api.adminRequest(
+            '/records/rentals?${Uri(queryParameters: {
+              'limit': '50',
+              'cursor': _nextCursor!
+            }).query}');
+        _nextCursor = result['nextCursor'] as String?;
+        more = (result['records'] as List)
+            .whereType<Map>()
+            .map((row) => RentalModel.fromMap(Map<String, dynamic>.from(row),
+                id: row['id']?.toString()))
+            .toList();
+      } else {
+        final page = await _api.listRentalHistoryPage(_nextCursor!);
+        more = page.records;
+        _nextCursor = page.nextCursor;
+      }
+      if (!mounted) return;
+      setState(() {
+        _loadedRecords = {
+          for (final row in [..._loadedRecords, ...more]) row.rentalId: row
+        }.values.where((row) => widget.isAdmin || !row.isOpen).toList();
+        _future = Future.value(_loadedRecords);
+      });
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('$error')));
+      }
+    } finally {
+      if (mounted) setState(() => _loadingMore = false);
+    }
   }
 
   Future<void> _refresh() async {
@@ -406,6 +452,26 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
         ],
       );
 
+  Widget _viewToggle() => SizedBox(
+      width: 48,
+      height: 48,
+      child: IconButton.filledTonal(
+        key: const ValueKey('history-view-toggle'),
+        tooltip: _compactView ? 'Show detailed view' : 'Show compact view',
+        isSelected: _compactView,
+        icon: const Icon(Icons.view_agenda_outlined),
+        selectedIcon: const Icon(Icons.view_list_rounded),
+        iconSize: 20,
+        style: IconButton.styleFrom(
+          foregroundColor: mobileAccentText(context),
+          backgroundColor:
+              Theme.of(context).colorScheme.primary.withValues(alpha: .09),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        onPressed: () => setState(() => _compactView = !_compactView),
+      ));
+
   @override
   Widget build(BuildContext context) {
     final isSignedIn = Provider.of<AuthService>(context).currentUser != null;
@@ -458,94 +524,60 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                 const filters = ['All', 'Returned', 'Needs attention'];
                 return Column(
                   children: [
+                    if (_nextCursor != null)
+                      OutlinedButton(
+                          onPressed: _loadingMore ? null : _loadMore,
+                          child: Text(_loadingMore
+                              ? 'Loading…'
+                              : 'Load more stored history')),
                     if (!widget.isAdmin) ...[
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                        child: TextField(
-                          controller: _searchController,
-                          onChanged: (value) => setState(() => _query = value),
-                          textInputAction: TextInputAction.search,
-                          decoration: InputDecoration(
-                            hintText: 'Search item or rental ID',
-                            prefixIcon: const Icon(Icons.search_rounded),
-                            suffixIcon: _query.isEmpty
-                                ? null
-                                : IconButton(
-                                    tooltip: 'Clear search',
-                                    onPressed: () {
-                                      _searchController.clear();
-                                      setState(() => _query = '');
-                                    },
-                                    icon: const Icon(Icons.close_rounded),
-                                  ),
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 8, 18, 4),
-                        child: SizedBox(
-                            width: double.infinity,
-                            child: Wrap(
-                              alignment: WrapAlignment.spaceBetween,
-                              spacing: 16,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: [
-                                Text(
-                                  '${records.length} record${records.length == 1 ? '' : 's'}',
-                                  style: TextStyle(
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .onSurfaceVariant,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600),
-                                ),
-                                IconButton.filledTonal(
-                                  key: const ValueKey('history-view-toggle'),
-                                  tooltip: _compactView
-                                      ? 'Show detailed view'
-                                      : 'Show compact view',
-                                  isSelected: _compactView,
-                                  icon: const Icon(Icons.view_agenda_outlined),
-                                  selectedIcon:
-                                      const Icon(Icons.view_list_rounded),
-                                  iconSize: 20,
-                                  style: IconButton.styleFrom(
-                                    foregroundColor:
-                                        Theme.of(context).colorScheme.primary,
-                                    backgroundColor: Theme.of(context)
-                                        .colorScheme
-                                        .primary
-                                        .withValues(alpha: .1),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(11),
-                                    ),
-                                  ),
-                                  onPressed: () => setState(
-                                      () => _compactView = !_compactView),
-                                ),
-                              ],
-                            )),
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        child: Row(children: [
+                          Expanded(
+                              child: MobileSearchField(
+                            controller: _searchController,
+                            onChanged: (value) =>
+                                setState(() => _query = value),
+                            hintText: 'Search rentals',
+                          )),
+                          const SizedBox(width: 8),
+                          _viewToggle()
+                        ]),
                       ),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+                        padding: const EdgeInsets.fromLTRB(12, 0, 12, 2),
                         child: Row(
                           children: [
                             for (final filter in filters)
                               Padding(
                                 padding:
                                     const EdgeInsets.symmetric(horizontal: 4),
-                                child: FilterChip(
-                                  label: Text(
-                                      '$filter (${_count(records, filter)})'),
+                                child: MobileFilterChip(
+                                  label: '$filter (${_count(records, filter)})',
                                   selected: filter == _filter,
                                   onSelected: (_) =>
                                       setState(() => _filter = filter),
-                                  visualDensity: VisualDensity.compact,
                                 ),
                               ),
                           ],
                         ),
+                      ),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
+                        child: Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                                visible.length == records.length
+                                    ? '${records.length} record${records.length == 1 ? '' : 's'}'
+                                    : '${visible.length} of ${records.length} records',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant))),
                       ),
                     ],
                     Expanded(
@@ -553,6 +585,8 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                         onRefresh: _refresh,
                         child: visible.isEmpty
                             ? ListView(
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding: const EdgeInsets.all(20),
                                 children: [
@@ -586,6 +620,8 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                 ],
                               )
                             : ListView.builder(
+                                keyboardDismissBehavior:
+                                    ScrollViewKeyboardDismissBehavior.onDrag,
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 24),

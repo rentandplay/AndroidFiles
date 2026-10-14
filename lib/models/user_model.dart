@@ -12,7 +12,7 @@ class UserModel {
   bool get isStaff => const {'OWNER', 'OPERATOR', 'ADMIN', 'SUPER_ADMIN'}
       .contains(role.toUpperCase());
   final String? profileImageUrl;
-  final String? validIdUrl;
+  final bool hasAcknowledgedIdRequirement;
   final bool hasAcceptedTerms;
   final DateTime? createdAt;
 
@@ -25,7 +25,7 @@ class UserModel {
     this.role = 'CUSTOMER',
     this.mustChangePassword = false,
     this.profileImageUrl,
-    this.validIdUrl,
+    this.hasAcknowledgedIdRequirement = false,
     this.hasAcceptedTerms = false,
     this.createdAt,
   });
@@ -40,7 +40,7 @@ class UserModel {
       'role': role,
       'mustChangePassword': mustChangePassword,
       'profileImageUrl': profileImageUrl,
-      'validIdUrl': validIdUrl,
+      'hasAcknowledgedIdRequirement': hasAcknowledgedIdRequirement,
       'hasAcceptedTerms': hasAcceptedTerms,
       'createdAt': createdAt != null
           ? Timestamp.fromDate(createdAt!)
@@ -71,7 +71,11 @@ class UserModel {
       mustChangePassword: map['mustChangePassword'] == true ||
           map['must_change_password'] == true,
       profileImageUrl: map['profileImageUrl'] ?? map['profile_image_url'],
-      validIdUrl: map['validIdUrl'] ?? map['valid_id_url'],
+      hasAcknowledgedIdRequirement: map['hasAcknowledgedIdRequirement'] is bool
+          ? map['hasAcknowledgedIdRequirement'] as bool
+          : (map['validIdUrl'] ?? map['valid_id_url'] ?? '')
+              .toString()
+              .isNotEmpty,
       hasAcceptedTerms: map['hasAcceptedTerms'] ?? false,
       createdAt: parsedDate,
     );
@@ -85,7 +89,7 @@ class UserModel {
     String? role,
     bool? mustChangePassword,
     String? profileImageUrl,
-    String? validIdUrl,
+    bool? hasAcknowledgedIdRequirement,
     bool? hasAcceptedTerms,
     DateTime? createdAt,
   }) {
@@ -98,7 +102,8 @@ class UserModel {
       role: role ?? this.role,
       mustChangePassword: mustChangePassword ?? this.mustChangePassword,
       profileImageUrl: profileImageUrl ?? this.profileImageUrl,
-      validIdUrl: validIdUrl ?? this.validIdUrl,
+      hasAcknowledgedIdRequirement:
+          hasAcknowledgedIdRequirement ?? this.hasAcknowledgedIdRequirement,
       hasAcceptedTerms: hasAcceptedTerms ?? this.hasAcceptedTerms,
       createdAt: createdAt ?? this.createdAt,
     );

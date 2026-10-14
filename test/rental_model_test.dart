@@ -2,6 +2,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:rent_and_play_app/models/rental_model.dart';
 
 void main() {
+  test(
+      'saved fulfillment distinguishes Lakewoods shop handover from resort delivery and survives copying',
+      () {
+    final shop = RentalModel.fromMap({
+      'id': 'shop',
+      'status': 'APPROVED',
+      'fulfillment_mode': 'SHOP_HANDOVER',
+      'delivery_status': 'PREPARED',
+      'delivery_location': 'Rent & Play · Lakewoods, Los Baños'
+    });
+    expect(shop.isRentAndPlayPickup, isTrue);
+    expect(shop.customerHandoffLocation, contains('Lakewoods Subdivision'));
+    expect(shop.statusLabel, 'Ready for shop handover');
+    final copied =
+        RentalModel.fromMap(shop.copyWith(itemName: 'Updated').toMap());
+    expect(copied.fulfillmentMode, 'SHOP_HANDOVER');
+    final delivery = RentalModel.fromMap({
+      'id': 'delivery',
+      'status': 'APPROVED',
+      'fulfillment_mode': 'DELIVERY',
+      'delivery_status': 'PREPARED',
+      'delivery_location': 'ASRI Hotspring Resort'
+    });
+    expect(delivery.isRentAndPlayPickup, isFalse);
+    expect(delivery.customerHandoffLocation, 'ASRI Hotspring Resort');
+    expect(delivery.statusLabel, 'Ready for delivery');
+    expect(
+        RentalModel.fromMap({'delivery_location': 'ASRI Hotspring Resort'})
+            .isRentAndPlayPickup,
+        isFalse);
+    expect(
+        RentalModel.fromMap({'fulfillment_mode': 'DELIVERY'})
+            .customerHandoffLocation,
+        'Delivery location not recorded');
+  });
   test('approved booking is cancellable and awaits pickup', () {
     final rental = RentalModel.fromMap({
       'id': 'booking',

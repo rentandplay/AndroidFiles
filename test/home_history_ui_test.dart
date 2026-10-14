@@ -20,6 +20,9 @@ import 'package:rent_and_play_app/services/auth_service.dart';
 import 'package:rent_and_play_app/services/mobile_api_service.dart';
 import 'package:rent_and_play_app/theme/app_theme.dart';
 import 'package:rent_and_play_app/widgets/home_discovery.dart';
+import 'package:rent_and_play_app/widgets/mobile_controls.dart';
+import 'package:rent_and_play_app/screens/user/active_rentals_screen.dart';
+import 'package:rent_and_play_app/screens/auth/login_screen.dart';
 
 import 'widget_test.dart' show SignedOutAuth;
 
@@ -61,10 +64,12 @@ class _HomeApi extends MobileApiService {
 
   @override
   Future<List<RentalModel>> listRentals() async => rentals;
+  @override
+  Stream<Map<String, dynamic>> watchRentalEvents() => const Stream.empty();
 }
 
 RentalModel _rental(String id, String name,
-        {double due = 0, double refund = 0}) =>
+        {double due = 0, double refund = 0, String status = 'COMPLETED'}) =>
     RentalModel(
       rentalId: id,
       rentalCode: 'R-000$id',
@@ -78,7 +83,7 @@ RentalModel _rental(String id, String name,
       returnedDate: DateTime.utc(2026, 10, 11, 3),
       rateFee: 50,
       paymentMethod: 'CASH',
-      status: 'COMPLETED',
+      status: status,
       paymentStatus: refund > 0
           ? 'REFUND_PENDING'
           : due > 0
@@ -124,6 +129,7 @@ void main() {
       {bool dark = false,
       bool history = false,
       bool browse = false,
+      bool rentals = false,
       AuthService? auth,
       double width = 360,
       double scale = 1}) async {
@@ -177,7 +183,9 @@ void main() {
                                 ? 3
                                 : browse
                                     ? 1
-                                    : 0,
+                                    : rentals
+                                        ? 2
+                                        : 0,
                             destinations: _destinations,
                           ),
                   )),
@@ -187,9 +195,10 @@ void main() {
     await tester.pumpAndSettle();
     final imageContext = tester.element(find.byType(Scaffold).first);
     await tester.runAsync(() async {
-      for (final image in ItemModel.getInitialCatalog()
-          .map((item) => item.cleanImageUrl)
-          .toSet()) {
+      for (final image in {
+        ...ItemModel.getInitialCatalog().map((item) => item.cleanImageUrl),
+        'assets/images/logo_rent_and_play.png',
+      }) {
         await precacheImage(AssetImage(image), imageContext);
       }
     });
@@ -415,6 +424,100 @@ void main() {
     expect(find.text('Saved (1)'), findsOneWidget);
     expect(find.byTooltip('Remove from saved'), findsOneWidget);
     await save(tester, capture, 'browse-saved-dark-large-text');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Browse compact search clears results and sort menu changes equipment order',
+      (tester) async {
+    final template = ItemModel.getInitialCatalog().first;
+    final api = _HomeApi()
+      ..items = [
+        template
+            .copyWith(id: 'a', name: 'A unavailable', status: 'unavailable')
+            .toMap(),
+        template.copyWith(id: 'b', name: 'B available').toMap(),
+      ];
+    await render(tester, CatalogScreen(api: api), browse: true);
+    expect(tester.getSize(find.byType(MobileSearchField)).height,
+        lessThanOrEqualTo(52));
+    expect(tester.getTopLeft(find.text('B available')).dx,
+        lessThan(tester.getTopLeft(find.text('A unavailable')).dx));
+    await tester.enterText(find.byType(TextField), 'B available');
+    await tester.pumpAndSettle();
+    expect(find.text('1 item'), findsOneWidget);
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty);
+    expect(find.text('2 items'), findsOneWidget);
+    await tester.tap(find.byTooltip('Sort equipment'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byWidgetPredicate((widget) =>
+        widget is CheckedPopupMenuItem<String> && widget.value == 'name'));
+    await tester.pumpAndSettle();
+    expect(tester.getTopLeft(find.text('A unavailable')).dx,
+        lessThan(tester.getTopLeft(find.text('B available')).dx));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Rentals search clears both the displayed query and filtered results',
+      (tester) async {
+    final api = _HomeApi()
+      ..rentals = [
+        _rental('1', 'Basketball', status: 'ACTIVE'),
+        _rental('2', 'Pickleball Set', status: 'ACTIVE'),
+        _rental('3', 'Badminton Set', status: 'ACTIVE'),
+        _rental('4', 'Jenga', status: 'ACTIVE'),
+      ];
+    final capture =
+        await render(tester, ActiveRentalsScreen(api: api), rentals: true);
+    await tester.enterText(find.byType(TextField), 'Basketball');
+    await tester.pumpAndSettle();
+    expect(find.text('Showing 1 of 4 rentals'), findsOneWidget);
+    await save(tester, capture, 'rentals-search-light');
+    await tester.tap(find.byTooltip('Clear search'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        isEmpty);
+    expect(find.text('Showing 1 of 4 rentals'), findsNothing);
+    expect(find.text('Pickleball Set'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'Login stays readable with large text and typing alone shows no validation errors',
+      (tester) async {
+    final auth = _CustomerAuth()..changeUser(null);
+    final capture = await render(tester, const LoginScreen(), auth: auth);
+    await save(tester, capture, 'login-light');
+    await tester.enterText(find.byType(TextFormField).first, 'reynold');
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a valid email address.'), findsNothing);
+    expect(find.text('Please enter your password.'), findsNothing);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final darkAuth = _CustomerAuth()..changeUser(null);
+    final dark = await render(tester, const LoginScreen(),
+        auth: darkAuth, dark: true, width: 320, scale: 1.4);
+    await tester.enterText(find.byType(TextFormField).first, 'reynold');
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a valid email address.'), findsNothing);
+    await tester.scrollUntilVisible(find.text('Register'), 150,
+        scrollable: getVerticalScroll());
+    await tester.ensureVisible(find.text('Register'));
+    await tester.pumpAndSettle();
+    await save(tester, dark, 'login-large-text');
+    await tester.ensureVisible(find.text('Login'));
+    await tester.tap(find.text('Login'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter a valid email address.'), findsOneWidget);
+    expect(find.text('Please enter your password.'), findsOneWidget);
+    await tester.ensureVisible(find.byType(TextFormField).first);
+    await tester.pumpAndSettle();
+    await save(tester, dark, 'login-dark-validation');
     expect(tester.takeException(), isNull);
   });
 

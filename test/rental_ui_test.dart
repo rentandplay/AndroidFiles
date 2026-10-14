@@ -114,7 +114,7 @@ class UiApi extends MobileApiService {
 
   @override
   Future<Map<String, dynamic>> quoteRental(String id, int minutes,
-      {String? stockGroupId}) async {
+      {String? stockGroupId, DateTime? scheduledStartAt}) async {
     if (failQuote) {
       throw const MobileApiException('Price service unavailable. Try again.');
     }
@@ -266,8 +266,7 @@ void main() {
     final button = find.widgetWithText(FilledButton, 'Send rental request');
     expect(tester.getBottomRight(button).dy, lessThanOrEqualTo(780));
     expect(tester.widget<FilledButton>(button).onPressed, isNull);
-    final agreement = find.widgetWithText(CheckboxListTile,
-        'I have read and agree to the terms for this rental request.');
+    final agreement = find.byKey(const ValueKey('rental-terms-acceptance'));
     await tester.ensureVisible(agreement);
     await tester.tap(agreement);
     await tester.pumpAndSettle();
@@ -388,8 +387,7 @@ void main() {
     retryButton.onPressed!();
     await tester.pump();
     await tester.pumpAndSettle();
-    final agreement = find.widgetWithText(CheckboxListTile,
-        'I have read and agree to the terms for this rental request.');
+    final agreement = find.byKey(const ValueKey('rental-terms-acceptance'));
     await tester.ensureVisible(agreement);
     await tester.tap(agreement);
     await tester.pumpAndSettle();
@@ -467,7 +465,7 @@ void main() {
 
   testWidgets('admin rental queue highlights and filters due items',
       (tester) async {
-    final now = DateTime.now();
+    final now = DateTime.utc(2026,10,15,3);
     final rentals = [
       {
         'id': 'late-rental',
@@ -494,6 +492,7 @@ void main() {
         Scaffold(
             body: RentalAdminView(
                 page: 'Rentals',
+                now:now,
                 workspace: {'transactions': rentals},
                 onChanged: () async {})));
     await tester.pumpAndSettle();

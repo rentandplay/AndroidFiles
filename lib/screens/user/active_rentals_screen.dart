@@ -8,7 +8,9 @@ import '../../models/item_model.dart';
 import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
+import '../shared/rental_extension_dialog.dart';
 import '../../widgets/rental_ui.dart';
+import '../../widgets/mobile_controls.dart';
 import '../auth/login_screen.dart';
 import '../shared/transaction_ticket_dialog.dart';
 import 'return_equipment_screen.dart';
@@ -35,6 +37,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   String _error = '';
   String _rentalFilter = 'All';
   String _rentalQuery = '';
+  final _rentalSearchController = TextEditingController();
   final _cancelling = <String>{};
   final _uploadingProof = <String>{};
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
@@ -103,6 +106,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
 
   @override
   void dispose() {
+    _rentalSearchController.dispose();
     _rentalEvents?.cancel();
     _rentalClock?.cancel();
     WidgetsBinding.instance.removeObserver(this);
@@ -191,7 +195,8 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
       return 2;
     }
     if (rental.isAwaitingPickup &&
-        rental.deliveryStatus.toUpperCase() == 'PREPARED') {
+        const ['PREPARED', 'OUT_FOR_DELIVERY']
+            .contains(rental.deliveryStatus.toUpperCase())) {
       return 3;
     }
     if (rental.isAwaitingPickup) return 4;
@@ -357,6 +362,8 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
               : RefreshIndicator(
                   onRefresh: _refreshRentals,
                   child: ListView(
+                      keyboardDismissBehavior:
+                          ScrollViewKeyboardDismissBehavior.onDrag,
                       physics: const AlwaysScrollableScrollPhysics(),
                       padding: const EdgeInsets.all(16),
                       children: [
@@ -384,22 +391,12 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                         ],
                         if (open.length > 1) ...[
                           if (open.length > 3) ...[
-                            TextField(
+                            MobileSearchField(
                                 key: const ValueKey('rental-search'),
+                                controller: _rentalSearchController,
                                 onChanged: (value) =>
                                     setState(() => _rentalQuery = value),
-                                decoration: InputDecoration(
-                                    hintText: 'Search item or rental code',
-                                    prefixIcon: const Icon(Icons.search),
-                                    suffixIcon: _rentalQuery.isEmpty
-                                        ? null
-                                        : IconButton(
-                                            tooltip: 'Clear search',
-                                            onPressed: () => setState(() {
-                                                  _rentalQuery = '';
-                                                }),
-                                            icon: const Icon(Icons.close)),
-                                    border: const OutlineInputBorder())),
+                                hintText: 'Search rentals'),
                             const SizedBox(height: 10),
                           ],
                           SingleChildScrollView(
@@ -408,11 +405,10 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                 for (final entry in filterCounts.entries)
                                   Padding(
                                     padding: const EdgeInsets.only(right: 8),
-                                    child: ChoiceChip(
-                                        label: Text(
-                                            '${entry.key} · ${entry.value}'),
+                                    child: MobileCategoryChip(
+                                        label: '${entry.key} · ${entry.value}',
                                         selected: _rentalFilter == entry.key,
-                                        onSelected: (_) => setState(
+                                        onSelected: () => setState(
                                             () => _rentalFilter = entry.key)),
                                   ),
                               ])),
@@ -484,6 +480,13 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                                   rental: rental, api: _api)));
                                   if (mounted) _refreshRentals();
                                 },
+                                onExtension: () async {
+                                  if (await showRentalExtensionDialog(
+                                          context, _api, rental.rentalId) &&
+                                      mounted) {
+                                    await _refreshRentals();
+                                  }
+                                },
                                 onRefresh: _refreshRentals,
                               ),
                             ),
@@ -502,15 +505,17 @@ class RentalBookingCard extends StatelessWidget {
       this.onCancel,
       this.onReturn,
       this.onUploadPaymentProof,
+      this.onExtension,
       this.onRefresh});
   final RentalModel rental;
   final VoidCallback? onTicket,
       onCancel,
       onReturn,
       onRefresh,
-      onUploadPaymentProof;
-  String _date(DateTime value) =>
-      DateFormat('MMM d · h:mm a').format(value.toLocal());
+      onUploadPaymentProof,
+      onExtension;
+  String _date(DateTime value) => DateFormat('MMM d · h:mm a')
+      .format(value.toUtc().add(const Duration(hours: 8)));
 
   int _progressStep() {
     if (rental.isAwaitingInspection) return 3;
@@ -570,7 +575,7 @@ class RentalBookingCard extends StatelessWidget {
                                 : 'Approved · preparing delivery',
                         rental.deliveryStatus == 'PREPARED'
                             ? isRentAndPlayPickup
-                                ? 'Go to Rent & Play at ASRI and show your rental QR code and valid ID.'
+                                ? 'Show your rental QR code and valid ID at ${rental.customerHandoffLocation}.'
                                 : 'Ready for ${rental.deliveryLocation}. Show your rental QR code and valid ID at handoff.'
                             : isRentAndPlayPickup
                                 ? 'Staff is preparing your item. Rental time starts at handoff.'
@@ -677,7 +682,8 @@ class RentalBookingCard extends StatelessWidget {
               icon: const Icon(Icons.upload_file_rounded),
               label: const Text('Upload receipt'))
         else if (rental.isAwaitingPickup &&
-            rental.deliveryStatus.toUpperCase() == 'PREPARED')
+            const ['PREPARED', 'OUT_FOR_DELIVERY']
+                .contains(rental.deliveryStatus.toUpperCase()))
           FilledButton.icon(
               onPressed: onTicket,
               icon: const Icon(Icons.qr_code_rounded),
@@ -696,6 +702,21 @@ class RentalBookingCard extends StatelessWidget {
               icon: const Icon(Icons.assignment_return_rounded),
               label: const Text('Request return')),
       ],
+      if (rental.scheduledStartAt != null)
+        Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Text('Scheduled: ${_date(rental.scheduledStartAt!)}')),
+      if (rental.isActive &&
+          !rental.hasPendingReturnRequest &&
+          rental.dueDate.isAfter(DateTime.now()))
+        OutlinedButton.icon(
+            onPressed: rental.extensionRequest['status'] == 'PENDING'
+                ? null
+                : onExtension,
+            icon: const Icon(Icons.more_time),
+            label: Text(rental.extensionRequest['status'] == 'PENDING'
+                ? 'Extension under review'
+                : 'Request more time')),
       if (rental.canCancel)
         Align(
             alignment: Alignment.center,

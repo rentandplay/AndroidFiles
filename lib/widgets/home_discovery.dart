@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 
 import '../models/item_model.dart';
 import '../theme/app_theme.dart';
+import '../utils/catalog_price.dart';
+import 'mobile_controls.dart';
 
 /// Discovery content uses the live catalog, including its prices and stock.
 class HomeDiscovery extends StatelessWidget {
@@ -84,7 +85,7 @@ class HomeDiscovery extends StatelessWidget {
                 ),
             ]),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
         ],
         if (suggestions.isNotEmpty) ...[
           _heading(context, 'More to explore', action: 'See all'),
@@ -102,10 +103,10 @@ class HomeDiscovery extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
         ] else if (items.isEmpty) ...[
           _catalogNotice(context),
-          const SizedBox(height: 22),
+          const SizedBox(height: 18),
         ],
         _rentalGuide(context),
       ],
@@ -114,7 +115,7 @@ class HomeDiscovery extends StatelessWidget {
 
   Widget _heading(BuildContext context, String title, {String? action}) =>
       Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 12, 10),
+        padding: const EdgeInsets.fromLTRB(20, 0, 12, 6),
         child: Row(children: [
           Expanded(
             child: Text(title,
@@ -170,7 +171,7 @@ class HomeDiscovery extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final available = _isAvailable(item) == 1;
     final accent = _categoryColor(item.category);
-    final rate = _previewRate(item);
+    final rate = catalogPriceLabel(item);
     final textScaler = MediaQuery.textScalerOf(context);
     final width = (MediaQuery.sizeOf(context).width * .44).clamp(150.0, 200.0);
     return SizedBox(
@@ -229,7 +230,7 @@ class HomeDiscovery extends StatelessWidget {
                               style: TextStyle(
                                   fontSize: 11,
                                   height: 1.3,
-                                  color: scheme.primary,
+                                  color: mobileAccentText(context),
                                   fontWeight: FontWeight.w700)),
                         )),
                     const SizedBox(height: 9),
@@ -264,22 +265,6 @@ class HomeDiscovery extends StatelessWidget {
         ),
       ),
     );
-  }
-
-  String _previewRate(ItemModel item) {
-    final options = item.rateOptions
-        .where((option) =>
-            option['amount'] is num &&
-            option['label'] is String &&
-            (option['label'] as String).trim().isNotEmpty)
-        .toList()
-      ..sort((a, b) => (a['amount'] as num).compareTo(b['amount'] as num));
-    if (options.isEmpty) {
-      return item.rateText.isEmpty ? 'View rental rates' : item.rateText;
-    }
-    final amount =
-        NumberFormat('#,##0.##', 'en').format(options.first['amount']);
-    return '${options.length > 1 ? 'From ' : ''}₱$amount / ${options.first['label']}';
   }
 
   Widget _catalogNotice(BuildContext context) => Padding(

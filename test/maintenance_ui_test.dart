@@ -45,6 +45,7 @@ class _Api extends AdminFirestoreService {
   Future<Map<String, dynamic>> getMap(String path,
       {bool forceRefresh = false}) async {
     reads.add(path);
+    if(path.startsWith('/records/maintenance'))return {'records':[ticket],'nextCursor':null};
     if (path == '/maintenance-staff') {
       if (failStaffOnce) {
         failStaffOnce = false;

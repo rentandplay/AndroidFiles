@@ -139,7 +139,7 @@ class _BookingTicketState extends State<BookingTicket> {
                           : status == 'PENDING_ADMIN_APPROVAL'
                               ? 'Your request is still under review. Rental time starts only when staff hands the item over to you at ${widget.rental.customerHandoffLocation}.'
                               : widget.rental.isRentAndPlayPickup
-                                  ? 'Go to Rent & Play at ASRI. Bring a valid ID; staff will scan the QR code when they hand over your item.'
+                                  ? 'Show your rental QR code and a valid ID to staff at ${widget.rental.customerHandoffLocation} for shop handover.'
                                   : 'Bring a valid ID. Delivery staff will scan the QR code when they hand over your item at ${widget.rental.customerHandoffLocation}.'),
                 ]));
               },

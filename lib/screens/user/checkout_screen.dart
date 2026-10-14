@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
-import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/rental_ui.dart';
@@ -24,6 +23,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _form = GlobalKey<FormState>();
   int _selectedDurationMinutes = 60;
   String _selectedResort = '';
+  DateTime? _scheduledStartAt;
   final _customResortController = TextEditingController();
   String _paymentMethod = 'CASH';
   bool _isSubmitting = false, _quoteLoading = true, _paymentConfirmed = false;
@@ -184,7 +184,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     try {
       final quote = await _api.quoteRental(
           widget.item.id, _selectedDurationMinutes,
-          stockGroupId: widget.item.stockGroupId);
+          stockGroupId: widget.item.stockGroupId,
+          scheduledStartAt: _scheduledStartAt);
       if (mounted && version == _quoteVersion) {
         setState(() {
           _quote = quote;
@@ -217,13 +218,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     final value = _quote?['due_at'];
     final parsed = value is String ? DateTime.tryParse(value)?.toLocal() : null;
     return parsed == null
-        ? 'Confirmed after staff hands over the item'
+        ? 'Set at handoff'
         : DateFormat('EEE, MMM d, yyyy · h:mm a').format(parsed);
   }
 
   String get _lateRateText {
     final rate = _quote?['overtime_rate'];
-    if (rate is! num) return 'Shown in the rental fee details';
+    if (rate is! num) return 'See rate details';
     final unit = (_quote?['overtime_unit_minutes'] as num?)?.toInt() ?? 60;
     return '${rentalMoney(rate)} per started late ${unit >= 1440 ? 'day' : 'hour'}';
   }
@@ -319,14 +320,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       await _api.createRentalRequest(
         itemId: widget.item.id,
         stockGroupId: widget.item.stockGroupId,
+        scheduledStartAt: _scheduledStartAt,
         itemName: widget.item.name,
         itemCode: widget.item.qrCode,
         durationMinutes: _selectedDurationMinutes,
-        deliveryLocation: _selectedResort == 'ASRI Hotspring Resort'
-            ? rentAndPlayPickupLocation
-            : _selectedResort == 'Other / Custom Resort'
-                ? _customResortController.text.trim()
-                : _selectedResort,
+        deliveryLocation: _selectedResort == 'Other / Custom Resort'
+            ? _customResortController.text.trim()
+            : _selectedResort,
         paymentMethod: _paymentMethod,
         requestKey: _requestKey,
         paymentProofImageDataUrl: _paymentProofImage,
@@ -367,7 +367,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return PopScope(
       canPop: !_isSubmitting,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Review rental request')),
+        appBar: AppBar(title: const Text('Review request')),
         bottomNavigationBar: RentalActionBar(
           summaryLabel:
               _paymentMethod == 'QR' ? 'Transfer total' : 'Due at handoff',
@@ -437,6 +437,64 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                       fontSize: 13,
                                       fontWeight: FontWeight.w600)),
                               const SizedBox(height: 8),
+                              ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: const Icon(Icons.event_outlined),
+                                  title: Text(_scheduledStartAt == null
+                                      ? 'Rent now'
+                                      : DateFormat('MMM d, yyyy · h:mm a')
+                                          .format(_scheduledStartAt!
+                                              .toUtc()
+                                              .add(const Duration(hours: 8)))),
+                                  subtitle: const Text(
+                                      'Delivery within Lakewood Subdivision only'),
+                                  trailing: _scheduledStartAt == null
+                                      ? null
+                                      : IconButton(
+                                          icon: const Icon(Icons.close),
+                                          onPressed: () {
+                                            setState(() {
+                                              _scheduledStartAt = null;
+                                              _requestKey = MobileApiService
+                                                  .operationKey();
+                                              _acceptedRentalTerms = false;
+                                            });
+                                            _loadQuote();
+                                          }),
+                                  onTap: () async {
+                                    final day = await showDatePicker(
+                                        context: context,
+                                        initialDate: DateTime.now()
+                                            .toUtc()
+                                            .add(const Duration(hours: 8)),
+                                        firstDate: DateTime.now()
+                                            .toUtc()
+                                            .add(const Duration(hours: 8)),
+                                        lastDate: DateTime.now()
+                                            .toUtc()
+                                            .add(const Duration(hours: 8))
+                                            .add(const Duration(days: 180)));
+                                    if (day == null || !context.mounted) return;
+                                    final time = await showTimePicker(
+                                        context: context,
+                                        initialTime: TimeOfDay.fromDateTime(
+                                            DateTime.now()
+                                                .toUtc()
+                                                .add(const Duration(hours: 8))
+                                                .add(const Duration(
+                                                    minutes: 15))));
+                                    if (time == null || !context.mounted) {
+                                      return;
+                                    }
+                                    setState(() {
+                                      _scheduledStartAt = DateTime.parse(
+                                          '${DateFormat('yyyy-MM-dd').format(day)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+08:00');
+                                      _requestKey =
+                                          MobileApiService.operationKey();
+                                      _acceptedRentalTerms = false;
+                                    });
+                                    _loadQuote();
+                                  }),
                               Wrap(spacing: 8, runSpacing: 8, children: [
                                 for (final minutes in _durationChoices)
                                   ChoiceChip(
@@ -490,16 +548,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                         }
                                       },
                               ),
-                              if (_selectedResort ==
-                                  'ASRI Hotspring Resort') ...[
-                                const SizedBox(height: 8),
-                                const RentalNotice(
-                                  icon: Icons.storefront_outlined,
-                                  title: 'Pick up at Rent & Play',
-                                  message:
-                                      'Rent & Play is located at ASRI Hotspring Resort, so your equipment will not be delivered. Show your rental QR code and a valid ID to staff.',
-                                ),
-                              ] else if (_selectedResort.isNotEmpty) ...[
+                              if (_selectedResort.isNotEmpty) ...[
                                 const SizedBox(height: 8),
                                 RentalNotice(
                                   icon: Icons.delivery_dining_outlined,
@@ -711,22 +760,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       RentalSection(
                         title: 'Rental agreement',
                         icon: Icons.fact_check_outlined,
-                        subtitle:
-                            'Confirm the terms and charges for this specific rental request.',
+                        subtitle: 'Review before sending your request.',
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            RentalValueRow('Requested duration',
-                                _durationLabel(_selectedDurationMinutes)),
-                            RentalValueRow('Billed duration', _packageLength),
                             RentalValueRow(
                                 'Estimated return', _estimatedDueText),
-                            RentalValueRow('Rental fee', rentalMoney(_baseFee)),
                             RentalValueRow('Late rate', _lateRateText),
                             const SizedBox(height: 8),
                             CheckboxListTile(
+                              key: const ValueKey('rental-terms-acceptance'),
                               contentPadding: EdgeInsets.zero,
                               controlAffinity: ListTileControlAffinity.leading,
+                              titleAlignment: ListTileTitleAlignment.top,
                               value: _acceptedRentalTerms,
                               onChanged: _isSubmitting ||
                                       _quoteLoading ||
@@ -734,10 +780,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                   ? null
                                   : (value) => setState(() =>
                                       _acceptedRentalTerms = value ?? false),
-                              title: const Text(
-                                  'I have read and agree to the terms for this rental request.'),
+                              title: const Text('I agree to the rental terms',
+                                  style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600)),
                               subtitle: const Text(
-                                  'Applies to the item, duration, estimated return time, price, handoff location, and payment method shown above.'),
+                                  'Read the terms for this request.',
+                                  style: TextStyle(fontSize: 12, height: 1.4)),
                             ),
                             Align(
                               alignment: Alignment.centerLeft,

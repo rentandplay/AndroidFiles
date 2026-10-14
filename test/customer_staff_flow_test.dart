@@ -47,7 +47,7 @@ class _FlowApi extends MobileApiService {
   };
   @override
   Future<Map<String, dynamic>> quoteRental(String id, int minutes,
-          {String? stockGroupId}) async =>
+          {String? stockGroupId, DateTime? scheduledStartAt}) async =>
       {
         'rental_fee': 150,
         'billed_minutes': 300,
@@ -69,6 +69,7 @@ class _FlowApi extends MobileApiService {
     required String itemName,
     String? itemCode,
     required int durationMinutes,
+    DateTime? scheduledStartAt,
     required String deliveryLocation,
     required String paymentMethod,
     required String requestKey,
@@ -143,8 +144,9 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('ASRI Hotspring Resort').last);
     await tester.pumpAndSettle();
-    final agreement = find.widgetWithText(CheckboxListTile,
-        'I have read and agree to the terms for this rental request.');
+    expect(find.text('Delivery to ASRI Hotspring Resort'), findsOneWidget);
+    expect(find.text('Pick up at Rent & Play'), findsNothing);
+    final agreement = find.byKey(const ValueKey('rental-terms-acceptance'));
     await tester.ensureVisible(agreement);
     await tester.tap(agreement);
     await tester.pumpAndSettle();
@@ -155,6 +157,7 @@ void main() {
     expect(api.calls.single['acceptedRentalTerms'], true);
     expect(api.calls.single['rentalTermsVersion'], mobileRentalTermsVersion);
     expect(api.calls.single['paymentMethod'], 'CASH');
+    expect(api.calls.single['deliveryLocation'], 'ASRI Hotspring Resort');
     expect(api.calls.single['requestKey'], matches(RegExp(r'^[a-f0-9]{32}$')));
     expect(find.byType(ActiveRentalsScreen), findsOneWidget);
     expect(find.text('R-0001'), findsOneWidget);

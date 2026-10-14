@@ -87,6 +87,34 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
   List<Map<String, dynamic>> _tickets = [];
   bool _loading = true;
   String _error = '', _filter = 'Open', _query = '';
+  String? _cursor;
+  bool _moreBusy = false;
+  Future<void> _more() async {
+    if (_cursor == null || _moreBusy) return;
+    setState(() => _moreBusy = true);
+    try {
+      final data = await _api.getMap('/records/maintenance?${Uri(queryParameters: {
+            'limit': '25',
+            'status': _filter == 'Open'
+                ? 'OPEN'
+                : _filter == 'History'
+                    ? 'CLOSED'
+                    : 'ALL',
+            'cursor': _cursor!
+          }).query}');
+      if (mounted) {
+        setState(() {
+          _tickets = [..._tickets, ..._rows(data['records'])];
+          _cursor = data['nextCursor'];
+        });
+      }
+    } catch (error) {
+      if (mounted) setState(() => _error = '$error');
+    } finally {
+      if (mounted) setState(() => _moreBusy = false);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -95,11 +123,20 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
 
   Future<void> _load() async {
     try {
-      final data =
-          await _api.getMap('/mobile/admin-workspace', forceRefresh: true);
+      final data = await _api.getMap(
+          '/records/maintenance?${Uri(queryParameters: {
+                'limit': '25',
+                'status': _filter == 'Open'
+                    ? 'OPEN'
+                    : _filter == 'History'
+                        ? 'CLOSED'
+                        : 'ALL'
+              }).query}',
+          forceRefresh: true);
       if (!mounted) return;
       setState(() {
-        _tickets = _rows(data['maintenance']);
+        _tickets = _rows(data['records']);
+        _cursor = data['nextCursor'];
         _loading = false;
         _error = '';
       });
@@ -189,8 +226,10 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                             .map((filter) => ChoiceChip(
                                 label: Text(filter),
                                 selected: _filter == filter,
-                                onSelected: (_) =>
-                                    setState(() => _filter = filter)))
+                                onSelected: (_) {
+                                  setState(() => _filter = filter);
+                                  _load();
+                                }))
                             .toList()),
                     const SizedBox(height: 12),
                     TextField(
@@ -203,6 +242,11 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                       const Padding(
                           padding: EdgeInsets.all(24),
                           child: Text('No maintenance tickets in this view.')),
+                    if (_cursor != null)
+                      OutlinedButton(
+                          onPressed: _moreBusy ? null : _more,
+                          child: Text(
+                              _moreBusy ? 'Loading…' : 'Load more tickets')),
                     for (final ticket in visible)
                       Card(
                           child: ListTile(

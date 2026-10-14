@@ -24,11 +24,15 @@ class Mx10PrinterService {
   }
 
   Future<bool> isConnected() async {
-    final status = await _channel.invokeMapMethod<String, dynamic>(
-      'getPrinterStatus',
-    );
-    return status?['connected'] == true;
+    return (await status())['connected'] == true;
   }
+
+  Future<Map<String, dynamic>> status() async =>
+      await _channel.invokeMapMethod<String, dynamic>('getPrinterStatus') ?? {};
+
+  Future<void> printReceipt(List<Map<String, dynamic>> lines) =>
+      _channel.invokeMethod<void>(
+          'printRentalReceipt', {'lines': lines, 'paperMode': 'continuous'});
 
   Future<void> printLabel({
     required String code,

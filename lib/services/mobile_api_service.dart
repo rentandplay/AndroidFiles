@@ -126,12 +126,14 @@ class MobileApiService {
   }
 
   Future<Map<String, dynamic>> quoteRental(String itemId, int minutes,
-      {String? stockGroupId}) async {
+      {String? stockGroupId, DateTime? scheduledStartAt}) async {
     final result = await _request('/mobile/quote', method: 'POST', body: {
       'itemId': itemId,
       if (stockGroupId != null && stockGroupId.isNotEmpty)
         'stockGroupId': stockGroupId,
-      'durationMinutes': minutes
+      'durationMinutes': minutes,
+      if (scheduledStartAt != null)
+        'scheduledStartAt': scheduledStartAt.toUtc().toIso8601String()
     });
     return Map<String, dynamic>.from(result['quote'] as Map);
   }
@@ -311,6 +313,7 @@ class MobileApiService {
     required String itemName,
     String? itemCode,
     required int durationMinutes,
+    DateTime? scheduledStartAt,
     required String deliveryLocation,
     required String paymentMethod,
     required String requestKey,
@@ -329,6 +332,8 @@ class MobileApiService {
         if (stockGroupId != null && stockGroupId.isNotEmpty)
           'stockGroupId': stockGroupId,
         'durationMinutes': durationMinutes,
+        if (scheduledStartAt != null)
+          'scheduledStartAt': scheduledStartAt.toUtc().toIso8601String(),
         'deliveryLocation': deliveryLocation,
         'paymentMethod': paymentMethod.toUpperCase(),
         'requestKey': requestKey,
@@ -354,8 +359,24 @@ class MobileApiService {
         id: (record['id'] ?? record['rentalId'])?.toString());
   }
 
+  String? nextRentalCursor;
+  Future<({List<RentalModel> records, String? nextCursor})>
+      listRentalHistoryPage(String cursor) async {
+    final result = await _request('/mobile/rentals?${Uri(queryParameters: {
+          'cursor': cursor,
+          'limit': '50'
+        }).query}');
+    final records = (result['rentals'] as List)
+        .whereType<Map>()
+        .map((row) => RentalModel.fromMap(Map<String, dynamic>.from(row),
+            id: row['id']?.toString()))
+        .toList();
+    return (records: records, nextCursor: result['nextCursor'] as String?);
+  }
+
   Future<List<RentalModel>> listRentals() async {
     final result = await _request('/mobile/rentals');
+    nextRentalCursor = result['nextCursor'] as String?;
     final records = result['rentals'];
     if (records is! List) return const [];
     return records.whereType<Map>().map((record) {

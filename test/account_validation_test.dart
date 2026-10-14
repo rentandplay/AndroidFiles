@@ -21,13 +21,30 @@ void main() {
     expect(staff.role, 'OPERATOR'); expect(staff.isStaff, isTrue); expect(staff.mustChangePassword, isTrue);
     expect(UserModel.fromMap({'role': 'USER'}).role, 'CUSTOMER');
   });
-  testWidgets('mobile login shows inline email errors and forgot password asks for an address', (tester) async {
+  testWidgets('mobile login validates only on submit and forgot password asks for an address', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
     final email = find.byType(TextFormField).first;
-    await tester.enterText(email, 'some one@school.edu.ph'); await tester.pump();
+    final login = find.widgetWithText(ElevatedButton, 'Login');
+    await tester.enterText(email, 'reynold');
+    await tester.pump();
+    expect(find.text('Enter a valid email address.'), findsNothing);
+    expect(find.text('Please enter your password.'), findsNothing);
+    await tester.enterText(email, 'some one@school.edu.ph');
+    await tester.pump();
+    expect(find.text('Email addresses cannot contain spaces.'), findsNothing);
+    await tester.ensureVisible(login);
+    await tester.tap(login);
+    await tester.pumpAndSettle();
     expect(find.text('Email addresses cannot contain spaces.'), findsOneWidget);
-    await tester.enterText(email, 'MARIA@SCHOOL.EDU.PH'); await tester.pump();
+    expect(find.text('Please enter your password.'), findsOneWidget);
+    await tester.enterText(email, 'MARIA@SCHOOL.EDU.PH');
+    await tester.pump();
     expect(tester.widget<TextFormField>(email).controller!.text, 'maria@school.edu.ph');
+    await tester.ensureVisible(login);
+    await tester.tap(login);
+    await tester.pumpAndSettle();
+    expect(find.text('Email addresses cannot contain spaces.'), findsNothing);
+    expect(find.text('Please enter your password.'), findsOneWidget);
     await tester.ensureVisible(find.text('Forgot password?'));
     await tester.tap(find.text('Forgot password?')); await tester.pumpAndSettle();
     expect(find.text('Account email'), findsOneWidget); expect(find.text('Send reset link'), findsOneWidget);

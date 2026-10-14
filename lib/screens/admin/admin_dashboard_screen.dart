@@ -6,6 +6,7 @@ import '../../services/admin_firestore_service.dart';
 import '../../widgets/notification_widgets.dart';
 import 'equipment_list_screen.dart';
 import 'maintenance_screen.dart';
+import 'payments_screen.dart';
 import 'rental_admin_view.dart';
 import '../profile/profile_screen.dart';
 
@@ -541,6 +542,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
             icon: const Icon(Icons.build_outlined),
             label: const Text('Manage maintenance'),
           ),
+          OutlinedButton.icon(
+              onPressed: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => PaymentsScreen(api: _api))),
+              icon: const Icon(Icons.payments_outlined),
+              label: const Text('Payments & expenses')),
         ],
       ),
     );

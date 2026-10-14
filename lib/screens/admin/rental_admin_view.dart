@@ -1,4 +1,9 @@
 import '../../utils/record_codes.dart';
+import 'walk_in_customer_form.dart';
+import 'rental_extra_screen.dart';
+import 'delivery_calendar_screen.dart';
+import '../shared/rental_extension_dialog.dart';
+import '../shared/rental_receipt_dialog.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -82,12 +87,16 @@ class RentalAdminView extends StatefulWidget {
       required this.onChanged,
       this.initialScanKind,
       this.scanRequestId = 0,
+      this.api,
+      this.now,
       this.onScanConsumed});
   final String page;
   final Map<String, dynamic> workspace;
   final Future<void> Function() onChanged;
   final String? initialScanKind;
   final int scanRequestId;
+  final MobileApiService? api;
+  final DateTime? now;
   final VoidCallback? onScanConsumed;
   @override
   State<RentalAdminView> createState() => _RentalAdminViewState();
@@ -95,7 +104,7 @@ class RentalAdminView extends StatefulWidget {
 
 class _RentalAdminViewState extends State<RentalAdminView> {
   String _query = '', _stage = 'All';
-  final _api = MobileApiService.instance;
+  MobileApiService get _api => widget.api ?? MobileApiService.instance;
   Timer? _rentalClock;
 
   @override
@@ -141,6 +150,20 @@ class _RentalAdminViewState extends State<RentalAdminView> {
 
   Future<void> _action(Map<String, dynamic> row, String action,
       {String? code}) async {
+    if (action == 'extension-request') {
+      await showRentalExtensionDialog(context, _api, row['id'], staff: true);
+      await widget.onChanged();
+      return;
+    }
+    if (['delivery', 'extension-review'].contains(action)) {
+      await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+              builder: (_) => RentalExtraScreen(
+                  row: row, kind: action, api: _api, scannedCode: code)));
+      await widget.onChanged();
+      return;
+    }
     await Navigator.push<bool>(
         context,
         MaterialPageRoute(
@@ -148,6 +171,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                 row: row,
                 action: action,
                 workspace: widget.workspace,
+                api: _api,
                 scannedCode: code)));
     await widget.onChanged();
   }
@@ -172,13 +196,18 @@ class _RentalAdminViewState extends State<RentalAdminView> {
         } else if (row['status'] == 'ACTIVE') {
           await _action(row, 'receipt', code: code);
         } else if (row['status'] == 'APPROVED' &&
-            row['delivery_status'] != 'PREPARED') {
+            row['delivery_status'] == 'DELIVERY_FAILED') {
+          await _action(row, 'delivery', code: code);
+        } else if (row['status'] == 'APPROVED' &&
+            !const ['PREPARED', 'OUT_FOR_DELIVERY']
+                .contains(row['delivery_status'])) {
           await _action(row, 'prepare-delivery', code: code);
         } else {
           _details(row);
         }
       } else if (row['status'] == 'APPROVED' &&
-          row['delivery_status'] == 'PREPARED') {
+          const ['PREPARED', 'OUT_FOR_DELIVERY']
+              .contains(row['delivery_status'])) {
         await _action(row, 'release', code: code);
       } else {
         _details(row, code: code);
@@ -250,7 +279,25 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                             children: [
                           Text(
                               '${row['customer_name']} · ${row['item_code'] ?? ''}'),
-                          Text(recordReference(row)),
+                          SelectableText(recordReference(row)),
+                          if (row['request_source'] == 'WALK_IN') ...[
+                            RentalValueRow(
+                                'Rental flow', 'Walk-in / staff assisted'),
+                            RentalValueRow(
+                                'Handover method',
+                                row['fulfillment_mode'] == 'SHOP_HANDOVER'
+                                    ? 'At Rent & Play · Lakewoods'
+                                    : 'Resort delivery'),
+                            if (row['confirmed_rental_at'] != null)
+                              OutlinedButton.icon(
+                                  onPressed: () => showDialog<void>(
+                                      context: context,
+                                      barrierDismissible: false,
+                                      builder: (_) =>
+                                          RentalReceiptDialog(rental: row)),
+                                  icon: const Icon(Icons.receipt_long),
+                                  label: const Text('Bluetooth / PDF receipt')),
+                          ],
                           const Divider(),
                           RentalStatusBadge(status: _text(row['status'])),
                           const SizedBox(height: 12),
@@ -279,8 +326,13 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                 'Final rental charges: ${_money(fee['final_rental_charges'])}'),
                           RentalValueRow(
                               'Balance due', _money(row['balance_due'])),
-                          if (['COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
-                              .contains(row['status']))
+                          if ([
+                            'ACTIVE',
+                            'COMPLETED',
+                            'CANCELLED',
+                            'REJECTED',
+                            'EXPIRED'
+                          ].contains(row['status']))
                             RentalValueRow(
                                 'Refund due', _money(row['refund_due'])),
                           if (row['final_reason'] != null)
@@ -360,21 +412,49 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                           padding: EdgeInsets.all(8),
                           child: Text('Waiting for payment screenshot')),
                   ],
+                  if (row['status'] == 'ACTIVE' &&
+                      (row['extension_request'] as Map?)?['status'] !=
+                          'PENDING')
+                    TextButton(
+                        onPressed: () => open('extension-request'),
+                        child: const Text('Request additional time')),
+                  if (row['extension_request'] is Map &&
+                      row['extension_request']['status'] == 'PENDING')
+                    TextButton(
+                        onPressed: () => open('extension-review'),
+                        child: const Text('Review extension')),
+                  if (row['status'] == 'APPROVED' &&
+                      row['fulfillment_mode'] != 'SHOP_HANDOVER')
+                    TextButton(
+                        onPressed: () => open('delivery'),
+                        child: const Text('Local delivery progress')),
                   if (row['status'] == 'APPROVED') ...[
                     TextButton(
                         onPressed: () => open('assignment'),
                         child: const Text('Change unit')),
-                    TextButton(
-                        onPressed: () => open('reject'),
-                        child: const Text('Cancel request')),
+                    if (!const ['OUT_FOR_DELIVERY', 'DELIVERY_FAILED']
+                        .contains(row['delivery_status']))
+                      TextButton(
+                          onPressed: () => open('reject'),
+                          child: const Text('Cancel request')),
                     FilledButton(
                         onPressed: () => open(
-                            row['delivery_status'] == 'PREPARED'
-                                ? 'release'
-                                : 'prepare-delivery'),
-                        child: Text(row['delivery_status'] == 'PREPARED'
-                            ? 'Confirm resort handoff'
-                            : 'Prepare for delivery'))
+                            row['delivery_status'] == 'DELIVERY_FAILED'
+                                ? 'delivery'
+                                : const ['PREPARED', 'OUT_FOR_DELIVERY']
+                                        .contains(row['delivery_status'])
+                                    ? 'release'
+                                    : 'prepare-delivery'),
+                        child: Text(row['delivery_status'] == 'DELIVERY_FAILED'
+                            ? 'Receive at shop'
+                            : const ['PREPARED', 'OUT_FOR_DELIVERY']
+                                    .contains(row['delivery_status'])
+                                ? (row['fulfillment_mode'] == 'SHOP_HANDOVER'
+                                    ? 'Confirm shop handover'
+                                    : 'Confirm resort handoff')
+                                : (row['fulfillment_mode'] == 'SHOP_HANDOVER'
+                                    ? 'Prepare for handover'
+                                    : 'Prepare for delivery')))
                   ],
                   if (row['status'] == 'ACTIVE') ...[
                     if (row['latest_return_request_status'] ==
@@ -390,8 +470,13 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                     FilledButton(
                         onPressed: () => open('complete-return'),
                         child: const Text('Complete inspection')),
-                  if (['COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED']
-                          .contains(row['status']) &&
+                  if ([
+                        'ACTIVE',
+                        'COMPLETED',
+                        'CANCELLED',
+                        'REJECTED',
+                        'EXPIRED'
+                      ].contains(row['status']) &&
                       row.containsKey('rental_paid_amount'))
                     TextButton(
                         onPressed: () => open('settlement'),
@@ -416,8 +501,12 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                 ? 'payment-review'
                 : null)
             : 'approve',
-        'APPROVED' =>
-          row['delivery_status'] == 'PREPARED' ? 'release' : 'prepare-delivery',
+        'APPROVED' => row['delivery_status'] == 'DELIVERY_FAILED'
+            ? 'delivery'
+            : const ['PREPARED', 'OUT_FOR_DELIVERY']
+                    .contains(row['delivery_status'])
+                ? 'release'
+                : 'prepare-delivery',
         'ACTIVE' => 'receipt',
         'RETURN_PENDING_INSPECTION' => 'complete-return',
         _ => null,
@@ -425,8 +514,13 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   String _nextLabel(Map<String, dynamic> row) => switch (_nextAction(row)) {
         'payment-review' => 'Review payment screenshot',
         'approve' => 'Approve rental request',
-        'prepare-delivery' => 'Prepare for delivery',
-        'release' => 'Confirm resort handoff',
+        'prepare-delivery' => row['fulfillment_mode'] == 'SHOP_HANDOVER'
+            ? 'Prepare for handover'
+            : 'Prepare for delivery',
+        'release' => row['fulfillment_mode'] == 'SHOP_HANDOVER'
+            ? 'Confirm shop handover'
+            : 'Confirm resort handoff',
+        'delivery' => 'Receive unsuccessful delivery',
         'receipt' => 'Receive equipment',
         'complete-return' => 'Complete inspection',
         _ => 'View details',
@@ -458,7 +552,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   @override
   Widget build(BuildContext context) {
     final all = _rows(widget.workspace['transactions']);
-    final now = DateTime.now();
+    final now = widget.now ?? DateTime.now();
     final active = all.where((row) => row['status'] == 'ACTIVE').toList();
     final overdueCount = active.where((row) => _isOverdue(row, now)).length;
     final dueTodayCount = active.where((row) => _isDueToday(row, now)).length;
@@ -510,6 +604,18 @@ class _RentalAdminViewState extends State<RentalAdminView> {
               Text(widget.page,
                   style: Theme.of(context).textTheme.headlineSmall),
               const SizedBox(height: 8),
+              if (widget.page == 'Rentals')
+                OutlinedButton.icon(
+                    icon: const Icon(Icons.event_note),
+                    label: const Text('Local delivery plan'),
+                    onPressed: () async {
+                      final row = await Navigator.push<Map<String, dynamic>>(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  DeliveryCalendarScreen(api: _api)));
+                      if (row != null && mounted) _details(row);
+                    }),
               const RentalNotice(
                   message:
                       '1. Review the request and verify QR payment proof if provided. 2. Scan the assigned unit at the shop. 3. At handoff, scan the customer QR, verify their ID and rental payment, and inspect the unit and accessories. The timer starts only after handoff is confirmed.'),
@@ -539,7 +645,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                   FilledButton.icon(
                       onPressed: () => _action({}, 'booking'),
                       icon: const Icon(Icons.add),
-                      label: const Text('Create counter rental')),
+                      label: const Text('Create walk-in rental')),
                 if (widget.page != 'Transaction History')
                   OutlinedButton.icon(
                       onPressed: () => _lookup(
@@ -705,7 +811,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _reason = TextEditingController(),
       _notes = TextEditingController(),
       _minutes = TextEditingController(text: '60'),
-      _location = TextEditingController(text: 'Shop pickup');
+      _location = TextEditingController();
   final _penalty = TextEditingController(text: '0'),
       _payment = TextEditingController(text: '0'),
       _rentalRefund = TextEditingController(text: '0');
@@ -717,6 +823,45 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _method = 'CASH',
       _error = '';
   String? _itemId, _customerId;
+  String _fulfillmentMode = 'SHOP_HANDOVER', _customerSearch = '';
+  DateTime? _scheduledStartAt;
+  bool _customerTermsAcknowledged = false;
+  final List<Map<String, dynamic>> _createdCustomers = [];
+  final List<Map<String, dynamic>> _foundCustomers = [];
+  Timer? _customerSearchTimer;
+  int _customerSearchVersion = 0;
+  void _searchCustomer(String value) {
+    setState(() => _customerSearch = value);
+    _customerSearchTimer?.cancel();
+    final version = ++_customerSearchVersion;
+    if (value.trim().length < 2) return;
+    _customerSearchTimer = Timer(const Duration(milliseconds: 400), () async {
+      try {
+        final result = await _api.adminRequest(
+            '/records/customers?${Uri(queryParameters: {
+              'search': value.trim(),
+              'status': 'ACTIVE',
+              'limit': '20'
+            }).query}');
+        if (mounted && version == _customerSearchVersion) {
+          setState(() {
+            for (final row in _rows(result['records'])) {
+              _foundCustomers
+                  .removeWhere((current) => current['id'] == row['id']);
+              _foundCustomers.add(row);
+            }
+          });
+        }
+      } catch (error) {
+        if (mounted && version == _customerSearchVersion) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('$error')));
+        }
+      }
+    });
+  }
+
+  bool get _walkIn => _row['request_source'] == 'WALK_IN';
   Map<String, dynamic>? _quote;
   Map<String, dynamic>? _paymentProof;
   bool _paymentProofLoading = false;
@@ -764,7 +909,25 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         });
       }
     });
-    if (_action == 'release') _transaction.text = widget.scannedCode ?? '';
+    _location.addListener(() {
+      if (_action == 'booking' && mounted) {
+        setState(() {
+          _quote = null;
+          _quoteVersion++;
+        });
+      }
+    });
+    if (_action == 'release') {
+      if (_walkIn) {
+        _manual = true;
+        _verification.updateManual(true);
+        _reason.text =
+            'Staff-assisted walk-in handover. Customer identity checked in person.';
+        _transaction.text = _text(_row['rental_code']);
+      } else {
+        _transaction.text = widget.scannedCode ?? '';
+      }
+    }
     if (_action == 'receipt') _inventory.text = widget.scannedCode ?? '';
     if (_action == 'prepare-delivery') {
       _inventory.text = widget.scannedCode ?? '';
@@ -790,6 +953,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
 
   @override
   void dispose() {
+    _customerSearchTimer?.cancel();
     _quoteVersion++;
     _verification.removeListener(_verificationChanged);
     _verification.dispose();
@@ -889,14 +1053,21 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             labels: const ['Customer rental QR', 'Physical handoff']),
         if (_verification.step == 0)
           RentalSection(
-              title: 'Verify the customer rental',
+              title: _walkIn
+                  ? 'Verify the walk-in rental'
+                  : 'Verify the customer rental',
               icon: Icons.qr_code,
-              subtitle:
-                  'At the delivery location, scan the rental QR shown in My Rentals. Equipment was already checked at the shop.',
+              subtitle: _walkIn
+                  ? 'Verify the saved rental reference. No customer app is required. The exact equipment was already checked at the shop.'
+                  : 'At the delivery location, scan the rental QR shown in My Rentals. Equipment was already checked at the shop.',
               child: Column(children: [
-                _qr(_transaction,
-                    _manual ? 'Printed rental code' : 'Customer rental QR'),
-                _manualControl()
+                if (_walkIn)
+                  RentalValueRow('Rental reference', recordReference(_row))
+                else ...[
+                  _qr(_transaction,
+                      _manual ? 'Printed rental code' : 'Customer rental QR'),
+                  _manualControl()
+                ]
               ])),
         if (_verification.step == 2) ...[
           const RentalNotice(
@@ -910,6 +1081,20 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               child: Column(children: [
                 _check('The receiver matches the rental customer.',
                     _customerVerified, (value) => _customerVerified = value),
+                if (_walkIn)
+                  _check(
+                      'Customer agreed to the duration, total, late fees, and physical return inspection.',
+                      _customerTermsAcknowledged,
+                      (value) => _customerTermsAcknowledged = value),
+                if (_walkIn) ...[
+                  RentalValueRow('Billed duration',
+                      '${_map(_row['fee_breakdown'])['billed_minutes']} minutes'),
+                  RentalValueRow('Late fee',
+                      '${_money(_map(_row['fee_breakdown'])['overtime_rate'])} per started ${_map(_row['fee_breakdown'])['overtime_unit_minutes'] ?? 60} minutes')
+                ],
+                if (_walkIn)
+                  RentalValueRow('Grace period',
+                      '${_map(_row['fee_breakdown'])['grace_minutes'] ?? 0} minutes'),
                 const Divider(height: 20),
                 RentalValueRow('Rental fee', _money(_row['rental_fee'])),
                 _check('Rental payment received and verified', _paymentVerified,
@@ -973,7 +1158,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                   _busy ? null : (value) => setState(() => _result = value!)),
         _check('I checked this unit and all included accessories.',
             _accessories, (value) => _accessories = value),
-        _field(_notes, 'Inspection notes'),
+        _field(_notes, 'Inspection notes',
+            required: !release &&
+                ['DAMAGED', 'NEEDS_INSPECTION'].contains(_condition)),
         Wrap(spacing: 8, children: [
           OutlinedButton.icon(
               onPressed: _busy ? null : () => _addPhoto(ImageSource.camera),
@@ -1003,12 +1190,32 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         'accessoriesChecked': _accessories,
         'photos': _photos
       };
+  Future<void> _addWalkInCustomer() async {
+    final customer = await showDialog<Map<String, dynamic>>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => WalkInCustomerForm(api: _api));
+    if (!mounted || customer == null) return;
+    setState(() {
+      _createdCustomers.add(customer);
+      _customerId = _text(customer['id']);
+      _customerSearch = '';
+      _changed = true;
+    });
+  }
+
   Map<String, dynamic> _bookingPayload() => {
         'itemId': _itemId,
         'customerId': _customerId,
         'durationMinutes': int.parse(_minutes.text),
+        if (_scheduledStartAt != null)
+          'scheduledStartAt': _scheduledStartAt!.toUtc().toIso8601String(),
         'mode': 'TIMED',
-        'deliveryLocation': _location.text.trim(),
+        'rentalChannel': 'WALK_IN',
+        'fulfillmentMode': _fulfillmentMode,
+        'deliveryLocation': _fulfillmentMode == 'SHOP_HANDOVER'
+            ? 'Rent & Play · Lakewoods, Los Baños'
+            : _location.text.trim(),
         'paymentMethod': _method
       };
   Future<void> _preview() async {
@@ -1049,6 +1256,11 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
     }
     if (_action == 'release' && !_customerVerified) {
       setState(() => _error = 'Verify the customer receiving the equipment.');
+      return;
+    }
+    if (_action == 'release' && _walkIn && !_customerTermsAcknowledged) {
+      setState(() => _error =
+          'Confirm that the customer agreed to the duration, total, late fees, and return terms.');
       return;
     }
     if (_action == 'prepare-delivery' &&
@@ -1127,7 +1339,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             ..._bookingPayload(),
             'expectedQuote': {
               'rentalFee': _quote!['rental_fee'],
-              'billedMinutes': _quote!['billed_minutes']
+              'billedMinutes': _quote!['billed_minutes'],
+              if (_quote!['overtime_rate'] != null)
+                'overtimeRate': _quote!['overtime_rate']
             }
           });
           break;
@@ -1170,6 +1384,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             ..._verification.releaseCodes,
             'customerVerified': _customerVerified,
             'paymentVerified': _paymentVerified,
+            'customerTermsAcknowledged': _customerTermsAcknowledged,
             'inspection': _inspectionPayload(),
             if (_manual) 'manualReason': _reason.text.trim()
           });
@@ -1198,6 +1413,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
           payload.addAll({
             'paymentAmount': double.parse(_payment.text),
             'rentalRefundAmount': double.parse(_rentalRefund.text),
+            'paymentMethod': _method,
+            'reference': _transaction.text,
             'notes': _notes.text
           });
           break;
@@ -1231,14 +1448,18 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   }
 
   String get _title => switch (_action) {
-        'booking' => 'Create counter rental',
+        'booking' => 'Create walk-in rental',
         'approve' => 'Approve rental request',
         'payment-review' => 'Verify QR payment',
         'payment-reject' => 'Reject QR payment proof',
-        'prepare-delivery' => 'Prepare for delivery',
+        'prepare-delivery' => _row['fulfillment_mode'] == 'SHOP_HANDOVER'
+            ? 'Prepare for handover'
+            : 'Prepare for delivery',
         'reject' => 'Reject / cancel rental request',
         'reject-return' => 'Reject customer return request',
-        'release' => 'Confirm resort handoff',
+        'release' => _row['fulfillment_mode'] == 'SHOP_HANDOVER'
+            ? 'Confirm shop handover'
+            : 'Confirm resort handoff',
         'receipt' => 'Record physical receipt',
         'complete-return' => 'Confirm Return',
         'assignment' => 'Change assigned unit',
@@ -1250,11 +1471,28 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
     final items = _rows(widget.workspace['items'])
             .where((item) =>
                 item['is_active'] != false &&
-                item['status'] == 'AVAILABLE' &&
-                item['reserved_rental_id'] == null)
+                const ['AVAILABLE', 'RENTED', 'RESERVED_PENDING']
+                    .contains(item['status']))
             .toList(),
-        customers = _rows(widget.workspace['customers'])
-            .where((row) => row['is_active'] != false)
+        customers = [
+          ..._rows(widget.workspace['customers']),
+          ..._createdCustomers,
+          ..._foundCustomers
+        ]
+            .fold<Map<String, Map<String, dynamic>>>({}, (map, row) {
+              map[row['id'].toString()] = row;
+              return map;
+            })
+            .values
+            .where((row) =>
+                row['is_active'] != false &&
+                (row['id'] == _customerId ||
+                    '${row['full_name']} ${row['customer_code']} ${row['phone']}'
+                        .toLowerCase()
+                        .replaceAll(RegExp(r'[^a-z0-9]'), '')
+                        .contains(_customerSearch
+                            .toLowerCase()
+                            .replaceAll(RegExp(r'[^a-z0-9]'), ''))))
             .toList();
     return PopScope<bool>(
         canPop: !_busy && !_verification.busy && !_previewing,
@@ -1346,6 +1584,15 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                           _quote = null;
                                           _quoteVersion++;
                                         })),
+                            const RentalNotice(
+                                message:
+                                    'Walk-in customers can rent without an app. Search and reuse their profile before adding a new one.'),
+                            TextFormField(
+                                decoration: const InputDecoration(
+                                    labelText:
+                                        'Search beginning of name or customer reference'),
+                                enabled: !_busy && !_previewing,
+                                onChanged: _searchCustomer),
                             DropdownButtonFormField<String>(
                                 initialValue: _customerId,
                                 isExpanded: true,
@@ -1355,7 +1602,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                   for (final row in customers)
                                     DropdownMenuItem(
                                         value: _text(row['id']),
-                                        child: Text(_text(row['full_name'])))
+                                        child: Text(
+                                            '${row['full_name']} · ${row['customer_code'] ?? ''}',
+                                            overflow: TextOverflow.ellipsis))
                                 ],
                                 validator: (value) =>
                                     value == null ? 'Select customer' : null,
@@ -1363,9 +1612,90 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                     ? null
                                     : (value) =>
                                         setState(() => _customerId = value)),
+                            OutlinedButton.icon(
+                                onPressed: _busy || _previewing
+                                    ? null
+                                    : _addWalkInCustomer,
+                                icon: const Icon(Icons.person_add_alt_1),
+                                label: const Text('Add walk-in customer')),
+                            DropdownButtonFormField<String>(
+                                initialValue: _fulfillmentMode,
+                                decoration: const InputDecoration(
+                                    labelText: 'Handover method'),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'SHOP_HANDOVER',
+                                      child:
+                                          Text('At Rent & Play · Lakewoods')),
+                                  DropdownMenuItem(
+                                      value: 'DELIVERY',
+                                      child: Text('Deliver to customer resort'))
+                                ],
+                                onChanged: _busy || _previewing
+                                    ? null
+                                    : (value) => setState(() {
+                                          _fulfillmentMode = value!;
+                                          _quote = null;
+                                          _quoteVersion++;
+                                        })),
+                            ListTile(
+                                title: Text(_scheduledStartAt == null
+                                    ? 'Rent now'
+                                    : 'Scheduled: ${DateFormat('MMM d, h:mm a').format(_scheduledStartAt!.toUtc().add(const Duration(hours: 8)))}'),
+                                subtitle: const Text(
+                                    'Lakewood local handover or delivery'),
+                                trailing: IconButton(
+                                    icon: const Icon(Icons.close),
+                                    onPressed: _busy
+                                        ? null
+                                        : () => setState(() {
+                                              _scheduledStartAt = null;
+                                              _quote = null;
+                                              _quoteVersion++;
+                                            })),
+                                onTap: _busy
+                                    ? null
+                                    : () async {
+                                        final day = await showDatePicker(
+                                            context: context,
+                                            initialDate: DateTime.now()
+                                                .toUtc()
+                                                .add(const Duration(hours: 8)),
+                                            firstDate: DateTime.now()
+                                                .toUtc()
+                                                .add(const Duration(hours: 8)),
+                                            lastDate: DateTime.now()
+                                                .toUtc()
+                                                .add(const Duration(hours: 8))
+                                                .add(
+                                                    const Duration(days: 180)));
+                                        if (day == null || !context.mounted) {
+                                          return;
+                                        }
+                                        final time = await showTimePicker(
+                                            context: context,
+                                            initialTime: TimeOfDay.fromDateTime(
+                                                DateTime.now()
+                                                    .toUtc()
+                                                    .add(const Duration(
+                                                        hours: 8))
+                                                    .add(const Duration(
+                                                        minutes: 15))));
+                                        if (time == null || !context.mounted) {
+                                          return;
+                                        }
+                                        setState(() {
+                                          _scheduledStartAt = DateTime.parse(
+                                              '${day.year}-${day.month.toString().padLeft(2, '0')}-${day.day.toString().padLeft(2, '0')}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+08:00');
+                                          _quote = null;
+                                          _quoteVersion++;
+                                        });
+                                      }),
                             _field(_minutes, 'Duration in minutes',
                                 numeric: true),
-                            _field(_location, 'Delivery location'),
+                            if (_fulfillmentMode == 'DELIVERY')
+                              _field(_location,
+                                  'Resort name, address, and delivery instructions'),
                             DropdownButtonFormField<String>(
                                 initialValue: _method,
                                 decoration: const InputDecoration(
@@ -1499,6 +1829,23 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                             if (_row['status'] != 'COMPLETED')
                               _field(_rentalRefund, 'Rental payment refunded',
                                   numeric: true),
+                            DropdownButtonFormField<String>(
+                                initialValue: _method,
+                                decoration: const InputDecoration(
+                                    labelText: 'Payment / refund method'),
+                                items: const [
+                                  DropdownMenuItem(
+                                      value: 'CASH',
+                                      child: Text('Cash · in person')),
+                                  DropdownMenuItem(
+                                      value: 'QR', child: Text('QR transfer'))
+                                ],
+                                onChanged: _busy
+                                    ? null
+                                    : (value) =>
+                                        setState(() => _method = value!)),
+                            _field(_transaction, 'Transfer reference',
+                                required: _method == 'QR'),
                             _field(_notes, 'Receipt / settlement notes')
                           ],
                           const SizedBox(height: 16),

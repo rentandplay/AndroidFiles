@@ -131,11 +131,12 @@ class AuthService extends ChangeNotifier {
         .asyncMap((_) => getCurrentUserModel());
   }
 
-  Future<void> updateValidIdUrl(String uid, String validIdUrl) async {
+  Future<void> acknowledgeIdRequirement(String uid) async {
     if (currentUser?.uid != uid) {
       throw const MobileApiException('Sign in to update your profile.');
     }
-    await _api.profile(method: 'PATCH', body: {'validIdUrl': validIdUrl});
+    await _api
+        .profile(method: 'PATCH', body: {'hasAcknowledgedIdRequirement': true});
     notifyListeners();
   }
 
