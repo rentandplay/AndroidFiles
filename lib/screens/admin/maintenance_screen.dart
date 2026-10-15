@@ -93,8 +93,9 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     if (_cursor == null || _moreBusy) return;
     setState(() => _moreBusy = true);
     try {
-      final data = await _api.getMap('/records/maintenance?${Uri(queryParameters: {
-            'limit': '25',
+      final data =
+          await _api.getMap('/records/maintenance?${Uri(queryParameters: {
+            'limit': '5',
             'status': _filter == 'Open'
                 ? 'OPEN'
                 : _filter == 'History'
@@ -125,7 +126,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     try {
       final data = await _api.getMap(
           '/records/maintenance?${Uri(queryParameters: {
-                'limit': '25',
+                'limit': '5',
                 'status': _filter == 'Open'
                     ? 'OPEN'
                     : _filter == 'History'

@@ -30,7 +30,7 @@ class _DeliveryCalendarScreenState extends State<DeliveryCalendarScreen> {
           .adminRequest('/records/rentals?${Uri(queryParameters: {
             'status': 'OPEN',
             'scheduledDay': _day,
-            'limit': '25',
+            'limit': '5',
             if (more && _cursor != null) 'cursor': _cursor!
           }).query}');
       if (!mounted) return;

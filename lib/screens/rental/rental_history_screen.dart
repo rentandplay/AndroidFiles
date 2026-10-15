@@ -56,7 +56,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
       records = await _api.listRentals();
       _nextCursor = _api.nextRentalCursor;
     } else {
-      final result = await _api.adminRequest('/records/rentals?limit=50');
+      final result = await _api.adminRequest('/records/rentals?limit=5');
       _nextCursor = result['nextCursor'] as String?;
       records = (result['records'] as List)
           .whereType<Map>()
@@ -81,7 +81,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
       if (widget.isAdmin) {
         final result = await _api.adminRequest(
             '/records/rentals?${Uri(queryParameters: {
-              'limit': '50',
+              'limit': '5',
               'cursor': _nextCursor!
             }).query}');
         _nextCursor = result['nextCursor'] as String?;

@@ -32,7 +32,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool _isLoading = false;
   bool _obscurePassword = true;
-  String? _emailDomainError;
 
   @override
   void dispose() {
@@ -116,13 +115,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       String errorMessage = 'Could not log in. Please try again.';
-      if (e is MobileApiException) {
-        errorMessage = e.userMessage;
-        if (e.code == 'INVALID_EMAIL_DOMAIN') {
-          setState(() => _emailDomainError = e.userMessage);
-          _formKey.currentState?.validate();
-        }
-      }
+      if (e is MobileApiException) errorMessage = e.userMessage;
       if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'user-not-found':
@@ -318,8 +311,6 @@ class _LoginScreenState extends State<LoginScreen> {
                                 const LowercaseEmailFormatter(),
                                 LengthLimitingTextInputFormatter(254)
                               ],
-                              onChanged: (_) =>
-                                  setState(() => _emailDomainError = null),
                               keyboardType: TextInputType.emailAddress,
                               textInputAction: TextInputAction.next,
                               cursorColor: _formAccent,
@@ -364,9 +355,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                       color: AppTheme.brandOrange, width: 1.5),
                                 ),
                               ),
-                              validator: (value) =>
-                                  AccountValidation.email(value) ??
-                                  _emailDomainError,
+                              validator: AccountValidation.email,
                             ),
                             const SizedBox(height: 16),
                             const Text(

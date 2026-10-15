@@ -68,10 +68,34 @@ class MobileApiService {
   }) =>
       _request(path, method: method, body: body, forceRefresh: forceRefresh);
 
-  Future<void> requestPasswordReset(String email) async {
-    await _request('/auth/password-reset',
-        method: 'POST', authenticated: false, body: {'email': email});
-  }
+  Future<Map<String, dynamic>> requestPasswordResetCode(String email) =>
+      _request('/auth/password-reset/request',
+          method: 'POST', authenticated: false, body: {'email': email});
+
+  Future<Map<String, dynamic>> verifyPasswordResetCode(
+          String email, String code) =>
+      _request('/auth/password-reset/verify',
+          method: 'POST',
+          authenticated: false,
+          body: {'email': email, 'code': code});
+
+  Future<Map<String, dynamic>> completePasswordReset({
+    required String email,
+    required String verificationToken,
+    required String requestKey,
+    required String newPassword,
+    required String confirmPassword,
+  }) =>
+      _request('/auth/password-reset/complete',
+          method: 'POST',
+          authenticated: false,
+          body: {
+            'email': email,
+            'verificationToken': verificationToken,
+            'requestKey': requestKey,
+            'newPassword': newPassword,
+            'confirmPassword': confirmPassword,
+          });
 
   Future<Map<String, dynamic>> notifications({String? before, String? since}) {
     final query = <String, String>{
@@ -364,7 +388,7 @@ class MobileApiService {
       listRentalHistoryPage(String cursor) async {
     final result = await _request('/mobile/rentals?${Uri(queryParameters: {
           'cursor': cursor,
-          'limit': '50'
+          'limit': '5'
         }).query}');
     final records = (result['rentals'] as List)
         .whereType<Map>()

@@ -8,7 +8,7 @@ Rental changes refresh the staff counter immediately through the shared live eve
 
 ## Account validation and recovery
 
-Login and registration normalize emails to lowercase, reject spaces, and check real mail domains through the backend. Company and school addresses are accepted. Registration shows inline name, email, phone, password-strength, and matching-confirmation errors. New passwords require at least eight characters, a capital letter, and a number. Forgot password opens an email-entry screen, then requests a real reset link and shows the recipient and next steps. App launch uses an ordinary opening screen; it does not describe a saved login as account recovery.
+Login and registration normalize emails to lowercase, reject spaces, and check email format only; no flow performs a DNS/domain lookup. Registration verifies mailbox ownership with an email code. Registration shows inline name, email, phone, password-strength, and matching-confirmation errors. New passwords require at least eight characters, a capital letter, and a number. Forgot password uses the same email-code, verification, and new-password flow as the web app. App launch uses an ordinary opening screen; it does not describe a saved login as account recovery.
 
 New Owner/Operator accounts must change their temporary password before entering the staff workspace. The backend enforces this restriction independently of routing, and mobile asks the user to log in with the new password. See [the shared account procedures](../RENT-AND-PLAY/docs/architecture/account-access.md).
 

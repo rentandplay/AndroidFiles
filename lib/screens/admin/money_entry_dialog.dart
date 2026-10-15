@@ -3,9 +3,14 @@ import '../../services/admin_api_service.dart';
 import '../../services/mobile_api_service.dart';
 
 class MoneyEntryDialog extends StatefulWidget {
-  const MoneyEntryDialog({super.key, required this.api, this.receipt = false});
+  const MoneyEntryDialog(
+      {super.key,
+      required this.api,
+      this.receipt = false,
+      this.initialRentalCode = ''});
   final AdminFirestoreService api;
   final bool receipt;
+  final String initialRentalCode;
   @override
   State<MoneyEntryDialog> createState() => _MoneyEntryDialogState();
 }
@@ -20,6 +25,17 @@ class _MoneyEntryDialogState extends State<MoneyEntryDialog> {
   String _method = 'CASH', _category = 'OTHER', _error = '', _foundCode = '';
   Map<String, dynamic>? _rental;
   bool _busy = false, _confirmed = false;
+  @override
+  void initState() {
+    super.initState();
+    if (widget.receipt && widget.initialRentalCode.isNotEmpty) {
+      _code.text = widget.initialRentalCode;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _find();
+      });
+    }
+  }
+
   @override
   void dispose() {
     _amount.dispose();

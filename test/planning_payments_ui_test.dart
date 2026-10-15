@@ -14,14 +14,24 @@ import 'widget_test.dart' show SignedOutAuth;
 
 class PaymentApi extends AdminFirestoreService {
   final calls = <Map<String, dynamic>>[];
+  final reads = <String>[];
   @override
   Future<Map<String, dynamic>> getMap(String path,
-          {bool forceRefresh = false}) async =>
-      path.startsWith('/finance/summary')
-          ? {
-              'totals': {'collections': 40, 'cash_net_movement': 30}
+      {bool forceRefresh = false}) async {
+    reads.add(path);
+    return path.startsWith('/finance/summary')
+        ? {
+            'totals': {'collections': 40, 'cash_net_movement': 30},
+            'rental_totals': {
+              'charges': 60,
+              'saved_paid': 40,
+              'balance_due': 20,
+              'refund_due': 0
             }
-          : {'entries': [], 'nextCursor': null};
+          }
+        : {'records': [], 'entries': [], 'nextCursor': null};
+  }
+
   @override
   Future<Map<String, dynamic>> post(String path,
       {Map<String, dynamic> body = const {}}) async {
@@ -157,7 +167,10 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(MaterialApp(home: PaymentsScreen(api: api)));
     await tester.pumpAndSettle();
-    expect(find.text('Net cash recorded'), findsOneWidget);
+    expect(find.text('Saved rental payments'), findsOneWidget);
+    final rentalRead =
+        api.reads.singleWhere((path) => path.startsWith('/finance/rentals'));
+    expect(Uri.parse(rentalRead).queryParameters['limit'], '5');
     expect(tester.takeException(), isNull);
   });
   testWidgets(
@@ -255,7 +268,7 @@ void main() {
     expect(find.textContaining('On the way'), findsOneWidget);
     final query = Uri.parse(api.calls.single['path']).queryParameters;
     expect(query['status'], 'OPEN');
-    expect(query['limit'], '25');
+    expect(query['limit'], '5');
     expect(
         query['scheduledDay'],
         DateTime.now()

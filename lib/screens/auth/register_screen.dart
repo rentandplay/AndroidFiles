@@ -43,7 +43,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _acceptedTerms = false;
-  String? _emailDomainError;
 
   String get _currentEmail => _emailController.text.toLowerCase();
   bool get _codeMatchesCurrentEmail =>
@@ -73,7 +72,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   void _handleEmailChange() {
-    if (_emailDomainError != null) setState(() => _emailDomainError = null);
     if (_verificationToken.isEmpty || _requestedEmail == _currentEmail) return;
     setState(() {
       _verificationToken = '';
@@ -86,7 +84,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String? _validateEmail(String? value) {
-    return AccountValidation.email(value) ?? _emailDomainError;
+    return AccountValidation.email(value);
   }
 
   String? _validatePhone(String? value) {
@@ -163,10 +161,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
       _showMessage('We sent a verification code to $email.');
     } catch (error) {
       if (!mounted) return;
-      if (error is MobileApiException && error.code == 'INVALID_EMAIL_DOMAIN') {
-        setState(() => _emailDomainError = error.userMessage);
-        _formKey.currentState?.validate();
-      }
       _showMessage(_errorMessage(error), isError: true);
     } finally {
       if (mounted) setState(() => _isSendingCode = false);
@@ -704,7 +698,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
                 const SizedBox(height: 14),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: const Color(0xFFF8FAFC),
                     borderRadius: BorderRadius.circular(12),
@@ -775,9 +770,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           borderRadius: BorderRadius.circular(14)),
                       elevation: 2,
                     ),
-                    onPressed: _isLoading || !_acceptedTerms
-                        ? null
-                        : _handleRegister,
+                    onPressed:
+                        _isLoading || !_acceptedTerms ? null : _handleRegister,
                     icon: _isLoading
                         ? const SizedBox(
                             height: 18,
