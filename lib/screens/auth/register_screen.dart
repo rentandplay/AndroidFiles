@@ -357,6 +357,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
           TextFormField(
             controller: controller,
             enabled: !_isLoading,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
             textCapitalization: TextCapitalization.words,
             textInputAction: TextInputAction.next,
             inputFormatters: [LengthLimitingTextInputFormatter(60)],
@@ -449,7 +450,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
           ),
           child: Form(
             key: _formKey,
-            autovalidateMode: AutovalidateMode.onUserInteraction,
+            // Keep untouched fields quiet. Each field starts validating after
+            // interaction, while submit validates the entire form.
+            autovalidateMode: AutovalidateMode.disabled,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -497,6 +500,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _emailController,
                   enabled: !_isLoading,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   keyboardType: TextInputType.emailAddress,
                   textInputAction: TextInputAction.next,
                   inputFormatters: [
@@ -578,6 +582,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: TextFormField(
                           controller: _codeController,
                           enabled: !_isLoading,
+                          autovalidateMode: AutovalidateMode.onUserInteraction,
                           keyboardType: TextInputType.number,
                           textInputAction: TextInputAction.done,
                           autofillHints: const [AutofillHints.oneTimeCode],
@@ -626,6 +631,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _phoneController,
                   enabled: !_isLoading,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   keyboardType: TextInputType.phone,
                   textInputAction: TextInputAction.next,
                   autofillHints: const [AutofillHints.telephoneNumber],
@@ -642,6 +648,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _passwordController,
                   enabled: !_isLoading,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   obscureText: _obscurePassword,
                   textInputAction: TextInputAction.next,
                   inputFormatters: [LengthLimitingTextInputFormatter(128)],
@@ -668,6 +675,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 TextFormField(
                   controller: _confirmPasswordController,
                   enabled: !_isLoading,
+                  autovalidateMode: AutovalidateMode.onUserInteraction,
                   obscureText: _obscureConfirmPassword,
                   textInputAction: TextInputAction.done,
                   inputFormatters: [LengthLimitingTextInputFormatter(128)],

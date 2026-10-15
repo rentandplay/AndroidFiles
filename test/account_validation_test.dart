@@ -88,13 +88,19 @@ void main() {
     expect(find.text('Password reset link sent to your email.'), findsNothing);
   });
   testWidgets(
-      'registration identifies one-letter and repeated-character names inline',
+      'registration keeps untouched fields quiet and validates fields as edited',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(home: RegisterScreen()));
     final fields = find.byType(TextFormField);
+    expect(find.text('Enter your first name.'), findsNothing);
+    expect(find.text('Enter your email address.'), findsNothing);
+    expect(find.text('Enter your phone number.'), findsNothing);
+    expect(find.text('Enter a password.'), findsNothing);
     await tester.enterText(fields.at(0), 'A');
     await tester.pump();
     expect(find.text('Use at least 2 letters for each name.'), findsWidgets);
+    expect(find.text('Enter your email address.'), findsNothing);
+    expect(find.text('Enter your phone number.'), findsNothing);
     await tester.enterText(fields.at(0), 'raveeeeeeNN');
     await tester.pump();
     expect(

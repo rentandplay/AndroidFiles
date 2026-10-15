@@ -349,62 +349,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Sub-Navigation Tabs
-                _buildSubNavTabs(
-                  isAdmin,
-                  selectedTab,
-                  isDark,
-                  cardBg,
-                  cardBorder,
-                  textPrimary,
-                  textSecondary,
-                ),
-
-                if (isAdmin && widget.onOpenEquipment != null) ...[
-                  const SizedBox(height: 16),
-                  _buildEquipmentMenu(
+                if (isAdmin) ...[
+                  // 1. Sub-Navigation Tabs for Admin/Staff only
+                  _buildSubNavTabs(
+                    isAdmin,
+                    selectedTab,
+                    isDark,
                     cardBg,
                     cardBorder,
                     textPrimary,
                     textSecondary,
                   ),
-                ],
 
-                const SizedBox(height: 14),
-
-                // 2. Tab Content View
-                if (isAdmin && selectedTab == 'Business')
-                  _buildBusinessTabCard(isDark, cardBg, cardBorder, textPrimary,
-                      textSecondary, inputFill,
-                      canEdit: isOwner)
-                else if (selectedTab == 'Appearance')
-                  _buildAppearanceTabCard(themeProvider, isDark, cardBg,
-                      cardBorder, textPrimary, textSecondary)
-                else if (isAdmin &&
-                    (selectedTab == 'Users' ||
-                        selectedTab == 'Account & security'))
-                  _buildUsersAccountTabCard(userModel, user, role, isDark,
-                      cardBg, cardBorder, textPrimary, textSecondary, inputFill)
-                else if (isAdmin && selectedTab == 'Preferences')
-                  _buildPreferencesTabCard(
-                      isDark, cardBg, cardBorder, textPrimary, textSecondary)
-                else if (!isAdmin && user == null)
-                  _buildGuestProfileCard(
-                      cardBg, cardBorder, textPrimary, textSecondary)
-                else if (!isAdmin)
-                  _buildCustomerProfileCard(userModel, user, isDark, cardBg,
-                      cardBorder, textPrimary, textSecondary)
-                else
-                  _buildUsersAccountTabCard(
-                      userModel,
-                      user,
-                      role,
-                      isDark,
+                  if (widget.onOpenEquipment != null) ...[
+                    const SizedBox(height: 16),
+                    _buildEquipmentMenu(
                       cardBg,
                       cardBorder,
                       textPrimary,
                       textSecondary,
-                      inputFill),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+
+                  // 2. Tab Content View for Admin/Staff
+                  if (selectedTab == 'Business')
+                    _buildBusinessTabCard(isDark, cardBg, cardBorder, textPrimary,
+                        textSecondary, inputFill,
+                        canEdit: isOwner)
+                  else if (selectedTab == 'Appearance')
+                    _buildAppearanceTabCard(themeProvider, isDark, cardBg,
+                        cardBorder, textPrimary, textSecondary)
+                  else if (selectedTab == 'Users' ||
+                      selectedTab == 'Account & security')
+                    _buildUsersAccountTabCard(userModel, user, role, isDark,
+                        cardBg, cardBorder, textPrimary, textSecondary, inputFill)
+                  else if (selectedTab == 'Preferences')
+                    _buildPreferencesTabCard(
+                        isDark, cardBg, cardBorder, textPrimary, textSecondary)
+                  else
+                    _buildUsersAccountTabCard(
+                        userModel,
+                        user,
+                        role,
+                        isDark,
+                        cardBg,
+                        cardBorder,
+                        textPrimary,
+                        textSecondary,
+                        inputFill),
+                ] else ...[
+                  // Unified Advanced Customer View (No top tabs)
+                  if (user == null)
+                    _buildGuestProfileCard(
+                        cardBg, cardBorder, textPrimary, textSecondary)
+                  else ...[
+                    _buildCustomerProfileCard(userModel, user, isDark, cardBg,
+                        cardBorder, textPrimary, textSecondary),
+                    const SizedBox(height: 16),
+                    _buildAppearanceTabCard(themeProvider, isDark, cardBg,
+                        cardBorder, textPrimary, textSecondary),
+                    const SizedBox(height: 16),
+                    _buildQuickInfoCard(
+                        isDark, cardBg, cardBorder, textPrimary, textSecondary),
+                  ],
+                ],
               ],
             ),
           );
@@ -808,8 +818,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       padding: const EdgeInsets.all(20.0),
       decoration: BoxDecoration(
         color: cardBg,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         border: Border.all(color: cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -895,6 +912,72 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SizedBox(height: 6),
           Text('• Real-Time Notification Sound Enabled',
               style: TextStyle(fontSize: 13, color: textSecondary)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickInfoCard(
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20.0),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: cardBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ABOUT & SUPPORT',
+            style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFF57C00),
+                letterSpacing: 1.0),
+          ),
+          const SizedBox(height: 12),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF57C00).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.info_outline_rounded, color: Color(0xFFF57C00), size: 20),
+            ),
+            title: Text('App Version', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: textPrimary)),
+            subtitle: Text('Rent & Play v1.0.0 (Build 24)', style: TextStyle(fontSize: 12, color: textSecondary)),
+          ),
+          const Divider(height: 16),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF57C00).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.security_rounded, color: Color(0xFFF57C00), size: 20),
+            ),
+            title: Text('Rental Terms & Privacy', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: textPrimary)),
+            subtitle: Text('Secure transactions & verified agreements', style: TextStyle(fontSize: 12, color: textSecondary)),
+          ),
         ],
       ),
     );

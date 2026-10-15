@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -25,6 +26,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _selectedResort = '';
   DateTime? _scheduledStartAt;
   final _customResortController = TextEditingController();
+  bool _isCustomDuration = false;
+  final _customHoursController = TextEditingController(text: '22');
   String _paymentMethod = 'CASH';
   bool _isSubmitting = false, _quoteLoading = true, _paymentConfirmed = false;
   bool _acceptedRentalTerms = false;
@@ -206,6 +209,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _quoteVersion++;
     _customResortController.dispose();
+    _customHoursController.dispose();
     _paymentReferenceController.dispose();
     super.dispose();
   }
@@ -499,12 +503,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 for (final minutes in _durationChoices)
                                   ChoiceChip(
                                       label: Text(_durationLabel(minutes)),
-                                      selected:
+                                      selected: !_isCustomDuration &&
                                           minutes == _selectedDurationMinutes,
                                       onSelected: _isSubmitting
                                           ? null
                                           : (_) {
                                               setState(() {
+                                                _isCustomDuration = false;
                                                 _selectedDurationMinutes =
                                                     minutes;
                                                 _requestKey = MobileApiService
@@ -512,7 +517,55 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                               });
                                               _loadQuote();
                                             }),
+                                ChoiceChip(
+                                  label: const Text('Custom hours'),
+                                  selected: _isCustomDuration,
+                                  onSelected: _isSubmitting
+                                      ? null
+                                      : (_) {
+                                          setState(() {
+                                            _isCustomDuration = true;
+                                            final hours = int.tryParse(
+                                                    _customHoursController
+                                                        .text) ??
+                                                22;
+                                            _selectedDurationMinutes =
+                                                hours * 60;
+                                            _requestKey = MobileApiService
+                                                .operationKey();
+                                          });
+                                          _loadQuote();
+                                        },
+                                ),
                               ]),
+                              if (_isCustomDuration) ...[
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: _customHoursController,
+                                  enabled: !_isSubmitting,
+                                  keyboardType: TextInputType.number,
+                                  inputFormatters: [
+                                    FilteringTextInputFormatter.digitsOnly
+                                  ],
+                                  decoration: const InputDecoration(
+                                    labelText: 'Number of hours',
+                                    hintText: 'e.g. 22',
+                                    prefixIcon:
+                                        Icon(Icons.access_time_rounded),
+                                  ),
+                                  onChanged: (value) {
+                                    final hours = int.tryParse(value) ?? 0;
+                                    if (hours > 0 && hours <= 168) {
+                                      setState(() {
+                                        _selectedDurationMinutes = hours * 60;
+                                        _requestKey = MobileApiService
+                                            .operationKey();
+                                      });
+                                      _loadQuote();
+                                    }
+                                  },
+                                ),
+                              ],
                               const SizedBox(height: 14),
                               Text('Which resort are you staying at?',
                                   style: TextStyle(

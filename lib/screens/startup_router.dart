@@ -1,3 +1,5 @@
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -28,29 +30,54 @@ class _StartupRouterState extends State<StartupRouter> {
   @override
   void initState() {
     super.initState();
-    _startup = _resolveInitialScreen();
+    _startup = _loadInitialScreen();
+  }
+
+  Future<Widget> _loadInitialScreen() async {
+    try {
+      return await _resolveInitialScreen();
+    } catch (error, stackTrace) {
+      if (kDebugMode) {
+        debugPrint('Rent & Play startup failed: $error');
+        debugPrintStack(stackTrace: stackTrace);
+      }
+      // Gracefully fallback to CustomerHomeScreen instead of showing error screen
+      return const CustomerHomeScreen();
+    }
   }
 
   Future<Widget> _resolveInitialScreen() async {
     final auth = Provider.of<AuthService>(context, listen: false);
-    final firebaseUser = await auth.authStateChanges.first;
+    
+    User? firebaseUser;
+    try {
+      firebaseUser = await auth.authStateChanges.first.timeout(const Duration(seconds: 4));
+    } catch (_) {
+      firebaseUser = auth.currentUser;
+    }
     if (firebaseUser == null) return const CustomerHomeScreen();
 
     UserModel? user;
     try {
-      user = await auth.getCurrentUserModel();
+      user = await auth.getCurrentUserModel().timeout(const Duration(seconds: 5));
     } on MobileApiException catch (error) {
       if (error.statusCode == 401 || error.statusCode == 403) {
         await auth.logout();
         return const LoginScreen();
       }
-      rethrow;
+      // Gracefully fallback on other API/network errors
+      return const CustomerHomeScreen();
+    } catch (_) {
+      // Gracefully fallback on connection timeout or network failure
+      return const CustomerHomeScreen();
     }
     if (user == null) return const CustomerHomeScreen();
 
     if (_isAdmin(user)) {
       if (user.mustChangePassword) return const RequiredPasswordChangeScreen();
-      await AdminFirestoreService.instance.restoreAdminSession();
+      try {
+        await AdminFirestoreService.instance.restoreAdminSession().timeout(const Duration(seconds: 5));
+      } catch (_) {}
       return AdminDashboardScreen(onSignedOut: _returnToLogin);
     }
 
@@ -58,12 +85,6 @@ class _StartupRouterState extends State<StartupRouter> {
   }
 
   bool _isAdmin(UserModel user) => user.isStaff;
-
-  void _retry() {
-    setState(() {
-      _startup = _resolveInitialScreen();
-    });
-  }
 
   void _returnToLogin() {
     if (!mounted) return;
@@ -81,7 +102,7 @@ class _StartupRouterState extends State<StartupRouter> {
             return const _StartupLoadingScreen();
           }
           if (snapshot.hasError) {
-            return _StartupErrorScreen(onRetry: _retry);
+            return const CustomerHomeScreen();
           }
           return snapshot.data ?? const CustomerHomeScreen();
         },
@@ -110,44 +131,6 @@ class _StartupLoadingScreen extends StatelessWidget {
               SizedBox(height: 16),
               Text('Opening Rent & Play…'),
             ],
-          ),
-        ),
-      );
-}
-
-class _StartupErrorScreen extends StatelessWidget {
-  const _StartupErrorScreen({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.cloud_off_outlined, size: 48),
-                const SizedBox(height: 16),
-                const Text(
-                  'Could not open Rent & Play',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Check your connection and try again.',
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 20),
-                FilledButton.icon(
-                  onPressed: onRetry,
-                  icon: const Icon(Icons.refresh),
-                  label: const Text('Try again'),
-                ),
-              ],
-            ),
           ),
         ),
       );

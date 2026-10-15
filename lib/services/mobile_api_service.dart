@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/rental_model.dart';
@@ -41,10 +42,13 @@ class MobileApiService {
 
   static final MobileApiService instance = MobileApiService();
 
+  static const bool _hasExplicitBaseUrl = bool.hasEnvironment('API_BASE_URL');
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000/api',
+    defaultValue: 'http://127.0.0.1:3000/api',
   );
+
+  String _activeBaseUrl = _configuredBaseUrl;
 
   final FirebaseAuth _auth;
   final http.Client _client;
@@ -204,8 +208,47 @@ class MobileApiService {
   }
 
   Uri _uri(String path) => Uri.parse(
-        '${_configuredBaseUrl.replaceAll(RegExp(r'/+$'), '')}$path',
+        '${_activeBaseUrl.replaceAll(RegExp(r'/+$'), '')}$path',
       );
+
+  Future<http.Response> _execHttp(
+    String method,
+    Uri uri,
+    Map<String, String> headers,
+    Map<String, dynamic>? body,
+  ) {
+    final encodedBody = body != null ? jsonEncode(body) : null;
+    return (switch (method) {
+      'PATCH' => _client.patch(uri, headers: headers, body: encodedBody),
+      'PUT' => _client.put(uri, headers: headers, body: encodedBody),
+      'DELETE' => _client.delete(uri, headers: headers, body: encodedBody),
+      'POST' => _client.post(uri, headers: headers, body: encodedBody),
+      _ => _client.get(uri, headers: headers),
+    }).timeout(const Duration(seconds: 5));
+  }
+
+  Future<bool> _resolveWorkingBaseUrl() async {
+    if (_hasExplicitBaseUrl) return false;
+    final candidates = [
+      'http://127.0.0.1:3000/api',
+      'http://10.0.2.2:3000/api',
+      'http://192.168.8.102:3000/api',
+    ];
+    for (final candidate in candidates) {
+      if (candidate == _activeBaseUrl) continue;
+      try {
+        final testUri = Uri.parse(
+            '${candidate.replaceAll(RegExp(r'/+$'), '')}/catalog');
+        final response =
+            await _client.get(testUri).timeout(const Duration(seconds: 2));
+        if (response.statusCode >= 200 && response.statusCode < 500) {
+          _activeBaseUrl = candidate;
+          return true;
+        }
+      } catch (_) {}
+    }
+    return false;
+  }
 
   Future<Map<String, dynamic>> _request(
     String path, {
@@ -233,23 +276,27 @@ class MobileApiService {
 
     if (body != null) headers['Content-Type'] = 'application/json';
     final uri = _uri(path);
-    final response = switch (method) {
-      'PATCH' => await _client
-          .patch(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      'PUT' => await _client
-          .put(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      'DELETE' => await _client
-          .delete(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      'POST' => await _client
-          .post(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      _ => await _client
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 90)),
-    };
+    if (kDebugMode) debugPrint('Rent & Play API: $method $uri');
+    late final http.Response response;
+    try {
+      response = await _execHttp(method, uri, headers, body);
+    } catch (e) {
+      if (e is MobileApiException) rethrow;
+      if (!_hasExplicitBaseUrl && await _resolveWorkingBaseUrl()) {
+        final newUri = _uri(path);
+        try {
+          response = await _execHttp(method, newUri, headers, body);
+        } catch (_) {
+          throw const MobileApiException(
+            'Could not connect to the rental service. Please check your connection.',
+          );
+        }
+      } else {
+        throw const MobileApiException(
+          'Could not connect to the rental service. Please check your connection.',
+        );
+      }
+    }
 
     dynamic decoded;
     try {

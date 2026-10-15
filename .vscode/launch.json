@@ -2,6 +2,14 @@
   "version": "0.2.0",
   "configurations": [
     {
+      "name": "Rent & Play: Phones (USB install, Wi-Fi API)",
+      "type": "dart",
+      "request": "launch",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "toolArgs": ["--dart-define=API_BASE_URL=http://192.168.137.1:3000/api"]
+    },
+    {
       "name": "Rent & Play: Android local (USB)",
       "type": "dart",
       "request": "launch",

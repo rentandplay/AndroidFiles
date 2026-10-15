@@ -7,13 +7,17 @@ param(
     [int]$ApiPort = 3000,
     [string]$DeviceId,
     [switch]$BuildApk,
-    [switch]$Install
+    [switch]$Install,
+    [switch]$AllDevices
 )
 
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 if ($Install -and -not $BuildApk) {
     throw 'Use -BuildApk -Install to build and install a local APK.'
+}
+if ($AllDevices -and (-not $Install -or $DeviceId)) {
+    throw 'Use -AllDevices with -BuildApk -Install, without -DeviceId.'
 }
 
 function Get-LanIpv4Address {
@@ -31,8 +35,6 @@ function Get-LanIpv4Address {
             $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
             $_.Address.ToString() -ne '0.0.0.0'
         }).Count -gt 0
-        if (-not $hasIpv4Gateway) { continue }
-
         $ipv4 = $properties.UnicastAddresses | Where-Object {
             $_.Address.AddressFamily -eq [System.Net.Sockets.AddressFamily]::InterNetwork -and
             -not $_.Address.IsLoopback -and
@@ -40,8 +42,13 @@ function Get-LanIpv4Address {
         } | Select-Object -First 1
         if (-not $ipv4) { continue }
 
+        # Windows Mobile Hotspot has no gateway on its own virtual adapter.
+        $isHotspot = $adapter.Description -match 'Wi-Fi Direct Virtual Adapter' -and
+            $ipv4.Address.ToString() -eq '192.168.137.1'
+        if (-not $hasIpv4Gateway -and -not $isHotspot) { continue }
+
         [PSCustomObject]@{
-            Priority = if ($adapter.Name -match 'wi-?fi|wlan|wireless') { 0 } else { 1 }
+            Priority = if ($isHotspot) { 0 } elseif ($adapter.Name -match 'wi-?fi|wlan|wireless') { 1 } else { 2 }
             Name     = $adapter.Name
             Address  = $ipv4.Address.ToString()
         }
@@ -57,6 +64,18 @@ function Get-LanIpv4Address {
 }
 
 function Get-AdbPath {
+    # Android Studio can use an SDK outside the default user-profile folder.
+    $localProperties = Join-Path $projectRoot 'android\local.properties'
+    if (Test-Path -LiteralPath $localProperties) {
+        $sdkSetting = Get-Content -LiteralPath $localProperties |
+            Where-Object { $_ -match '^sdk\.dir=' } | Select-Object -First 1
+        if ($sdkSetting) {
+            $projectSdk = $sdkSetting.Substring('sdk.dir='.Length).Trim().Replace('\\', '\').Replace('\:', ':').Replace('\ ', ' ')
+            $projectAdb = Join-Path $projectSdk 'platform-tools\adb.exe'
+            if (Test-Path -LiteralPath $projectAdb) { return $projectAdb }
+        }
+    }
+
     $adbCommand = Get-Command adb.exe -ErrorAction SilentlyContinue
     if ($adbCommand) { return $adbCommand.Source }
 
@@ -113,10 +132,24 @@ if ($BuildApk) {
     Write-Host "Created $localApk"
 
     if ($Install) {
-        $adbArgs = @()
-        if ($DeviceId) { $adbArgs += @('-s', $DeviceId) }
-        & $adbPath @adbArgs install -r $localApk
-        if ($LASTEXITCODE -ne 0) { throw "APK installation failed with exit code $LASTEXITCODE." }
+        $installTargets = @($DeviceId)
+        if ($AllDevices) {
+            $deviceList = & $adbPath devices
+            if ($LASTEXITCODE -ne 0) { throw 'Could not list Android devices.' }
+            $installTargets = @($deviceList | ForEach-Object {
+                if ($_ -match '^(\S+)\s+device(?:\s|$)') { $Matches[1] }
+            })
+            if ($installTargets.Count -eq 0) {
+                throw 'No authorized Android devices found. Connect the phones by USB and allow USB debugging.'
+            }
+        }
+        foreach ($targetDevice in $installTargets) {
+            $adbArgs = @()
+            if ($targetDevice) { $adbArgs += @('-s', $targetDevice) }
+            Write-Host "Installing APK ($apiBaseUrl) on device: $targetDevice"
+            & $adbPath @adbArgs install -r $localApk
+            if ($LASTEXITCODE -ne 0) { throw "APK installation failed for device '$targetDevice' with exit code $LASTEXITCODE." }
+        }
     }
     return
 }

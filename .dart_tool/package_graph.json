@@ -904,11 +904,6 @@
       "dependencies": []
     },
     {
-      "name": "ffi",
-      "version": "2.2.0",
-      "dependencies": []
-    },
-    {
       "name": "process",
       "version": "5.0.6",
       "dependencies": [
@@ -916,6 +911,11 @@
         "path",
         "platform"
       ]
+    },
+    {
+      "name": "ffi",
+      "version": "2.2.0",
+      "dependencies": []
     },
     {
       "name": "platform",
