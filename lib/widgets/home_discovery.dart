@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../models/item_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/catalog_price.dart';
+import 'liquid_glass.dart';
 import 'mobile_controls.dart';
 
 /// Discovery content uses the live catalog, including its prices and stock.
@@ -135,34 +136,26 @@ class HomeDiscovery extends StatelessWidget {
   Widget _categoryChip(BuildContext context, String category) {
     final scheme = Theme.of(context).colorScheme;
     final accent = _categoryColor(category);
-    return Material(
-      color: scheme.surface,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(color: scheme.outline),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => onCategorySelected(category),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(9, 8, 13, 8),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                color: accent.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Icon(_categoryIcon(category), color: accent, size: 18),
-            ),
-            const SizedBox(width: 8),
-            Text(category,
-                style:
-                    const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-          ]),
+    return LiquidGlassContainer(
+      borderRadius: 16,
+      blurSigma: 12,
+      padding: const EdgeInsets.fromLTRB(9, 8, 14, 8),
+      onTap: () => onCategorySelected(category),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Container(
+          width: 32,
+          height: 32,
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: .18),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: accent.withValues(alpha: .3)),
+          ),
+          child: Icon(_categoryIcon(category), color: accent, size: 18),
         ),
-      ),
+        const SizedBox(width: 8),
+        Text(category,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      ]),
     );
   }
 
@@ -176,92 +169,120 @@ class HomeDiscovery extends StatelessWidget {
     final width = (MediaQuery.sizeOf(context).width * .44).clamp(150.0, 200.0);
     return SizedBox(
       width: width,
-      child: Material(
-        color: scheme.surface,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: scheme.outline),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: () => onItemSelected(item),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                color: accent.withValues(alpha: dark ? .16 : .06),
-                padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                child: item.buildImage(fit: BoxFit.contain, height: 100),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(item.category,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                            color: scheme.onSurfaceVariant,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600)),
-                    const SizedBox(height: 4),
-                    ConstrainedBox(
-                      constraints: BoxConstraints(
-                          minHeight: textScaler.scale(14) * 1.25 * 2),
-                      child: Text(item.name,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                              fontSize: 14,
-                              height: 1.25,
-                              fontWeight: FontWeight.w800)),
-                    ),
-                    const SizedBox(height: 6),
-                    ConstrainedBox(
-                        constraints: BoxConstraints(
-                            minHeight: textScaler.scale(11) * 1.3 * 2),
-                        child: Tooltip(
-                          message: item.rateText.isEmpty ? rate : item.rateText,
-                          child: Text(rate,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  height: 1.3,
-                                  color: mobileAccentText(context),
-                                  fontWeight: FontWeight.w700)),
-                        )),
-                    const SizedBox(height: 9),
-                    Row(children: [
-                      Container(
-                          width: 5,
-                          height: 5,
-                          decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: available
-                                  ? const Color(0xFF27876B)
-                                  : scheme.onSurfaceVariant)),
-                      const SizedBox(width: 5),
-                      Expanded(
-                          child: Text(available ? 'Available' : 'Unavailable',
-                              style: TextStyle(
-                                  fontSize: 10,
-                                  color: available
-                                      ? dark
-                                          ? const Color(0xFF89D5B8)
-                                          : const Color(0xFF216F56)
-                                      : scheme.onSurfaceVariant,
-                                  fontWeight: FontWeight.w600))),
-                      Icon(Icons.arrow_forward_rounded,
-                          size: 14, color: scheme.onSurfaceVariant),
-                    ]),
-                  ],
+      child: LiquidGlassContainer(
+        borderRadius: 20,
+        blurSigma: 12,
+        onTap: () => onItemSelected(item),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Stack(
+              children: [
+                Container(
+                  color: accent.withValues(alpha: dark ? .16 : .08),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
+                  child: item.buildImage(fit: BoxFit.contain, height: 100),
                 ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 35,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white.withValues(alpha: dark ? 0.08 : 0.25),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(item.category,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: scheme.onSurfaceVariant,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 4),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                        minHeight: textScaler.scale(14) * 1.25 * 2),
+                    child: Text(item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 14,
+                            height: 1.25,
+                            fontWeight: FontWeight.w800)),
+                  ),
+                  const SizedBox(height: 6),
+                  ConstrainedBox(
+                      constraints: BoxConstraints(
+                          minHeight: textScaler.scale(11) * 1.3 * 2),
+                      child: Tooltip(
+                        message: item.rateText.isEmpty ? rate : item.rateText,
+                        child: Text(rate,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                fontSize: 11,
+                                height: 1.3,
+                                color: mobileAccentText(context),
+                                fontWeight: FontWeight.w700)),
+                      )),
+                  const SizedBox(height: 9),
+                  Row(children: [
+                    Container(
+                        width: 6,
+                        height: 6,
+                        decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: available
+                                ? const Color(0xFF27876B)
+                                : scheme.onSurfaceVariant,
+                            boxShadow: available
+                                ? [
+                                    BoxShadow(
+                                      color: const Color(0xFF27876B)
+                                          .withValues(alpha: 0.6),
+                                      blurRadius: 4,
+                                      spreadRadius: 1,
+                                    ),
+                                  ]
+                                : null)),
+                    const SizedBox(width: 6),
+                    Expanded(
+                        child: Text(available ? 'Available' : 'Unavailable',
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: available
+                                    ? dark
+                                        ? const Color(0xFF89D5B8)
+                                        : const Color(0xFF216F56)
+                                    : scheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w700))),
+                    Icon(Icons.arrow_forward_rounded,
+                        size: 14, color: scheme.onSurfaceVariant),
+                  ]),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );

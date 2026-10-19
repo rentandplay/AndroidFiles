@@ -43,7 +43,7 @@ class MobileApiService {
 
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://10.0.2.2:3000/api',
+    defaultValue: 'http://192.168.1.4:3000/api',
   );
 
   final FirebaseAuth _auth;

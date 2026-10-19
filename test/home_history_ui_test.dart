@@ -20,6 +20,7 @@ import 'package:rent_and_play_app/services/auth_service.dart';
 import 'package:rent_and_play_app/services/mobile_api_service.dart';
 import 'package:rent_and_play_app/theme/app_theme.dart';
 import 'package:rent_and_play_app/widgets/home_discovery.dart';
+import 'package:rent_and_play_app/widgets/liquid_glass.dart';
 import 'package:rent_and_play_app/widgets/mobile_controls.dart';
 import 'package:rent_and_play_app/screens/user/active_rentals_screen.dart';
 import 'package:rent_and_play_app/screens/auth/login_screen.dart';
@@ -125,6 +126,48 @@ void main() {
     }
   });
 
+  Widget _buildTestDock(BuildContext context, int selectedIndex) {
+    const tabs = [
+      LiquidGlassTab(
+        label: 'Home',
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+      ),
+      LiquidGlassTab(
+        label: 'Browse',
+        icon: Icons.storefront_outlined,
+        activeIcon: Icons.storefront_rounded,
+      ),
+      LiquidGlassTab(
+        label: 'Rentals',
+        icon: Icons.shopping_bag_outlined,
+        activeIcon: Icons.shopping_bag_rounded,
+      ),
+      LiquidGlassTab(
+        label: 'History',
+        icon: Icons.history,
+        activeIcon: Icons.history_rounded,
+      ),
+      LiquidGlassTab(
+        label: 'Profile',
+        icon: Icons.person_outline_rounded,
+        activeIcon: Icons.person_rounded,
+      ),
+    ];
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
+        child: LiquidGlassBottomNavBar(
+          selectedIndex: selectedIndex,
+          tabs: tabs,
+          onTabSelected: (_) {},
+        ),
+      ),
+    );
+  }
+
   Future<GlobalKey> render(WidgetTester tester, Widget screen,
       {bool dark = false,
       bool history = false,
@@ -174,20 +217,19 @@ void main() {
           ),
           home: Consumer<AuthService>(
               builder: (context, service, _) => Scaffold(
+                    extendBody: true,
                     body: screen,
                     bottomNavigationBar: service.currentUser == null
                         ? null
-                        : NavigationBar(
-                            height: 72,
-                            selectedIndex: history
+                        : _buildTestDock(
+                            context,
+                            history
                                 ? 3
                                 : browse
                                     ? 1
                                     : rentals
                                         ? 2
-                                        : 0,
-                            destinations: _destinations,
-                          ),
+                                        : 0),
                   )),
         ),
       ),

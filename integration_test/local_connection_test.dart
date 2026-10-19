@@ -12,7 +12,7 @@ import 'package:rent_and_play_app/services/mobile_api_service.dart';
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
   const origin = String.fromEnvironment('API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:3000/api');
+      defaultValue: 'http://192.168.1.4:3000/api');
   testWidgets('Android reaches shared Firebase catalog with ESP32 on standby',
       (_) async {
     await Firebase.initializeApp(

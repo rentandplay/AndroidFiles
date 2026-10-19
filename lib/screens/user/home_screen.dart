@@ -11,6 +11,7 @@ import '../../services/mobile_api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/home_discovery.dart';
 import '../../utils/catalog_price.dart';
+import '../../widgets/liquid_glass.dart';
 import '../../widgets/notification_widgets.dart';
 import '../../widgets/rent_play_wordmark.dart';
 import '../../widgets/rental_ui.dart';
@@ -139,36 +140,81 @@ class HomeScreenState extends State<HomeScreen> {
     final activeRentals = _activeRentals;
     final currentRequests = _currentRequests;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
       appBar: AppBar(
         centerTitle: true,
+        backgroundColor: isDark
+            ? const Color(0xFF131D2D).withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.90),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+          ),
+        ),
         title: const RentPlayWordmark(),
         actions: [
           if (user == null)
-            TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginScreen()),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFDF762D).withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                ),
+                child: TextButton(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                  ),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  ),
+                  child: const Text('Sign in',
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700, color: Colors.white)),
+                ),
               ),
-              child: const Text('Sign in'),
             )
           else
             const RentalNotificationBell(),
           const SizedBox(width: 6),
         ],
       ),
-      body: Column(
-        children: [
-          if (_loading) const LinearProgressIndicator(),
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: _loadHome,
-              child: ListView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(0, 8, 0, 28),
-                children: [
+      body: LiquidAmbientBackdrop(
+        child: Column(
+          children: [
+            if (_loading) const LinearProgressIndicator(),
+            Expanded(
+              child: RefreshIndicator(
+                onRefresh: _loadHome,
+                child: ListView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 28),
+                  children: [
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
                     child: Column(
@@ -258,12 +304,14 @@ class HomeScreenState extends State<HomeScreen> {
                     onItemSelected: widget.onItemSelected,
                     onRetry: _loadHome,
                   ),
+                  const SizedBox(height: 90),
                 ],
               ),
             ),
           ),
         ],
       ),
+    ),
     );
   }
 
@@ -282,127 +330,165 @@ class HomeScreenState extends State<HomeScreen> {
           final item = _featuredItems[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: Material(
-              color: Colors.transparent,
-              borderRadius: BorderRadius.circular(24),
-              clipBehavior: Clip.antiAlias,
-              child: InkWell(
-                onTap: () => widget.onItemSelected(item),
-                child: Ink(
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        AppTheme.brandOrange,
-                        Color(0xFFF58A32),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(24),
-                  ),
-                  child: Stack(
-                    children: [
-                      Positioned(
-                        right: -18,
-                        bottom: -42,
-                        child: Container(
-                          width: 170,
-                          height: 170,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: .12),
+            child: LiquidGlassContainer(
+              borderRadius: 24,
+              blurSigma: 16,
+              glowColor: const Color(0xFFDF762D),
+              customGradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(0xFFE26B1E).withValues(alpha: 0.94),
+                  const Color(0xFFFF8B38).withValues(alpha: 0.82),
+                ],
+              ),
+              borderGradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.45, 1.0],
+                colors: [
+                  Colors.white.withValues(alpha: 0.85),
+                  Colors.white.withValues(alpha: 0.30),
+                  const Color(0xFFFFC093).withValues(alpha: 0.50),
+                ],
+              ),
+              onTap: () => widget.onItemSelected(item),
+              child: Stack(
+                children: [
+                  // Specular angled light shine streak
+                  Positioned(
+                    top: -45,
+                    left: -30,
+                    right: -30,
+                    height: 100,
+                    child: Transform.rotate(
+                      angle: -0.25,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.white.withValues(alpha: 0.35),
+                              Colors.white.withValues(alpha: 0.0),
+                            ],
                           ),
                         ),
                       ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 14, 8, 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 6,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 9, vertical: 5),
-                                    decoration: BoxDecoration(
-                                      color:
-                                          Colors.white.withValues(alpha: .18),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: const Text(
-                                      'FEATURED',
-                                      style: TextStyle(
-                                        color: Colors.white,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: .7,
-                                      ),
-                                    ),
-                                  ),
-                                  const Spacer(),
-                                  Text(
-                                    item.name,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 19,
-                                      height: 1.05,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 5),
-                                  Tooltip(
-                                    message: item.rateText,
-                                    child: Text(
-                                      catalogPriceLabel(item),
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color:
-                                            Colors.white.withValues(alpha: .9),
-                                        fontSize: 12,
-                                        height: 1.15,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(height: 6),
-                                  TextButton(
-                                    onPressed: () =>
-                                        widget.onItemSelected(item),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: Colors.white,
-                                      padding: EdgeInsets.zero,
-                                      minimumSize: const Size(0, 30),
-                                      tapTargetSize:
-                                          MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    child: const Text(
-                                      'View item  ›',
-                                      style: TextStyle(
-                                          fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Expanded(
-                              flex: 5,
-                              child: item.buildImage(
-                                fit: BoxFit.contain,
-                                height: 136,
-                                width: 145,
-                              ),
-                            ),
+                    ),
+                  ),
+                  // Glowing liquid refraction orb
+                  Positioned(
+                    right: -25,
+                    bottom: -35,
+                    child: Container(
+                      width: 190,
+                      height: 190,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        gradient: RadialGradient(
+                          colors: [
+                            Colors.white.withValues(alpha: 0.28),
+                            Colors.transparent,
                           ],
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(18, 14, 8, 12),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          flex: 6,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: .22),
+                                  borderRadius: BorderRadius.circular(16),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: .45),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'FEATURED',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: .7,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              Text(
+                                item.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 19,
+                                  height: 1.05,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Tooltip(
+                                message: item.rateText,
+                                child: Text(
+                                  catalogPriceLabel(item),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color:
+                                        Colors.white.withValues(alpha: .95),
+                                    fontSize: 12,
+                                    height: 1.15,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.22),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.4),
+                                    width: 1.0,
+                                  ),
+                                ),
+                                child: const Text(
+                                  'View item  ›',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Expanded(
+                          flex: 5,
+                          child: item.buildImage(
+                            fit: BoxFit.contain,
+                            height: 136,
+                            width: 145,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ),
           );
@@ -685,17 +771,29 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSignInCard(BuildContext context) => Card(
-        margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-        child: Padding(
-          padding: const EdgeInsets.all(18),
+  Widget _buildSignInCard(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+        child: LiquidGlassContainer(
+          borderRadius: 20,
+          blurSigma: 14,
+          padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Icon(Icons.receipt_long_outlined,
-                  size: 28, color: Theme.of(context).colorScheme.primary),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDF762D).withValues(alpha: .15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.receipt_long_outlined,
+                    size: 22, color: Color(0xFFDF762D)),
+              ),
               const SizedBox(width: 12),
               const Expanded(
-                child: Text('Sign in to see your rental activity.'),
+                child: Text('Sign in to see your rental activity.',
+                    style:
+                        TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
               ),
               TextButton(
                 onPressed: () => Navigator.push(
@@ -709,41 +807,51 @@ class HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  Widget _buildNoRentalsCard(BuildContext context) => Card(
-        margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-        child: Padding(
+  Widget _buildNoRentalsCard(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+        child: LiquidGlassContainer(
+          borderRadius: 20,
+          blurSigma: 14,
           padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
           child: Row(
             children: [
               Container(
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
                   color: Theme.of(context)
                       .colorScheme
                       .primary
-                      .withValues(alpha: .1),
-                  borderRadius: BorderRadius.circular(11),
+                      .withValues(alpha: .15),
+                  borderRadius: BorderRadius.circular(13),
+                  border: Border.all(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: .25),
+                  ),
                 ),
                 child: Icon(Icons.shopping_bag_outlined,
                     size: 20, color: Theme.of(context).colorScheme.primary),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 12),
               Expanded(
-                  child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Your next game awaits',
-                      style:
-                          TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                  Text('No active rentals right now.',
-                      style: TextStyle(
-                          fontSize: 11,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant)),
-                ],
-              )),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Your next game awaits',
+                        style: TextStyle(
+                            fontSize: 14, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 2),
+                    Text('No active rentals right now.',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant)),
+                  ],
+                ),
+              ),
               IconButton(
                 tooltip: 'Browse equipment',
                 onPressed: widget.onBrowse,

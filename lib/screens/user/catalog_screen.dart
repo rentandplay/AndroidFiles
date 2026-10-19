@@ -6,6 +6,7 @@ import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/rent_play_wordmark.dart';
+import '../../widgets/liquid_glass.dart';
 import '../auth/login_screen.dart';
 import 'item_details_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
@@ -30,6 +31,7 @@ class CatalogScreenState extends State<CatalogScreen> {
   bool _availableOnly = false;
   bool _savedOnly = false;
   bool _availableFirst = true;
+  bool _dismissGuestHero = false;
   final Set<String> _savedItemIds = {};
   String? _savedOwnerId;
   List<ItemModel> catalogItems = [];
@@ -205,23 +207,80 @@ class CatalogScreenState extends State<CatalogScreen> {
     final isAdmin = _currentUserModel?.isStaff == true;
 
     return Scaffold(
+      backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
       appBar: AppBar(
         centerTitle: true,
-        backgroundColor: isDark ? const Color(0xFF192536) : Colors.white,
+        backgroundColor: isDark
+            ? const Color(0xFF131D2D).withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.90),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            height: 1,
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+          ),
+        ),
         title: const RentPlayWordmark(),
         actions: [
           if (user == null)
-            TextButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
-                );
-              },
-              icon: const Icon(Icons.login),
-              label: const Text('Login'),
+            Padding(
+              padding: const EdgeInsets.only(right: 12),
+              child: Container(
+                height: 36,
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFFFF8A3D),
+                      Color(0xFFDF762D),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFDF762D).withValues(alpha: 0.35),
+                      blurRadius: 8,
+                      offset: const Offset(0, 3),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.35),
+                    width: 1.0,
+                  ),
+                ),
+                child: TextButton.icon(
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20)),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.login_rounded,
+                      size: 16, color: Colors.white),
+                  label: const Text(
+                    'Login',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
             )
           else ...[
             const RentalNotificationBell(),
@@ -287,48 +346,158 @@ class CatalogScreenState extends State<CatalogScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadCatalog,
-        child: CustomScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-          physics: const AlwaysScrollableScrollPhysics(),
-          slivers: [
-            if (_catalogLoading)
-              const SliverToBoxAdapter(child: LinearProgressIndicator()),
-            if (_catalogError.isNotEmpty)
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: Column(
-                    children: [
-                      Text(_catalogError),
-                      TextButton(
-                        onPressed: _loadCatalog,
-                        child: const Text('Retry catalog'),
-                      ),
-                    ],
+      body: LiquidAmbientBackdrop(
+        child: RefreshIndicator(
+          onRefresh: _loadCatalog,
+          child: CustomScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              if (_catalogLoading)
+                const SliverToBoxAdapter(child: LinearProgressIndicator()),
+              if (_catalogError.isNotEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      children: [
+                        Text(_catalogError),
+                        TextButton(
+                          onPressed: _loadCatalog,
+                          child: const Text('Retry catalog'),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            SliverToBoxAdapter(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                child: Row(children: [
-                  Expanded(
-                      child: MobileSearchField(
-                    controller: _searchController,
-                    onChanged: (value) => setState(() => _searchQuery = value),
-                    hintText: 'Search equipment',
-                  )),
-                  const SizedBox(width: 8),
-                  Material(
-                    color: scheme.surface,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: scheme.outline)),
-                    child: SizedBox(
+              if (user == null && !_dismissGuestHero)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                    child: LiquidGlassContainer(
+                      borderRadius: 22,
+                      blurSigma: 16,
+                      glowColor: const Color(0xFFDF762D),
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFF8A3D),
+                                      Color(0xFFDF762D)
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFDF762D)
+                                          .withValues(alpha: 0.3),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                                child: const Icon(Icons.auto_awesome_rounded,
+                                    size: 18, color: Colors.white),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Rent & Play Equipment',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -0.2,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Browse games & gear. Sign in anytime to book!',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: scheme.onSurfaceVariant,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Dismiss banner',
+                                visualDensity: VisualDensity.compact,
+                                icon: const Icon(Icons.close_rounded, size: 18),
+                                onPressed: () =>
+                                    setState(() => _dismissGuestHero = true),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _heroPill(context, Icons.bolt_rounded,
+                                    'Instant Booking'),
+                                const SizedBox(width: 6),
+                                _heroPill(context, Icons.verified_user_outlined,
+                                    'Insured Gear'),
+                                const SizedBox(width: 6),
+                                _heroPill(context, Icons.card_giftcard_rounded,
+                                    '10% Off First Rent'),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                  child: Row(children: [
+                    Expanded(
+                        child: MobileSearchField(
+                      controller: _searchController,
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
+                      hintText: 'Search equipment',
+                    )),
+                    const SizedBox(width: 8),
+                    Material(
+                      color: Colors.transparent,
+                      child: Container(
                         width: 48,
                         height: 48,
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? const Color(0xFF192536).withValues(alpha: 0.78)
+                              : Colors.white.withValues(alpha: 0.90),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.16)
+                                : const Color(0xFFE2E8F0),
+                            width: 1.1,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: isDark
+                                  ? Colors.black.withValues(alpha: 0.25)
+                                  : const Color(0xFF0F172A)
+                                      .withValues(alpha: 0.04),
+                              blurRadius: 10,
+                              offset: const Offset(0, 3),
+                            ),
+                          ],
+                        ),
                         child: PopupMenuButton<String>(
                           tooltip: 'Sort equipment',
                           icon: Icon(Icons.sort_rounded,
@@ -346,154 +515,186 @@ class CatalogScreenState extends State<CatalogScreen> {
                                 checked: !_availableFirst,
                                 child: const Text('Name A–Z')),
                           ],
-                        )),
-                  ),
-                ]),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: Container(
-                height: 48 + (textScale - 1) * 16,
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  itemCount: categories.length,
-                  itemBuilder: (context, index) {
-                    final category = categories[index];
-                    final isSelected = selectedCategory == category;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 9),
-                      child: MobileCategoryChip(
-                        label: category,
-                        selected: isSelected,
-                        onSelected: () =>
-                            setState(() => selectedCategory = category),
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 2),
-                child: Row(
-                  children: [
-                    _filterChip(
-                      id: 'catalog-available-filter',
-                      selected: _availableOnly,
-                      icon: _availableOnly
-                          ? Icons.check_circle_rounded
-                          : Icons.check_circle_outline,
-                      label: 'Available only',
-                      onSelected: (selected) =>
-                          setState(() => _availableOnly = selected),
-                    ),
-                    if (user != null) ...[
-                      const SizedBox(width: 8),
-                      _filterChip(
-                        id: 'catalog-saved-filter',
-                        selected: _savedOnly,
-                        icon: _savedOnly
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        label: 'Saved (${_savedItemIds.length})',
-                        onSelected: (selected) =>
-                            setState(() => _savedOnly = selected),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ),
-            SliverToBoxAdapter(
-                child: Padding(
-              padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
-              child: Text(
-                  '${filteredItems.length} item${filteredItems.length == 1 ? '' : 's'}',
-                  style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600)),
-            )),
-            if (filteredItems.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: _catalogLoading
-                      ? const CircularProgressIndicator()
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.toys_outlined,
-                              size: 42,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                            ),
-                            const SizedBox(height: 10),
-                            Text(
-                              _catalogError.isNotEmpty
-                                  ? 'Catalog unavailable'
-                                  : _searchQuery.isNotEmpty ||
-                                          _availableOnly ||
-                                          _savedOnly
-                                      ? 'No matching equipment'
-                                      : 'No items in this category yet',
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .titleSmall
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            if (_catalogError.isNotEmpty &&
-                                !_catalogLoading) ...[
-                              const SizedBox(height: 6),
-                              const Text(
-                                'We could not load equipment right now. Please try again later.',
-                                textAlign: TextAlign.center,
-                              ),
-                              const SizedBox(height: 8),
-                              FilledButton.icon(
-                                onPressed: _loadCatalog,
-                                icon: const Icon(Icons.refresh_rounded),
-                                label: const Text('Try again'),
-                              ),
-                            ] else if (!_catalogLoading &&
-                                (_searchQuery.isNotEmpty ||
-                                    selectedCategory != 'All' ||
-                                    _availableOnly ||
-                                    _savedOnly)) ...[
-                              const SizedBox(height: 6),
-                              TextButton(
-                                onPressed: _clearFilters,
-                                child: const Text('Clear search and filters'),
-                              ),
-                            ],
-                          ],
                         ),
+                      ),
+                    ),
+                  ]),
                 ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
-                sliver: SliverGrid(
-                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: gridColumns,
-                    mainAxisExtent: 110 + 160 * textScale,
-                    crossAxisSpacing: 14,
-                    mainAxisSpacing: 14,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, index) => _buildItemCard(filteredItems[index]),
-                    childCount: filteredItems.length,
+              ),
+              SliverToBoxAdapter(
+                child: Container(
+                  height: 48 + (textScale - 1) * 16,
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: categories.length,
+                    itemBuilder: (context, index) {
+                      final category = categories[index];
+                      final isSelected = selectedCategory == category;
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: MobileCategoryChip(
+                          label: category,
+                          selected: isSelected,
+                          onSelected: () =>
+                              setState(() => selectedCategory = category),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ),
-          ],
+              SliverToBoxAdapter(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
+                  child: Row(
+                    children: [
+                      _filterChip(
+                        id: 'catalog-available-filter',
+                        selected: _availableOnly,
+                        icon: _availableOnly
+                            ? Icons.check_circle_rounded
+                            : Icons.check_circle_outline,
+                        label: 'Available only',
+                        onSelected: (selected) =>
+                            setState(() => _availableOnly = selected),
+                      ),
+                      if (user != null) ...[
+                        const SizedBox(width: 8),
+                        _filterChip(
+                          id: 'catalog-saved-filter',
+                          selected: _savedOnly,
+                          icon: _savedOnly
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          label: 'Saved (${_savedItemIds.length})',
+                          onSelected: (selected) =>
+                              setState(() => _savedOnly = selected),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                  child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
+                child: Text(
+                    '${filteredItems.length} item${filteredItems.length == 1 ? '' : 's'}',
+                    style: TextStyle(
+                        color: scheme.onSurfaceVariant,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.1)),
+              )),
+              if (filteredItems.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: _catalogLoading
+                        ? const CircularProgressIndicator()
+                        : Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.toys_outlined,
+                                size: 42,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                              ),
+                              const SizedBox(height: 10),
+                              Text(
+                                _catalogError.isNotEmpty
+                                    ? 'Catalog unavailable'
+                                    : _searchQuery.isNotEmpty ||
+                                            _availableOnly ||
+                                            _savedOnly
+                                        ? 'No matching equipment'
+                                        : 'No items in this category yet',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleSmall
+                                    ?.copyWith(fontWeight: FontWeight.w600),
+                              ),
+                              if (_catalogError.isNotEmpty &&
+                                  !_catalogLoading) ...[
+                                const SizedBox(height: 6),
+                                const Text(
+                                  'We could not load equipment right now. Please try again later.',
+                                  textAlign: TextAlign.center,
+                                ),
+                                const SizedBox(height: 8),
+                                FilledButton.icon(
+                                  onPressed: _loadCatalog,
+                                  icon: const Icon(Icons.refresh_rounded),
+                                  label: const Text('Try again'),
+                                ),
+                              ] else if (!_catalogLoading &&
+                                  (_searchQuery.isNotEmpty ||
+                                      selectedCategory != 'All' ||
+                                      _availableOnly ||
+                                      _savedOnly)) ...[
+                                const SizedBox(height: 6),
+                                TextButton(
+                                  onPressed: _clearFilters,
+                                  child: const Text('Clear search and filters'),
+                                ),
+                              ],
+                            ],
+                          ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                  sliver: SliverGrid(
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: gridColumns,
+                      mainAxisExtent: 110 + 165 * textScale,
+                      crossAxisSpacing: 14,
+                      mainAxisSpacing: 14,
+                    ),
+                    delegate: SliverChildBuilderDelegate(
+                      (context, index) => _buildItemCard(filteredItems[index]),
+                      childCount: filteredItems.length,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
+      ),
+    );
+  }
+
+  Widget _heroPill(BuildContext context, IconData icon, String text) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : const Color(0xFF0F172A).withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.14)
+              : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: const Color(0xFFDF762D)),
+          const SizedBox(width: 5),
+          Text(
+            text,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
+        ],
       ),
     );
   }
@@ -505,7 +706,8 @@ class CatalogScreenState extends State<CatalogScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final statusKey = item.status.toUpperCase();
     final statusColor = switch (statusKey) {
-      'AVAILABLE' => isDark ? const Color(0xFF89D5B8) : const Color(0xFF216F56),
+      'AVAILABLE' =>
+        isDark ? const Color(0xFF89D5B8) : const Color(0xFF216F56),
       'RENTED' || 'RESERVED_PENDING' => mobileAccentText(context),
       _ => scheme.onSurfaceVariant,
     };
@@ -520,15 +722,11 @@ class CatalogScreenState extends State<CatalogScreen> {
             _ => 'Unavailable',
           };
 
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(18),
-        side: BorderSide(color: scheme.outline),
-      ),
+    return LiquidGlassContainer(
+      borderRadius: 22,
+      blurSigma: 12,
       child: InkWell(
+        borderRadius: BorderRadius.circular(22),
         onTap: () => _openItemDetails(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,10 +736,33 @@ class CatalogScreenState extends State<CatalogScreen> {
                 Container(
                   height: 110,
                   width: double.infinity,
-                  color: isDark
-                      ? AppTheme.darkSurfaceVariant
-                      : const Color(0xFFF3F5F7),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E2D44).withValues(alpha: 0.6)
+                        : const Color(0xFFF1F5F9).withValues(alpha: 0.7),
+                  ),
                   child: item.buildImage(fit: BoxFit.contain, height: 110),
+                ),
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 40,
+                  child: IgnorePointer(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.white
+                                .withValues(alpha: isDark ? 0.08 : 0.25),
+                            Colors.transparent,
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
                 Positioned(
                   top: 8,
@@ -553,9 +774,9 @@ class CatalogScreenState extends State<CatalogScreen> {
                       children: [
                         if (_canSave) ...[
                           Material(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surface
+                            color: (isDark
+                                    ? const Color(0xFF192536)
+                                    : Colors.white)
                                 .withValues(alpha: .94),
                             shape: const CircleBorder(),
                             child: IconButton(
@@ -585,21 +806,52 @@ class CatalogScreenState extends State<CatalogScreen> {
                               message: statusLabel,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 6),
+                                    horizontal: 8, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: scheme.surface.withValues(alpha: .96),
+                                  color: (isDark
+                                          ? const Color(0xFF131D2D)
+                                          : Colors.white)
+                                      .withValues(alpha: .96),
                                   border: Border.all(
-                                      color: statusColor.withValues(alpha: .2)),
+                                      color:
+                                          statusColor.withValues(alpha: .3)),
                                   borderRadius: BorderRadius.circular(10),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.04),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
                                 ),
-                                child: Text(statusLabel,
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
                                         color: statusColor,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: .2)),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Flexible(
+                                      child: Text(
+                                        statusLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: statusColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: .2,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             )),
                       ]),
@@ -653,29 +905,52 @@ class CatalogScreenState extends State<CatalogScreen> {
                     const Spacer(),
                     SizedBox(
                       width: double.infinity,
-                      height: 40 *
+                      height: 38 *
                           (MediaQuery.textScalerOf(context).scale(13) / 13)
                               .clamp(1.0, double.infinity),
-                      child: TextButton(
-                        style: TextButton.styleFrom(
-                          foregroundColor: mobileAccentText(context),
-                          padding: EdgeInsets.zero,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: isDark
+                                ? [
+                                    const Color(0xFF263750),
+                                    const Color(0xFF192536),
+                                  ]
+                                : [
+                                    const Color(0xFFFFF7ED),
+                                    const Color(0xFFFFEDD5),
+                                  ],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: (isDark
+                                    ? const Color(0xFFF0AD7C)
+                                    : const Color(0xFFDF762D))
+                                .withValues(alpha: 0.3),
+                            width: 1.0,
                           ),
                         ),
-                        onPressed: () => _openItemDetails(item),
-                        child: Row(children: [
-                          const Expanded(
-                              child: Text('View details',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w700))),
-                          const SizedBox(width: 4),
-                          const Icon(Icons.arrow_forward_rounded, size: 16),
-                        ]),
+                        child: TextButton(
+                          style: TextButton.styleFrom(
+                            foregroundColor: mobileAccentText(context),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => _openItemDetails(item),
+                          child: Row(children: [
+                            const Expanded(
+                                child: Text('View details',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700))),
+                            const SizedBox(width: 4),
+                            const Icon(Icons.arrow_forward_rounded, size: 16),
+                          ]),
+                        ),
                       ),
                     ),
                   ],

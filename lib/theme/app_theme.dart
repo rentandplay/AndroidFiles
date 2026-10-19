@@ -7,21 +7,20 @@ class AppTheme {
   static const Color brandOrangeLight = Color(0xFFF57C00);
   static const Color brandNavy = Color(0xFF0F172A);
 
-  // Light Mode Colors
-  static const Color lightBg = Color(0xFFF8FAFC);
-  static const Color lightSurface = Colors.white;
-  static const Color lightBorder = Color(0xFFE2E8F0);
-  static const Color lightTextPrimary = Color(0xFF0F172A);
-  static const Color lightTextSecondary = Color(0xFF64748B);
+  // Light Mode Colors (Subtle warm orange/porcelain undertone)
+  static const Color lightBg = Color(0xFFFBF8F5);
+  static const Color lightSurface = Color(0xFFFFFDFC);
+  static const Color lightBorder = Color(0xFFEFE8E1);
+  static const Color lightTextPrimary = Color(0xFF1A1512);
+  static const Color lightTextSecondary = Color(0xFF6E655F);
 
-  // Dark Mode Colors (Matching Rent & Play Web Dashboard screenshots)
-  static const Color darkBg = Color(0xFF0B1320); // Deep Dark Slate Navy
-  static const Color darkSurface = Color(0xFF131D2D); // Dark Card Surface
-  static const Color darkSurfaceVariant =
-      Color(0xFF1A2638); // Highlighted Container
-  static const Color darkBorder = Color(0xFF1E2C42); // Subtle Dark Border
-  static const Color darkTextPrimary = Color(0xFFF8FAFC); // Crisp Bright White
-  static const Color darkTextSecondary = Color(0xFF94A3B8); // Soft Slate Grey
+  // Dark Mode Colors (Deep obsidian slate with warm twilight undertone)
+  static const Color darkBg = Color(0xFF0D1219);
+  static const Color darkSurface = Color(0xFF141B26);
+  static const Color darkSurfaceVariant = Color(0xFF1E2635);
+  static const Color darkBorder = Color(0xFF242E40);
+  static const Color darkTextPrimary = Color(0xFFF9F7F5);
+  static const Color darkTextSecondary = Color(0xFF9EA3B0);
 
   static ThemeData get lightTheme {
     return ThemeData(
