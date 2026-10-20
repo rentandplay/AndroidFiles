@@ -17,15 +17,28 @@ class MobileApiException implements Exception {
 
   String get userMessage {
     final diagnostic = '${code ?? ''} $message'.toLowerCase();
-    final isFirebaseServiceFailure = (code ?? '').toUpperCase().startsWith(
+    final isConnectionFailure = diagnostic.contains('connection refused') ||
+        diagnostic.contains('failed host lookup') ||
+        diagnostic.contains('socketexception') ||
+        diagnostic.contains('clientexception') ||
+        diagnostic.contains('xmlhttprequest') ||
+        diagnostic.contains('econnrefused') ||
+        diagnostic.contains('network is unreachable');
+    if (isConnectionFailure) {
+      return 'Unable to connect to the server. Please check your internet connection and try again.';
+    }
+    final isTechnicalOrServiceFailure = (code ?? '').toUpperCase().startsWith(
               'FIREBASE_',
             ) ||
         diagnostic.contains('firestore_quota_exceeded') ||
         diagnostic.contains('resource_exhausted') ||
         diagnostic.contains('quota exceeded') ||
         diagnostic.contains('usage limit') ||
-        diagnostic.contains('firebase usage');
-    return isFirebaseServiceFailure
+        diagnostic.contains('firebase usage') ||
+        diagnostic.contains('backend is not running') ||
+        diagnostic.contains('npm run dev') ||
+        diagnostic.contains('apps/backend');
+    return isTechnicalOrServiceFailure
         ? 'The rental service is temporarily unavailable. Please try again later.'
         : message;
   }
@@ -279,6 +292,7 @@ class MobileApiService {
     }
 
     if (body != null) headers['Content-Type'] = 'application/json';
+<<<<<<< Updated upstream
 
     final candidateUrls = [
       _activeBaseUrl,
@@ -314,6 +328,39 @@ class MobileApiService {
       throw const MobileApiException(
           'Could not connect to the rental service. Please check your network.',
           statusCode: 503);
+=======
+    final uri = _uri(path);
+    final http.Response response;
+    try {
+      response = await (switch (method) {
+        'PATCH' => _client
+            .patch(uri, headers: headers, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 90)),
+        'PUT' => _client
+            .put(uri, headers: headers, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 90)),
+        'DELETE' => _client
+            .delete(uri, headers: headers, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 90)),
+        'POST' => _client
+            .post(uri, headers: headers, body: jsonEncode(body))
+            .timeout(const Duration(seconds: 90)),
+        _ => _client
+            .get(uri, headers: headers)
+            .timeout(const Duration(seconds: 90)),
+      });
+    } on TimeoutException {
+      throw const MobileApiException(
+        'Connection timed out. Please check your internet connection and try again.',
+        statusCode: 504,
+      );
+    } catch (e) {
+      if (e is MobileApiException) rethrow;
+      throw const MobileApiException(
+        'Unable to connect to the rental service. Please check your internet connection and try again.',
+        statusCode: 503,
+      );
+>>>>>>> Stashed changes
     }
 
     dynamic decoded;

@@ -115,8 +115,9 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       String errorMessage = 'Could not log in. Please try again.';
-      if (e is MobileApiException) errorMessage = e.userMessage;
-      if (e is FirebaseAuthException) {
+      if (e is MobileApiException) {
+        errorMessage = e.userMessage;
+      } else if (e is FirebaseAuthException) {
         switch (e.code) {
           case 'user-not-found':
             errorMessage = 'User account not found. Please register first.';
@@ -134,17 +135,43 @@ class _LoginScreenState extends State<LoginScreen> {
             break;
           case 'operation-not-allowed':
             errorMessage =
-                'Email/Password sign-in is disabled in Firebase Console. Please enable Email/Password provider in Authentication settings.';
+                'Sign-in is temporarily unavailable. Please try again later.';
+            break;
+          case 'network-request-failed':
+            errorMessage =
+                'Connection failed. Please check your internet connection and try again.';
+            break;
+          case 'too-many-requests':
+            errorMessage =
+                'Too many unsuccessful attempts. Please try again in a few minutes.';
             break;
           default:
-            errorMessage = e.message ?? e.toString();
+            errorMessage = e.message ?? 'Could not sign in. Please try again.';
+        }
+      } else {
+        final errText = e.toString().toLowerCase();
+        if (errText.contains('socket') ||
+            errText.contains('connection') ||
+            errText.contains('network') ||
+            errText.contains('host lookup')) {
+          errorMessage =
+              'Unable to connect to the server. Please check your network and try again.';
         }
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(errorMessage),
-          backgroundColor: Colors.red,
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline_rounded,
+                  color: Colors.white, size: 20),
+              const SizedBox(width: 10),
+              Expanded(child: Text(errorMessage)),
+            ],
+          ),
+          backgroundColor: const Color(0xFFC53030),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           duration: const Duration(seconds: 4),
         ),
       );
