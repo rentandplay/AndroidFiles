@@ -11,13 +11,28 @@ class QrCaptureScreen extends StatefulWidget {
 }
 
 class _QrCaptureScreenState extends State<QrCaptureScreen>
-    with WidgetsBindingObserver {
+    with WidgetsBindingObserver, SingleTickerProviderStateMixin {
   late final ScannerCameraSession _camera;
+  late final AnimationController _animationController;
   MobileScannerController get _controller => _camera.controller;
   bool _done = false;
+
+  bool get _isTestBinding =>
+      WidgetsBinding.instance.runtimeType.toString().contains('Test');
+
   @override
   void initState() {
     super.initState();
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2200),
+    );
+    if (!_isTestBinding) {
+      _animationController.repeat(reverse: true);
+    } else {
+      _animationController.value = 0.5;
+    }
+
     _camera = ScannerCameraSession(onError: () {
       if (mounted && !_done) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -36,14 +51,71 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (!_done) _camera.lifecycle(state);
+    if (!_done) {
+      _camera.lifecycle(state);
+      if (state == AppLifecycleState.resumed) {
+        if (!_isTestBinding && !_animationController.isAnimating) {
+          _animationController.repeat(reverse: true);
+        }
+      } else {
+        _animationController.stop();
+      }
+    }
   }
 
   @override
   void dispose() {
+    _animationController.dispose();
     WidgetsBinding.instance.removeObserver(this);
     _camera.dispose();
     super.dispose();
+  }
+
+  bool _isBarcodeInWindow(
+    Barcode barcode,
+    Rect window,
+    Size widgetSize,
+    Size textureSize,
+  ) {
+    if (barcode.corners.isEmpty) return true;
+
+    final effectiveTextureSize =
+        textureSize.isEmpty ? _controller.value.size : textureSize;
+    if (effectiveTextureSize.isEmpty || widgetSize.isEmpty) return true;
+
+    final adjustedSize =
+        applyBoxFit(BoxFit.cover, effectiveTextureSize, widgetSize);
+    double verticalPadding =
+        (widgetSize.height - adjustedSize.destination.height) / 2;
+    double horizontalPadding =
+        (widgetSize.width - adjustedSize.destination.width) / 2;
+    if (verticalPadding < 0) verticalPadding = 0;
+    if (horizontalPadding < 0) horizontalPadding = 0;
+
+    final double ratioWidth =
+        effectiveTextureSize.width / adjustedSize.destination.width;
+    final double ratioHeight =
+        effectiveTextureSize.height / adjustedSize.destination.height;
+
+    final adjustedCorners = [
+      for (final offset in barcode.corners)
+        Offset(
+          offset.dx / ratioWidth + horizontalPadding,
+          offset.dy / ratioHeight + verticalPadding,
+        ),
+    ];
+
+    if (adjustedCorners.isEmpty) return true;
+
+    final centerX = adjustedCorners.map((p) => p.dx).reduce((a, b) => a + b) /
+        adjustedCorners.length;
+    final centerY = adjustedCorners.map((p) => p.dy).reduce((a, b) => a + b) /
+        adjustedCorners.length;
+    final center = Offset(centerX, centerY);
+
+    // Restrict scanning to within the viewfinder guide box (with a slight 12% margin)
+    final allowedBounds = window.inflate(window.width * 0.12);
+    return allowedBounds.contains(center);
   }
 
   @override
@@ -79,6 +151,8 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                 center: Offset(size.maxWidth / 2, size.maxHeight / 2),
                 width: side,
                 height: side);
+            final widgetSize = Size(size.maxWidth, size.maxHeight);
+
             return MobileScanner(
               controller: _controller,
               scanWindow: window,
@@ -109,34 +183,99 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                 ]),
               )),
               overlayBuilder: (context, _) => IgnorePointer(
-                  child: Stack(children: [
-                Positioned.fromRect(
-                    rect: window,
-                    child: Container(
-                        decoration: BoxDecoration(
-                            border: Border.all(color: Colors.white, width: 3),
-                            borderRadius: BorderRadius.circular(18)))),
-                Positioned(
-                    left: 20,
-                    right: 20,
-                    bottom: 24,
-                    child: Container(
-                        padding: const EdgeInsets.all(14),
-                        decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: .7),
-                            borderRadius: BorderRadius.circular(12)),
-                        child: const Text(
-                            'Center one QR code inside the frame.\nKeep the camera steady.',
-                            textAlign: TextAlign.center,
-                            style:
-                                TextStyle(color: Colors.white, height: 1.5)))),
-              ])),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    AnimatedBuilder(
+                      animation: _animationController,
+                      builder: (context, _) => CustomPaint(
+                        size: widgetSize,
+                        painter: _ScannerOverlayPainter(
+                          scanWindow: window,
+                          scanProgress: _animationController.value,
+                          isSuccess: _done,
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: math.max(16, window.top - 54),
+                      left: 20,
+                      right: 20,
+                      child: Center(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 7),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.75),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                                color: _done
+                                    ? Colors.greenAccent.withValues(alpha: 0.6)
+                                    : Colors.white24,
+                                width: 1),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: _done
+                                      ? Colors.greenAccent
+                                      : const Color(0xFFFF963E),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                _done ? 'QR captured' : 'Align QR code inside the frame',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      top: window.bottom + 18,
+                      left: 20,
+                      right: 20,
+                      child: Center(
+                        child: Text(
+                          'Center one QR code inside the frame.\nKeep the camera steady.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.85),
+                            fontSize: 12.5,
+                            height: 1.4,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               onDetect: (capture) async {
                 if (_done || !mounted) return;
                 for (final barcode in capture.barcodes) {
                   final value = barcode.rawValue?.trim();
                   if (value != null && value.isNotEmpty) {
+                    if (!_isBarcodeInWindow(
+                      barcode,
+                      window,
+                      widgetSize,
+                      capture.size,
+                    )) {
+                      continue;
+                    }
                     _done = true;
+                    _animationController.stop();
+                    setState(() {});
                     await _camera.pause();
                     if (context.mounted) Navigator.pop(context, value);
                     break;
@@ -157,4 +296,138 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                           label: const Text('Go back and enter code'))))),
         ]),
       );
+}
+
+class _ScannerOverlayPainter extends CustomPainter {
+  _ScannerOverlayPainter({
+    required this.scanWindow,
+    required this.scanProgress,
+    required this.isSuccess,
+  });
+
+  final Rect scanWindow;
+  final double scanProgress;
+  final bool isSuccess;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final screenPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final rrect = RRect.fromRectAndRadius(scanWindow, const Radius.circular(20));
+    final windowPath = Path()..addRRect(rrect);
+
+    final maskPath = Path.combine(PathOperation.difference, screenPath, windowPath);
+    final maskPaint = Paint()..color = Colors.black.withValues(alpha: 0.65);
+    canvas.drawPath(maskPath, maskPaint);
+
+    final borderPaint = Paint()
+      ..color = isSuccess
+          ? Colors.greenAccent.withValues(alpha: 0.8)
+          : Colors.white.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    canvas.drawRRect(rrect, borderPaint);
+
+    final cornerColor = isSuccess ? Colors.greenAccent : const Color(0xFFFF963E);
+    final cornerPaint = Paint()
+      ..color = cornerColor
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4.0
+      ..strokeCap = StrokeCap.round;
+
+    const cornerLength = 28.0;
+    const cornerRadius = 16.0;
+
+    // Top-Left
+    final tl = Path()
+      ..moveTo(scanWindow.left, scanWindow.top + cornerLength)
+      ..lineTo(scanWindow.left, scanWindow.top + cornerRadius)
+      ..arcToPoint(
+        Offset(scanWindow.left + cornerRadius, scanWindow.top),
+        radius: const Radius.circular(cornerRadius),
+      )
+      ..lineTo(scanWindow.left + cornerLength, scanWindow.top);
+    canvas.drawPath(tl, cornerPaint);
+
+    // Top-Right
+    final tr = Path()
+      ..moveTo(scanWindow.right - cornerLength, scanWindow.top)
+      ..lineTo(scanWindow.right - cornerRadius, scanWindow.top)
+      ..arcToPoint(
+        Offset(scanWindow.right, scanWindow.top + cornerRadius),
+        radius: const Radius.circular(cornerRadius),
+      )
+      ..lineTo(scanWindow.right, scanWindow.top + cornerLength);
+    canvas.drawPath(tr, cornerPaint);
+
+    // Bottom-Left
+    final bl = Path()
+      ..moveTo(scanWindow.left, scanWindow.bottom - cornerLength)
+      ..lineTo(scanWindow.left, scanWindow.bottom - cornerRadius)
+      ..arcToPoint(
+        Offset(scanWindow.left + cornerRadius, scanWindow.bottom),
+        radius: const Radius.circular(cornerRadius),
+      )
+      ..lineTo(scanWindow.left + cornerLength, scanWindow.bottom);
+    canvas.drawPath(bl, cornerPaint);
+
+    // Bottom-Right
+    final br = Path()
+      ..moveTo(scanWindow.right - cornerLength, scanWindow.bottom)
+      ..lineTo(scanWindow.right - cornerRadius, scanWindow.bottom)
+      ..arcToPoint(
+        Offset(scanWindow.right, scanWindow.bottom - cornerRadius),
+        radius: const Radius.circular(cornerRadius),
+      )
+      ..lineTo(scanWindow.right, scanWindow.bottom - cornerLength);
+    canvas.drawPath(br, cornerPaint);
+
+    if (!isSuccess) {
+      final lineY = scanWindow.top + 14 + (scanWindow.height - 28) * scanProgress;
+      final lineRect = Rect.fromLTWH(
+        scanWindow.left + 12,
+        lineY - 1.5,
+        scanWindow.width - 24,
+        3.0,
+      );
+      final linePaint = Paint()
+        ..shader = const LinearGradient(
+          colors: [
+            Colors.transparent,
+            Color(0xFFFF963E),
+            Colors.white,
+            Color(0xFFFF963E),
+            Colors.transparent,
+          ],
+          stops: [0.0, 0.25, 0.5, 0.75, 1.0],
+        ).createShader(lineRect);
+      canvas.drawRRect(
+          RRect.fromRectAndRadius(lineRect, const Radius.circular(2)), linePaint);
+
+      final glowPaint = Paint()
+        ..shader = RadialGradient(
+          colors: [
+            const Color(0xFFFF963E).withValues(alpha: 0.35),
+            Colors.transparent,
+          ],
+        ).createShader(Rect.fromCenter(
+          center: Offset(scanWindow.center.dx, lineY),
+          width: scanWindow.width * 0.8,
+          height: 18,
+        ));
+      canvas.drawRect(
+        Rect.fromCenter(
+          center: Offset(scanWindow.center.dx, lineY),
+          width: scanWindow.width * 0.8,
+          height: 18,
+        ),
+        glowPaint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _ScannerOverlayPainter oldDelegate) =>
+      oldDelegate.scanProgress != scanProgress ||
+      oldDelegate.isSuccess != isSuccess ||
+      oldDelegate.scanWindow != scanWindow;
 }

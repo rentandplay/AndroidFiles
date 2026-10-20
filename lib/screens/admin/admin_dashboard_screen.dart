@@ -95,8 +95,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       return;
     }
     _rentalEvents = _api.watchRentalEvents().listen((event) {
-      if (!mounted || !_appResumed || _leaving) return;
-      if (event['event'] == 'ready' || event['event'] == 'rental.changed') {
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
         _eventRefreshTimer?.cancel();
         _eventRefreshTimer = Timer(const Duration(milliseconds: 180), () {
           if (mounted && _appResumed && !_leaving) {

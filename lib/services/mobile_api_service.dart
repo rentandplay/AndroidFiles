@@ -37,14 +37,31 @@ class MobileApiException implements Exception {
 class MobileApiService {
   MobileApiService({FirebaseAuth? auth, http.Client? client})
       : _auth = auth ?? FirebaseAuth.instance,
-        _client = client ?? http.Client();
+        _client = client ?? http.Client() {
+    try {
+      _auth.authStateChanges().listen((_) => resetRentalEventStream());
+    } catch (_) {}
+  }
 
   static final MobileApiService instance = MobileApiService();
 
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.4:3000/api',
+    defaultValue: 'http://192.168.1.35:3000/api',
   );
+
+  static final List<String> _candidateBaseUrls = () {
+    final list = <String>[
+      _configuredBaseUrl,
+      'http://192.168.1.35:3000/api',
+      'http://127.0.0.1:3000/api',
+      'http://10.0.2.2:3000/api',
+    ];
+    return list.toSet().toList();
+  }();
+
+  static String _activeBaseUrl = _configuredBaseUrl;
+
 
   final FirebaseAuth _auth;
   final http.Client _client;
@@ -55,6 +72,8 @@ class MobileApiService {
   );
   StreamSubscription<Map<String, dynamic>>? _rentalEventTransport;
   int _rentalEventGeneration = 0;
+  Timer? _retryTimer;
+  Completer<void>? _retryCompleter;
 
   static String operationKey() => List.generate(16,
           (_) => Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0'))
@@ -176,6 +195,9 @@ class MobileApiService {
   Future<Map<String, dynamic>> paymentInstructions() async =>
       _request('/mobile/payment-instructions');
 
+  Future<Map<String, dynamic>> terms() async =>
+      _request('/mobile/terms', authenticated: false);
+
   Future<void> submitPaymentProof({
     required String rentalId,
     required String imageDataUrl,
@@ -203,9 +225,34 @@ class MobileApiService {
     return Map<String, dynamic>.from(result['item'] as Map);
   }
 
-  Uri _uri(String path) => Uri.parse(
-        '${_configuredBaseUrl.replaceAll(RegExp(r'/+$'), '')}$path',
+  Uri _uri(String path, [String? baseUrlOverride]) => Uri.parse(
+        '${(baseUrlOverride ?? _activeBaseUrl).replaceAll(RegExp(r'/+$'), '')}$path',
       );
+
+  Future<http.Response> _executeHttp(
+    String method,
+    Uri uri,
+    Map<String, String> headers,
+    Map<String, dynamic>? body,
+  ) {
+    return switch (method) {
+      'PATCH' => _client
+          .patch(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15)),
+      'PUT' => _client
+          .put(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15)),
+      'DELETE' => _client
+          .delete(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15)),
+      'POST' => _client
+          .post(uri, headers: headers, body: jsonEncode(body))
+          .timeout(const Duration(seconds: 15)),
+      _ => _client
+          .get(uri, headers: headers)
+          .timeout(const Duration(seconds: 15)),
+    };
+  }
 
   Future<Map<String, dynamic>> _request(
     String path, {
@@ -232,24 +279,42 @@ class MobileApiService {
     }
 
     if (body != null) headers['Content-Type'] = 'application/json';
-    final uri = _uri(path);
-    final response = switch (method) {
-      'PATCH' => await _client
-          .patch(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      'PUT' => await _client
-          .put(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      'DELETE' => await _client
-          .delete(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      'POST' => await _client
-          .post(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 90)),
-      _ => await _client
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 90)),
-    };
+
+    final candidateUrls = [
+      _activeBaseUrl,
+      ..._candidateBaseUrls.where((u) => u != _activeBaseUrl),
+    ];
+
+    http.Response? response;
+    Object? lastError;
+
+    for (final candidate in candidateUrls) {
+      try {
+        final uri = _uri(path, candidate);
+        response = await _executeHttp(method, uri, headers, body);
+        _activeBaseUrl = candidate;
+        break;
+      } catch (e) {
+        lastError = e;
+        final errStr = e.toString().toLowerCase();
+        final isNetworkError = errStr.contains('socketexception') ||
+            errStr.contains('no route to host') ||
+            errStr.contains('connection refused') ||
+            errStr.contains('failed host lookup') ||
+            errStr.contains('clientexception') ||
+            errStr.contains('timeoutexception');
+        if (!isNetworkError) {
+          rethrow;
+        }
+      }
+    }
+
+    if (response == null) {
+      if (lastError != null) throw lastError;
+      throw const MobileApiException(
+          'Could not connect to the rental service. Please check your network.',
+          statusCode: 503);
+    }
 
     dynamic decoded;
     try {
@@ -446,6 +511,27 @@ class MobileApiService {
     final transport = _rentalEventTransport;
     _rentalEventTransport = null;
     if (transport != null) unawaited(transport.cancel());
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    if (_retryCompleter != null && !_retryCompleter!.isCompleted) {
+      _retryCompleter!.complete();
+    }
+    _retryCompleter = null;
+  }
+
+  Future<void> _delayRetry(int seconds, int generation) async {
+    if (generation != _rentalEventGeneration ||
+        !_rentalEventController.hasListener) {
+      return;
+    }
+    final completer = Completer<void>();
+    _retryCompleter = completer;
+    _retryTimer = Timer(Duration(seconds: seconds), () {
+      if (!completer.isCompleted) completer.complete();
+    });
+    await completer.future;
+    if (_retryCompleter == completer) _retryCompleter = null;
+    _retryTimer = null;
   }
 
   Stream<Map<String, dynamic>> _readRentalEvents(int generation) async* {
@@ -453,23 +539,27 @@ class MobileApiService {
     while (!_rentalEventController.isClosed &&
         generation == _rentalEventGeneration) {
       final user = _auth.currentUser;
-      if (user == null) return;
       final connectedAt = DateTime.now();
       try {
-        final token = await user.getIdToken();
-        if (token == null || token.isEmpty) return;
+        final token = user != null ? await user.getIdToken() : null;
         if (generation != _rentalEventGeneration) return;
         final request = http.Request('GET', _uri('/rental-events'))
           ..headers['Accept'] = 'text/event-stream'
-          ..headers['Authorization'] = 'Bearer $token'
           ..headers['Cache-Control'] = 'no-cache';
+        if (token != null && token.isNotEmpty) {
+          request.headers['Authorization'] = 'Bearer $token';
+        }
         final response =
             await _client.send(request).timeout(const Duration(seconds: 30));
-        if (response.statusCode == 204 ||
-            response.statusCode == 401 ||
-            response.statusCode == 403) {
+        if (response.statusCode == 204) {
           await response.stream.drain<void>();
-          return;
+          await _delayRetry(15, generation);
+          continue;
+        }
+        if (response.statusCode == 401 || response.statusCode == 403) {
+          await response.stream.drain<void>();
+          await _delayRetry(10, generation);
+          continue;
         }
         if (response.statusCode != 200 ||
             !(response.headers['content-type'] ?? '')
@@ -519,7 +609,7 @@ class MobileApiService {
       if (DateTime.now().difference(connectedAt) > const Duration(minutes: 2)) {
         retrySeconds = 1;
       }
-      await Future<void>.delayed(Duration(seconds: retrySeconds));
+      await _delayRetry(retrySeconds, generation);
       retrySeconds = (retrySeconds * 2).clamp(1, 30).toInt();
     }
   }

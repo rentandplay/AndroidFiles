@@ -5,21 +5,24 @@ const String rentalTermsVersion = '2026-10-13-v1';
 class TermsDialog extends StatelessWidget {
   final VoidCallback onAccept;
   final VoidCallback? onDecline;
+  final String? termsText;
 
   const TermsDialog({
     super.key,
     required this.onAccept,
     this.onDecline,
+    this.termsText,
   });
 
   static Future<bool?> show(BuildContext context,
-      {required VoidCallback onAccept, VoidCallback? onDecline}) {
+      {required VoidCallback onAccept, VoidCallback? onDecline, String? termsText}) {
     return showDialog<bool>(
       context: context,
       barrierDismissible: false,
       builder: (context) => TermsDialog(
         onAccept: onAccept,
         onDecline: onDecline,
+        termsText: termsText,
       ),
     );
   }
@@ -42,10 +45,16 @@ class TermsDialog extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                'Please read these rental terms before creating your Rent & Play account.',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-              ),
+              if (termsText != null && termsText!.trim().isNotEmpty) ...[
+                Text(
+                  termsText!.trim(),
+                  style: const TextStyle(fontSize: 12, height: 1.45, color: Colors.black87),
+                ),
+              ] else ...[
+                const Text(
+                  'Please read these rental terms before creating your Rent & Play account.',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                ),
               const SizedBox(height: 12),
               _buildSectionTitle('1. Account details'),
               _buildSectionText(
@@ -72,6 +81,7 @@ class TermsDialog extends StatelessWidget {
                 'Your name, email, phone number, and ID verification details are used to manage your account, verify rental handoffs, and communicate about rentals and returns. Please provide only accurate information needed for these purposes.',
               ),
             ],
+          ],
           ),
         ),
       ),

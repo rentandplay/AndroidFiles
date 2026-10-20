@@ -43,6 +43,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _acceptedTerms = false;
+  String? _dynamicTermsText;
+  String _currentTermsVersion = rentalTermsVersion;
 
   String get _currentEmail => _emailController.text.toLowerCase();
   bool get _codeMatchesCurrentEmail =>
@@ -230,7 +232,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         password: _passwordController.text,
         phone: _normalizedPhone(_phoneController.text),
         verificationToken: _verificationToken,
-        termsVersion: rentalTermsVersion,
+        termsVersion: _currentTermsVersion,
       );
 
       if (!mounted) return;
@@ -264,7 +266,21 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _showTerms() async {
-    await TermsDialog.show(context, onAccept: () {
+    if (_dynamicTermsText == null) {
+      try {
+        final result = await MobileApiService.instance.terms();
+        if (result['terms_and_conditions'] is String &&
+            (result['terms_and_conditions'] as String).trim().isNotEmpty) {
+          _dynamicTermsText = result['terms_and_conditions'] as String;
+        }
+        if (result['terms_version'] is String &&
+            (result['terms_version'] as String).trim().isNotEmpty) {
+          _currentTermsVersion = result['terms_version'] as String;
+        }
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    await TermsDialog.show(context, termsText: _dynamicTermsText, onAccept: () {
       if (mounted) setState(() => _acceptedTerms = true);
     }, onDecline: () {
       if (mounted) setState(() => _acceptedTerms = false);

@@ -141,9 +141,8 @@ class RentalNotificationService extends ChangeNotifier {
     }
     _rentalEvents = _api.watchRentalEvents().listen((event) {
       if (_disposed || !_active || version != _generation) return;
-      if (event['event'] == 'ready') {
-        refresh();
-      } else if (event['event'] == 'rental.changed') {
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
         refresh();
       }
     });

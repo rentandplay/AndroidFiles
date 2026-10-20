@@ -1,3 +1,4 @@
+import 'dart:async';
 import '../../services/mobile_api_service.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -44,11 +45,21 @@ class CatalogScreenState extends State<CatalogScreen> {
     return ['All', ...values];
   }
 
+  StreamSubscription<Map<String, dynamic>>? _eventSubscription;
+
   @override
   void initState() {
     super.initState();
     selectedCategory = widget.initialCategory;
     _loadCatalog();
+    final api = widget.api ?? MobileApiService.instance;
+    _eventSubscription = api.watchRentalEvents().listen((event) {
+      if (!mounted) return;
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
+        _loadCatalog(quiet: true);
+      }
+    });
   }
 
   @override
@@ -67,6 +78,7 @@ class CatalogScreenState extends State<CatalogScreen> {
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }
@@ -85,11 +97,13 @@ class CatalogScreenState extends State<CatalogScreen> {
     }
   }
 
-  Future<void> _loadCatalog() async {
-    setState(() {
-      _catalogLoading = true;
-      _catalogError = '';
-    });
+  Future<void> _loadCatalog({bool quiet = false}) async {
+    if (!quiet) {
+      setState(() {
+        _catalogLoading = true;
+        _catalogError = '';
+      });
+    }
     try {
       final records = await (widget.api ?? MobileApiService.instance).catalog();
       if (mounted) {
@@ -103,7 +117,7 @@ class CatalogScreenState extends State<CatalogScreen> {
     } catch (error) {
       if (mounted) {
         setState(() {
-          _catalogError = error.toString();
+          if (!quiet || catalogItems.isEmpty) _catalogError = error.toString();
           _catalogLoading = false;
         });
       }

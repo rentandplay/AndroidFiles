@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -116,10 +117,25 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
     }
   }
 
+  StreamSubscription<Map<String, dynamic>>? _eventSubscription;
+
   @override
   void initState() {
     super.initState();
     _load();
+    _eventSubscription = _api.watchRentalEvents().listen((event) {
+      if (!mounted) return;
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
+        _load();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _load() async {

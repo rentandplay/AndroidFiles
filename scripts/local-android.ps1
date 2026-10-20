@@ -62,9 +62,11 @@ function Get-AdbPath {
 
     $sdkDirectory = if ($env:ANDROID_HOME) { $env:ANDROID_HOME }
         elseif ($env:ANDROID_SDK_ROOT) { $env:ANDROID_SDK_ROOT }
+        elseif (Test-Path -LiteralPath 'C:\Android\SDK') { 'C:\Android\SDK' }
         else { Join-Path $env:LOCALAPPDATA 'Android\Sdk' }
     $adbExecutable = Join-Path $sdkDirectory 'platform-tools\adb.exe'
     if (Test-Path -LiteralPath $adbExecutable) { return $adbExecutable }
+    if (Test-Path -LiteralPath 'C:\Android\SDK\platform-tools\adb.exe') { return 'C:\Android\SDK\platform-tools\adb.exe' }
 
     throw 'Android SDK platform-tools are required. Set ANDROID_HOME to your SDK directory.'
 }

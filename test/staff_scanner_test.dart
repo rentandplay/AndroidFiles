@@ -157,6 +157,41 @@ void main() {
     expect(tester.takeException(), isNull);
   });
   testWidgets(
+      'QR codes outside the viewfinder window are ignored until placed inside the window',
+      (tester) async {
+    final results = <String?>[];
+    await open(tester, onResult: results.add);
+    // Outside the viewfinder window (top left at x=10, y=10)
+    camera.captures.add(const BarcodeCapture(
+      size: Size(480, 640),
+      barcodes: [
+        Barcode(
+          rawValue: 'outside-code',
+          corners: [Offset(10, 10), Offset(30, 10), Offset(30, 30), Offset(10, 30)],
+        ),
+      ],
+    ));
+    await tester.pump();
+    expect(results, isEmpty);
+    expect(find.byType(QrCaptureScreen), findsOneWidget);
+
+    // Inside the viewfinder window (center of 480x640: x=240, y=320)
+    camera.captures.add(const BarcodeCapture(
+      size: Size(480, 640),
+      barcodes: [
+        Barcode(
+          rawValue: 'inside-code',
+          corners: [Offset(230, 310), Offset(250, 310), Offset(250, 330), Offset(230, 330)],
+        ),
+      ],
+    ));
+    await tester.pumpAndSettle();
+    expect(results, ['inside-code']);
+    expect(find.byType(QrCaptureScreen), findsNothing);
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
       'pause and resume serialize camera changes and flashlight failures stay recoverable',
       (tester) async {
     await open(tester);

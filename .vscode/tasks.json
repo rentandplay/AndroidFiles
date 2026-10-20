@@ -4,7 +4,7 @@
     {
       "label": "Rent & Play: Forward local API over USB",
       "type": "process",
-      "command": "${env:LOCALAPPDATA}/Android/Sdk/platform-tools/adb.exe",
+      "command": "C:/Android/SDK/platform-tools/adb.exe",
       "args": ["reverse", "tcp:3000", "tcp:3000"],
       "problemMatcher": []
     }

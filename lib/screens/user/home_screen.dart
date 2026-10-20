@@ -49,21 +49,30 @@ class HomeScreenState extends State<HomeScreen> {
   int _carouselIndex = 0;
 
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
+  StreamSubscription<Map<String, dynamic>>? _eventSubscription;
 
   @override
   void initState() {
     super.initState();
     _loadHome();
+    _eventSubscription = _api.watchRentalEvents().listen((event) {
+      if (!mounted) return;
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
+        _loadHome(quiet: true);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _carouselController.dispose();
     super.dispose();
   }
 
-  Future<void> _loadHome() async {
-    if (mounted) setState(() => _loading = true);
+  Future<void> _loadHome({bool quiet = false}) async {
+    if (!quiet && mounted) setState(() => _loading = true);
     final isSignedIn =
         Provider.of<AuthService>(context, listen: false).currentUser != null;
 

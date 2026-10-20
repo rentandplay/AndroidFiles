@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -32,15 +34,26 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
   List<RentalModel> _loadedRecords = [];
 
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
+  StreamSubscription<Map<String, dynamic>>? _eventSubscription;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _eventSubscription = _api.watchRentalEvents().listen((event) {
+      if (!mounted) return;
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
+        setState(() {
+          _future = _load();
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
+    _eventSubscription?.cancel();
     _searchController.dispose();
     super.dispose();
   }

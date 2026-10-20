@@ -75,9 +75,8 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     if (!widget.isActive || !_appResumed || _eventUid == null) return;
     _rentalEvents = _api.watchRentalEvents().listen((event) {
       if (!mounted) return;
-      if (event['event'] == 'rental.changed') {
-        _refreshRentals();
-      } else if (event['event'] == 'ready') {
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
         _refreshRentals();
       }
     });

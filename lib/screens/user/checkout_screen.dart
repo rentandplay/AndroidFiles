@@ -35,6 +35,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _quoteError = '';
   int _quoteVersion = 0;
   String _requestKey = MobileApiService.operationKey();
+  String? _dynamicRentalTermsText;
+  String _currentRentalTermsVersion = mobileRentalTermsVersion;
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
   bool get _hasDailyBaseRate =>
@@ -92,6 +94,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             : _durationChoices.first;
     _loadQuote();
     _loadPaymentInstructions();
+    _loadTerms();
+  }
+
+  Future<void> _loadTerms() async {
+    try {
+      final res = await _api.terms();
+      if (mounted) {
+        setState(() {
+          final rentalText = res['rentalTerms'] as String?;
+          if (rentalText != null && rentalText.trim().isNotEmpty) {
+            _dynamicRentalTermsText = rentalText.trim();
+          }
+          final rentalVer = res['rentalTermsVersion'] as String?;
+          if (rentalVer != null && rentalVer.trim().isNotEmpty) {
+            _currentRentalTermsVersion = rentalVer.trim();
+          }
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadPaymentInstructions() async {
@@ -259,22 +280,30 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         ? _customResortController.text.trim()
                         : _selectedResort),
                 RentalValueRow('Payment',
-                    _paymentMethod == 'QR' ? 'InstaPay' : 'Cash at handoff'),
+                    _paymentMethod == 'QR' ? 'InstaPay / GCash' : 'Cash at handoff'),
                 const SizedBox(height: 12),
-                const Text(
-                  'Your request must be approved by the admin. The rental timer starts when staff verifies and hands over the equipment. The return time above is an estimate based on a handoff now; My Rentals will show the confirmed due time after handoff.',
-                  style: TextStyle(height: 1.45),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Return the same equipment and all included accessories by the confirmed due time. A return request alone does not stop the timer; staff must record receipt of the item. Late fees use the rate shown above. Damage, loss, or missing accessories may result in recorded charges after inspection.',
-                  style: TextStyle(height: 1.45),
-                ),
-                const SizedBox(height: 10),
-                const Text(
-                  'Show one physical Government or Student ID at handoff. For InstaPay, upload the successful transfer receipt; staff must verify the payment before approving the request.',
-                  style: TextStyle(height: 1.45),
-                ),
+                if (_dynamicRentalTermsText != null &&
+                    _dynamicRentalTermsText!.isNotEmpty)
+                  Text(
+                    _dynamicRentalTermsText!,
+                    style: const TextStyle(height: 1.45),
+                  )
+                else ...[
+                  const Text(
+                    'Your request must be approved by the admin. The rental timer starts when staff verifies and hands over the equipment. The return time above is an estimate based on a handoff now; My Rentals will show the confirmed due time after handoff.',
+                    style: TextStyle(height: 1.45),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Return the same equipment and all included accessories by the confirmed due time. A return request alone does not stop the timer; staff must record receipt of the item. Late fees use the rate shown above. Damage, loss, or missing accessories may result in recorded charges after inspection.',
+                    style: TextStyle(height: 1.45),
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    'Show one physical Government or Student ID at handoff. For InstaPay or GCash, upload the successful transfer receipt; staff must verify the payment before approving the request.',
+                    style: TextStyle(height: 1.45),
+                  ),
+                ],
               ],
             ),
           ),
@@ -311,11 +340,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       }
       if (_paymentMethod == 'QR' && !_paymentConfirmed) {
         throw const MobileApiException(
-            'Confirm that the InstaPay transfer succeeded.');
+            'Confirm that the InstaPay / GCash transfer succeeded.');
       }
       if (_paymentMethod == 'QR' && _paymentProofImage == null) {
         throw const MobileApiException(
-            'Upload a screenshot of the successful InstaPay transfer.');
+            'Upload a screenshot of the successful InstaPay / GCash transfer.');
       }
       await _api.createRentalRequest(
         itemId: widget.item.id,
@@ -338,7 +367,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             'overtimeRate': _quote!['overtime_rate'],
         },
         acceptedRentalTerms: true,
-        rentalTermsVersion: mobileRentalTermsVersion,
+        rentalTermsVersion: _currentRentalTermsVersion,
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -629,11 +658,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                     icon: Icon(Icons.payments_outlined),
                                     label: Text('Cash')),
                                 if (_paymentInstructions?[
-                                    'instapay_qr_data_url'] is String)
+                                            'instapay_qr_data_url']
+                                        is String ||
+                                    _paymentInstructions?['gcash_qr_data_url']
+                                        is String)
                                   const ButtonSegment<String>(
                                       value: 'QR',
                                       icon: Icon(Icons.qr_code_2_rounded),
-                                      label: Text('InstaPay')),
+                                      label: Text('InstaPay / GCash')),
                               ],
                               selected: {_paymentMethod},
                               showSelectedIcon: false,
@@ -652,11 +684,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                             ),
                             if (_paymentInstructions != null &&
                                 _paymentInstructions?['instapay_qr_data_url']
+                                    is! String &&
+                                _paymentInstructions?['gcash_qr_data_url']
                                     is! String)
                               Padding(
                                 padding: const EdgeInsets.only(top: 10),
                                 child: Text(
-                                    'InstaPay is not set up yet. Choose cash for now.',
+                                    'Online QR payment is not set up yet. Choose cash for now.',
                                     style: TextStyle(
                                         color: scheme.onSurfaceVariant,
                                         fontSize: 12)),
@@ -666,18 +700,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                       if (_paymentMethod == 'QR') ...[
                         RentalSection(
-                            title: 'Pay by InstaPay',
+                            title: 'Pay via InstaPay / GCash',
                             icon: Icons.qr_code_2,
                             subtitle:
                                 'Scan to transfer, then upload your receipt.',
                             child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.stretch,
                                 children: [
-                                  if (_paymentInstructions?['instapay_qr_data_url']
-                                          is String &&
-                                      (_paymentInstructions!['instapay_qr_data_url']
-                                              as String)
-                                          .startsWith('data:image/'))
+                                  if ((_paymentInstructions?[
+                                                  'instapay_qr_data_url']
+                                              as String?)
+                                          ?.startsWith('data:image/') ==
+                                      true ||
+                                      (_paymentInstructions?[
+                                                  'gcash_qr_data_url']
+                                              as String?)
+                                          ?.startsWith('data:image/') ==
+                                      true)
                                     Center(
                                         child: Container(
                                             constraints: const BoxConstraints(
@@ -688,8 +727,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                                 borderRadius:
                                                     BorderRadius.circular(12)),
                                             child: Image.memory(base64Decode(
-                                                (_paymentInstructions![
-                                                            'instapay_qr_data_url']
+                                                ((_paymentInstructions![
+                                                                'instapay_qr_data_url'] ??
+                                                            _paymentInstructions![
+                                                                'gcash_qr_data_url'])
                                                         as String)
                                                     .split(',')
                                                     .last)))),
@@ -754,7 +795,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                               _paymentConfirmed =
                                                   value ?? false),
                                       title: const Text(
-                                          'I completed this InstaPay transfer')),
+                                          'I completed this InstaPay / GCash transfer')),
                                 ])),
                       ],
                       RentalSection(

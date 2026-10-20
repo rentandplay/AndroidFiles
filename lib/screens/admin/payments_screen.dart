@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/admin_api_service.dart';
@@ -23,6 +25,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       ? 'Not recorded'
       : '₱${NumberFormat('#,##0.00').format(value)}';
 
+  StreamSubscription<Map<String, dynamic>>? _eventSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -31,6 +35,19 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     _range =
         DateTimeRange(start: end.subtract(const Duration(days: 29)), end: end);
     _load();
+    _eventSubscription = widget.api.watchRentalEvents().listen((event) {
+      if (!mounted) return;
+      final type = (event['event'] ?? '').toString();
+      if (type == 'ready' || type.endsWith('.changed')) {
+        _load(force: true);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _eventSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _load({bool more = false, bool force = false}) async {
