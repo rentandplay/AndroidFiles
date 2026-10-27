@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -28,34 +27,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   final GlobalKey<CatalogScreenState> _catalogKey =
       GlobalKey<CatalogScreenState>();
   final List<Widget?> _pages = List<Widget?>.filled(5, null);
-
-  static const _destinations = <NavigationDestination>[
-    NavigationDestination(
-      icon: Icon(Icons.home_outlined),
-      selectedIcon: Icon(Icons.home_rounded),
-      label: 'Home',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.storefront_outlined),
-      selectedIcon: Icon(Icons.storefront_rounded),
-      label: 'Browse',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.shopping_bag_outlined),
-      selectedIcon: Icon(Icons.shopping_bag_rounded),
-      label: 'Rentals',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.history_rounded),
-      selectedIcon: Icon(Icons.history),
-      label: 'History',
-    ),
-    NavigationDestination(
-      icon: Icon(Icons.person_outline_rounded),
-      selectedIcon: Icon(Icons.person_rounded),
-      label: 'Profile',
-    ),
-  ];
 
   @override
   void initState() {
@@ -94,7 +65,11 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
             isActive: _selectedIndex == 2,
           ),
         3 => RentalHistoryScreen(onBrowse: () => _selectPage(1)),
-        _ => const ProfileScreen(showBackButton: false),
+        _ => ProfileScreen(
+            showBackButton: false,
+            onViewRentals: () => _selectPage(2),
+            onViewHistory: () => _selectPage(3),
+          ),
       };
 
   void _openItem(ItemModel item) {
@@ -127,8 +102,6 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   @override
   Widget build(BuildContext context) {
     final isSignedIn = Provider.of<AuthService>(context).currentUser != null;
-    final scheme = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Scaffold(
       extendBody: true,
       body: isSignedIn

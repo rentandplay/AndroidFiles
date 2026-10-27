@@ -1,3 +1,5 @@
+import 'liquid_glass.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
@@ -61,38 +63,47 @@ class RentalSection extends StatelessWidget {
   final String? title, subtitle;
   final IconData? icon;
   final Widget child;
+
   @override
-  Widget build(BuildContext context) => Card(
+  Widget build(BuildContext context) => GlassCard(
         margin: const EdgeInsets.only(bottom: 16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            if (title != null) ...[
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                if (icon != null) ...[
-                  Icon(icon,
-                      size: 21, color: Theme.of(context).colorScheme.primary),
-                  const SizedBox(width: 9),
-                ],
-                Expanded(
-                    child: Text(title!,
-                        style: const TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.w700))),
-              ]),
-              if (subtitle != null) ...[
-                const SizedBox(height: 5),
-                Text(subtitle!,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        height: 1.4,
-                        fontSize: 13)),
+        borderRadius: 20,
+        padding: const EdgeInsets.all(18),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (title != null) ...[
+            Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (icon != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(icon,
+                      size: 19, color: Theme.of(context).colorScheme.primary),
+                ),
+                const SizedBox(width: 10),
               ],
-              const SizedBox(height: 14),
+              Expanded(
+                  child: Text(title!,
+                      style: const TextStyle(
+                          fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2))),
+            ]),
+            if (subtitle != null) ...[
+              const SizedBox(height: 5),
+              Text(subtitle!,
+                  style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                      fontSize: 13)),
             ],
-            child,
-          ]),
-        ),
+            const SizedBox(height: 14),
+          ],
+          child,
+        ]),
       );
 }
 
@@ -182,66 +193,155 @@ class RentalActionBar extends StatelessWidget {
   final bool busy;
   final String? summaryLabel, summaryValue;
   final Widget? secondary;
+
   @override
-  Widget build(BuildContext context) => AnimatedPadding(
-        duration: const Duration(milliseconds: 150),
-        padding:
-            EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-        child: Material(
-          color: Theme.of(context).colorScheme.surface,
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final glassFill = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: isDark
+          ? [
+              const Color(0xFF162030).withValues(alpha: 0.88),
+              const Color(0xFF0D1420).withValues(alpha: 0.78),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.90),
+              const Color(0xFFFAF6F0).withValues(alpha: 0.80),
+            ],
+    );
+
+    final specularBorder = LinearGradient(
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: 0.22),
+              const Color(0xFFDF762D).withValues(alpha: 0.25),
+              Colors.white.withValues(alpha: 0.10),
+            ]
+          : [
+              Colors.white.withValues(alpha: 0.95),
+              const Color(0xFFF3ECE4).withValues(alpha: 0.60),
+              const Color(0xFFDF762D).withValues(alpha: 0.25),
+              Colors.white.withValues(alpha: 0.80),
+            ],
+    );
+
+    return AnimatedPadding(
+      duration: const Duration(milliseconds: 150),
+      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+      child: ClipRect(
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
           child: Container(
             decoration: BoxDecoration(
-                border: Border(
-                    top: BorderSide(color: Theme.of(context).dividerColor))),
-            child: SafeArea(
-                top: false,
-                // Scaffold gives bottom bars the available screen height. Keep
-                // the centering wrapper shrink-wrapped so it does not cover
-                // the app bar and the rental form above it.
-                child: Center(
-                  heightFactor: 1,
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 712),
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
-                      child: Column(mainAxisSize: MainAxisSize.min, children: [
-                        if (summaryLabel != null) ...[
-                          RentalValueRow(summaryLabel!, summaryValue ?? '—',
-                              emphasis: true),
-                          const SizedBox(height: 6),
-                        ],
-                        SizedBox(
-                            width: double.infinity,
-                            child: FilledButton(
-                              onPressed: busy ? null : onPressed,
-                              style: FilledButton.styleFrom(
-                                  minimumSize: const Size.fromHeight(50),
-                                  backgroundColor:
-                                      Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? const Color(0xFFF0AD7C)
-                                          : const Color(0xFFB45316),
-                                  foregroundColor:
-                                      Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? const Color(0xFF0F172A)
-                                          : Colors.white),
-                              child: busy
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2))
-                                  : Text(label, textAlign: TextAlign.center),
-                            )),
-                        if (secondary != null) secondary!,
-                      ]),
+              gradient: glassFill,
+              boxShadow: [
+                BoxShadow(
+                  color: isDark
+                      ? Colors.black.withValues(alpha: 0.35)
+                      : const Color(0xFF0F172A).withValues(alpha: 0.06),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  height: 1.2,
+                  child: Container(
+                    decoration: BoxDecoration(gradient: specularBorder),
+                  ),
+                ),
+                SafeArea(
+                  top: false,
+                  child: Center(
+                    heightFactor: 1,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 712),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (summaryLabel != null) ...[
+                              RentalValueRow(
+                                summaryLabel!,
+                                summaryValue ?? '—',
+                                emphasis: true,
+                              ),
+                              const SizedBox(height: 8),
+                            ],
+                            SizedBox(
+                              width: double.infinity,
+                              child: Container(
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFDF762D)
+                                          .withValues(alpha: 0.35),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                child: FilledButton(
+                                  onPressed: busy ? null : onPressed,
+                                  style: FilledButton.styleFrom(
+                                    minimumSize: const Size.fromHeight(50),
+                                    backgroundColor: Colors.transparent,
+                                    shadowColor: Colors.transparent,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                    ),
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  child: busy
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2,
+                                            valueColor:
+                                                AlwaysStoppedAnimation<Color>(
+                                                    Colors.white),
+                                          ),
+                                        )
+                                      : Text(
+                                          label,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w700,
+                                            letterSpacing: -0.2,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ),
+                            if (secondary != null) secondary!,
+                          ],
+                        ),
+                      ),
                     ),
                   ),
-                )),
+                ),
+              ],
+            ),
           ),
         ),
-      );
+      ),
+    );
+  }
 }
 
 class RentalSteps extends StatelessWidget {

@@ -1,3 +1,5 @@
+import '../../widgets/glass_app_bar.dart';
+import '../../widgets/liquid_glass.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -15,14 +17,12 @@ class ItemDetailsScreen extends StatelessWidget {
   final ItemModel item;
 
   Future<void> _showRentalGuide(BuildContext context) =>
-      showModalBottomSheet<void>(
+      showFrostedModalBottomSheet<void>(
         context: context,
         isScrollControlled: true,
-        showDragHandle: true,
-        builder: (sheetContext) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            child: SingleChildScrollView(
+        builder: (sheetContext) => Padding(
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+          child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 mainAxisSize: MainAxisSize.min,
@@ -79,7 +79,6 @@ class ItemDetailsScreen extends StatelessWidget {
               ),
             ),
           ),
-        ),
       );
 
   Future<void> _continueToRental(BuildContext context) async {
@@ -144,14 +143,23 @@ class ItemDetailsScreen extends StatelessWidget {
         ? 'See rental price in the next step'
         : item.rateText.trim();
 
+    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
+
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Equipment details'),
+      extendBodyBehindAppBar: true,
+      extendBody: true,
+      appBar: GlassAppBar(
+        leading: HeaderActionPod(
+          icon: Icons.arrow_back_rounded,
+          tooltip: 'Back',
+          onTap: () => Navigator.pop(context),
+        ),
+        titleText: 'Equipment details',
         actions: [
-          IconButton(
+          HeaderActionPod(
+            icon: Icons.help_outline_rounded,
             tooltip: 'How renting works',
-            onPressed: () => _showRentalGuide(context),
-            icon: const Icon(Icons.help_outline_rounded),
+            onTap: () => _showRentalGuide(context),
           ),
         ],
       ),
@@ -163,7 +171,7 @@ class ItemDetailsScreen extends StatelessWidget {
       ),
       body: SingleChildScrollView(
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        padding: EdgeInsets.fromLTRB(16, topPadding + 14, 16, 100),
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 680),

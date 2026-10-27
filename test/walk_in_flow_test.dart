@@ -44,6 +44,30 @@ class WalkInApi extends MobileApiService {
         'delivery_prepared': true
       };
     }
+    if (path.endsWith('/terminal-dispatch')) {
+      return {
+        'request': {
+          'id': 'req-esp32',
+          'terminal_code': 'TERM-01',
+          'verification_code': '842910',
+          'rental_code': 'R-0001',
+          'item_name': 'Basketball',
+          'terminal_mode': body?['mode'] ?? 'HANDOVER',
+          'status': 'PENDING',
+        },
+        'rental': {'id': 'rental', 'rental_code': 'R-0001'}
+      };
+    }
+    if (path == '/records/rentals/rental') {
+      return {
+        'record': {
+          'id': 'rental',
+          'status': 'ACTIVE',
+          'delivery_status': 'OUT_FOR_DELIVERY',
+          'latest_terminal_request_status': 'CONFIRMED',
+        }
+      };
+    }
     return {
       'rental': {'id': 'rental', 'rental_code': 'R-0001'}
     };
@@ -185,6 +209,58 @@ void main() {
     expect(api.calls.last['customerTermsAcknowledged'], true);
     expect(api.calls.last['customerVerified'], true);
     expect(api.calls.last['paymentVerified'], true);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'staff can dispatch handover to ESP32 Counter Terminal and confirm via terminal dialog',
+      (tester) async {
+    final api = WalkInApi();
+    await tester.pumpWidget(MaterialApp(
+        home: RentalAdminActionScreen(
+            api: api,
+            row: const {
+              'id': 'rental',
+              'rental_code': 'R-0001',
+              'request_source': 'WALK_IN',
+              'fulfillment_mode': 'SHOP_HANDOVER',
+              'status': 'APPROVED',
+              'delivery_status': 'PREPARED',
+              'item_name': 'Basketball',
+              'customer_name': 'Juan Dela Cruz',
+              'rental_fee': 50,
+              'fee_breakdown': {
+                'billed_minutes': 60,
+                'overtime_rate': 10,
+                'overtime_unit_minutes': 60
+              },
+            },
+            action: 'release',
+            workspace: const {})));
+    await tapVisible(tester, find.text('Verify customer rental'));
+    for (final text in [
+      'The receiver matches the rental customer.',
+      'Customer agreed to the duration, total, late fees, and physical return inspection.',
+      'Rental payment received and verified',
+      'I checked this unit and all included accessories.'
+    ]) {
+      await tapVisible(tester, find.text(text));
+    }
+    await tapVisible(
+        tester,
+        find.widgetWithText(
+            OutlinedButton, 'Confirm on ESP32 Terminal'));
+    expect(find.text('ESP32 Counter Terminal'), findsOneWidget);
+    expect(find.text('SSD1306 OLED · TERM-01'), findsOneWidget);
+    expect(find.text('! COUNTER HANDOVER !'), findsOneWidget);
+    expect(find.text('ID: R-0001 · PIN: 842910'), findsOneWidget);
+    expect(
+        api.calls.any((call) =>
+            call['path'] == '/rentals/rental/terminal-dispatch' &&
+            call['mode'] == 'HANDOVER'),
+        true);
+    await tapVisible(tester, find.text('Check confirmation'));
+    expect(find.text('ESP32 Counter Terminal'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

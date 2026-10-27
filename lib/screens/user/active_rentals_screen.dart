@@ -1,3 +1,6 @@
+import '../../widgets/liquid_glass.dart';
+import '../../widgets/rental_dual_tracker.dart';
+import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -335,36 +338,48 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
           .length,
       'Returning': returnCount,
     };
+    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
     return Scaffold(
-      appBar: AppBar(title: const Text('My Rentals'), actions: [
-        IconButton(
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
+        loading: _refreshing,
+        titleText: 'My Rentals',
+        actions: [
+          HeaderActionPod(
+            icon: Icons.refresh_rounded,
             tooltip: 'Refresh rentals',
-            onPressed: _refreshRentals,
-            icon: const Icon(Icons.refresh)),
-      ]),
-      body: user == null
-          ? RentalEmptyState(
-              title: 'Sign in to view rentals',
-              message:
-                  'Your rental requests and equipment in use will appear here.',
-              action: FilledButton.icon(
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+            onTap: _refreshRentals,
+          ),
+          if (user != null) const RentalNotificationBellPod(),
+        ],
+      ),
+      body: LiquidAmbientBackdrop(
+        child: user == null
+          ? SafeArea(
+              child: RentalEmptyState(
+                title: 'Sign in to view rentals',
+                message:
+                    'Your rental requests and equipment in use will appear here.',
+                action: FilledButton.icon(
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  ),
+                  icon: const Icon(Icons.login_rounded),
+                  label: const Text('Sign in'),
                 ),
-                icon: const Icon(Icons.login_rounded),
-                label: const Text('Sign in'),
               ),
             )
           : _rentals == null && _error.isEmpty
               ? const Center(child: CircularProgressIndicator())
               : RefreshIndicator(
+                  edgeOffset: topPadding,
                   onRefresh: _refreshRentals,
                   child: ListView(
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(16),
+                      padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 100),
                       children: [
                         if (_error.isNotEmpty) ...[
                           RentalNotice(
@@ -492,6 +507,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                           ),
                       ]),
                 ),
+        ),
     );
   }
 }
@@ -659,7 +675,7 @@ class RentalBookingCard extends StatelessWidget {
         ),
       ]),
       const SizedBox(height: 18),
-      _RentalProgressTracker(step: _progressStep()),
+      RentalDualTracker(rental: rental, step: _progressStep()),
       const SizedBox(height: 18),
       _RentalNextStep(
           title: heading, message: message, icon: nextIcon, color: alertColor),

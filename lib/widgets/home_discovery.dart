@@ -4,7 +4,6 @@ import '../models/item_model.dart';
 import '../theme/app_theme.dart';
 import '../utils/catalog_price.dart';
 import 'liquid_glass.dart';
-import 'mobile_controls.dart';
 
 /// Discovery content uses the live catalog, including its prices and stock.
 class HomeDiscovery extends StatelessWidget {
@@ -134,27 +133,45 @@ class HomeDiscovery extends StatelessWidget {
       );
 
   Widget _categoryChip(BuildContext context, String category) {
-    final scheme = Theme.of(context).colorScheme;
     final accent = _categoryColor(category);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return LiquidGlassContainer(
-      borderRadius: 16,
-      blurSigma: 12,
-      padding: const EdgeInsets.fromLTRB(9, 8, 14, 8),
+      borderRadius: 22,
+      blurSigma: 14,
+      padding: const EdgeInsets.fromLTRB(8, 7, 16, 7),
       onTap: () => onCategorySelected(category),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
-          width: 32,
-          height: 32,
+          width: 36,
+          height: 36,
           decoration: BoxDecoration(
-            color: accent.withValues(alpha: .18),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: accent.withValues(alpha: .3)),
+            shape: BoxShape.circle,
+            gradient: RadialGradient(
+              colors: [
+                accent.withValues(alpha: isDark ? 0.40 : 0.22),
+                accent.withValues(alpha: isDark ? 0.12 : 0.06),
+              ],
+            ),
+            border: Border.all(
+              color: accent.withValues(alpha: isDark ? 0.50 : 0.35),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: accent.withValues(alpha: 0.22),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
           ),
           child: Icon(_categoryIcon(category), color: accent, size: 18),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 9),
         Text(category,
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: isDark ? Colors.white : const Color(0xFF1E293B))),
       ]),
     );
   }
@@ -166,12 +183,12 @@ class HomeDiscovery extends StatelessWidget {
     final accent = _categoryColor(item.category);
     final rate = catalogPriceLabel(item);
     final textScaler = MediaQuery.textScalerOf(context);
-    final width = (MediaQuery.sizeOf(context).width * .44).clamp(150.0, 200.0);
+    final width = (MediaQuery.sizeOf(context).width * .48).clamp(165.0, 210.0);
     return SizedBox(
       width: width,
       child: LiquidGlassContainer(
-        borderRadius: 20,
-        blurSigma: 12,
+        borderRadius: 22,
+        blurSigma: 14,
         onTap: () => onItemSelected(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -180,9 +197,21 @@ class HomeDiscovery extends StatelessWidget {
             Stack(
               children: [
                 Container(
-                  color: accent.withValues(alpha: dark ? .16 : .08),
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 8),
-                  child: item.buildImage(fit: BoxFit.contain, height: 100),
+                  height: 112,
+                  decoration: BoxDecoration(
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 0.85,
+                      colors: [
+                        accent.withValues(alpha: dark ? .26 : .14),
+                        accent.withValues(alpha: dark ? .04 : .01),
+                      ],
+                    ),
+                  ),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                  child: Center(
+                    child: item.buildImage(fit: BoxFit.contain, height: 95),
+                  ),
                 ),
                 Positioned(
                   top: 0,
@@ -204,6 +233,32 @@ class HomeDiscovery extends StatelessWidget {
                     ),
                   ),
                 ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 7, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: (dark ? const Color(0xFF141D2C) : Colors.white)
+                          .withValues(alpha: 0.88),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: accent.withValues(alpha: 0.35),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Text(
+                      item.category.toUpperCase(),
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                  ),
+                ),
               ],
             ),
             Padding(
@@ -211,14 +266,6 @@ class HomeDiscovery extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item.category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          color: scheme.onSurfaceVariant,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
                   ConstrainedBox(
                     constraints: BoxConstraints(
                         minHeight: textScaler.scale(14) * 1.25 * 2),
@@ -231,36 +278,48 @@ class HomeDiscovery extends StatelessWidget {
                             fontWeight: FontWeight.w800)),
                   ),
                   const SizedBox(height: 6),
-                  ConstrainedBox(
-                      constraints: BoxConstraints(
-                          minHeight: textScaler.scale(11) * 1.3 * 2),
-                      child: Tooltip(
-                        message: item.rateText.isEmpty ? rate : item.rateText,
-                        child: Text(rate,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                fontSize: 11,
-                                height: 1.3,
-                                color: mobileAccentText(context),
-                                fontWeight: FontWeight.w700)),
-                      )),
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: (dark
+                              ? const Color(0xFF1E2838)
+                              : const Color(0xFFFFF7ED))
+                          .withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(
+                        color: const Color(0xFFDF762D).withValues(alpha: 0.30),
+                        width: 1.0,
+                      ),
+                    ),
+                    child: Tooltip(
+                      message: item.rateText.isEmpty ? rate : item.rateText,
+                      child: Text(rate,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              fontSize: 11,
+                              height: 1.25,
+                              color: Color(0xFFDF762D),
+                              fontWeight: FontWeight.w800)),
+                    ),
+                  ),
                   const SizedBox(height: 9),
                   Row(children: [
                     Container(
-                        width: 6,
-                        height: 6,
+                        width: 7,
+                        height: 7,
                         decoration: BoxDecoration(
                             shape: BoxShape.circle,
                             color: available
-                                ? const Color(0xFF27876B)
+                                ? const Color(0xFF10B981)
                                 : scheme.onSurfaceVariant,
                             boxShadow: available
                                 ? [
                                     BoxShadow(
-                                      color: const Color(0xFF27876B)
+                                      color: const Color(0xFF10B981)
                                           .withValues(alpha: 0.6),
-                                      blurRadius: 4,
+                                      blurRadius: 5,
                                       spreadRadius: 1,
                                     ),
                                   ]
@@ -269,15 +328,24 @@ class HomeDiscovery extends StatelessWidget {
                     Expanded(
                         child: Text(available ? 'Available' : 'Unavailable',
                             style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 10.5,
                                 color: available
                                     ? dark
                                         ? const Color(0xFF89D5B8)
-                                        : const Color(0xFF216F56)
+                                        : const Color(0xFF047857)
                                     : scheme.onSurfaceVariant,
                                 fontWeight: FontWeight.w700))),
-                    Icon(Icons.arrow_forward_rounded,
-                        size: 14, color: scheme.onSurfaceVariant),
+                    Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: (dark
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.04)),
+                      ),
+                      child: Icon(Icons.arrow_forward_rounded,
+                          size: 13, color: scheme.onSurfaceVariant),
+                    ),
                   ]),
                 ],
               ),
@@ -331,46 +399,83 @@ class HomeDiscovery extends StatelessWidget {
     ];
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: scheme.primary.withValues(alpha: dark ? .12 : .06),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: scheme.primary.withValues(alpha: .12)),
-        ),
+      child: LiquidGlassContainer(
+        borderRadius: 24,
+        blurSigma: 14,
+        glowColor: const Color(0xFFDF762D),
+        padding: const EdgeInsets.all(18),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text('How it works',
-              style: TextStyle(
-                  color: scheme.onSurface,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 15)),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFDF762D).withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.help_outline_rounded,
+                    size: 16, color: Color(0xFFDF762D)),
+              ),
+              const SizedBox(width: 8),
+              Text('How it works',
+                  style: TextStyle(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 15)),
+            ],
+          ),
           const SizedBox(height: 16),
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             for (var i = 0; i < steps.length; i++) ...[
-              if (i > 0) const SizedBox(width: 12),
+              if (i > 0) const SizedBox(width: 10),
               Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Container(
-                        width: 34,
-                        height: 34,
-                        decoration: BoxDecoration(
-                            color: scheme.surface,
-                            borderRadius: BorderRadius.circular(11)),
-                        child:
-                            Icon(steps[i].$1, color: scheme.primary, size: 19)),
-                    const SizedBox(height: 8),
-                    Text('${i + 1}. ${steps[i].$2}',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 4),
-                    Text(steps[i].$3,
-                        style: TextStyle(
-                            fontSize: 10,
-                            height: 1.4,
-                            color: scheme.onSurfaceVariant)),
-                  ])),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: (dark
+                              ? const Color(0xFF1E2638)
+                              : Colors.white)
+                          .withValues(alpha: dark ? 0.6 : 0.7),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: dark
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : const Color(0xFFE2E8F0),
+                      ),
+                    ),
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Container(
+                          width: 32,
+                          height: 32,
+                          decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
+                              ),
+                              borderRadius: BorderRadius.circular(10),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFDF762D)
+                                      .withValues(alpha: 0.3),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]),
+                          child:
+                              Icon(steps[i].$1, color: Colors.white, size: 18)),
+                      const SizedBox(height: 8),
+                      Text('${i + 1}. ${steps[i].$2}',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 4),
+                      Text(steps[i].$3,
+                          style: TextStyle(
+                              fontSize: 10,
+                              height: 1.4,
+                              color: scheme.onSurfaceVariant)),
+                    ]),
+                  )),
             ],
           ]),
           const SizedBox(height: 14),

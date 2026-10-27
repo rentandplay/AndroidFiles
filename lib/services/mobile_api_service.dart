@@ -60,12 +60,13 @@ class MobileApiService {
 
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
-    defaultValue: 'http://192.168.1.35:3000/api',
+    defaultValue: 'https://rent-and-play.onrender.com/api',
   );
 
   static final List<String> _candidateBaseUrls = () {
     final list = <String>[
       _configuredBaseUrl,
+      'https://rent-and-play.onrender.com/api',
       'http://192.168.1.35:3000/api',
       'http://127.0.0.1:3000/api',
       'http://10.0.2.2:3000/api',
@@ -251,19 +252,19 @@ class MobileApiService {
     return switch (method) {
       'PATCH' => _client
           .patch(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15)),
+          .timeout(const Duration(seconds: 60)),
       'PUT' => _client
           .put(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15)),
+          .timeout(const Duration(seconds: 60)),
       'DELETE' => _client
           .delete(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15)),
+          .timeout(const Duration(seconds: 60)),
       'POST' => _client
           .post(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 15)),
+          .timeout(const Duration(seconds: 60)),
       _ => _client
           .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 15)),
+          .timeout(const Duration(seconds: 60)),
     };
   }
 
@@ -292,7 +293,6 @@ class MobileApiService {
     }
 
     if (body != null) headers['Content-Type'] = 'application/json';
-<<<<<<< Updated upstream
 
     final candidateUrls = [
       _activeBaseUrl,
@@ -328,39 +328,6 @@ class MobileApiService {
       throw const MobileApiException(
           'Could not connect to the rental service. Please check your network.',
           statusCode: 503);
-=======
-    final uri = _uri(path);
-    final http.Response response;
-    try {
-      response = await (switch (method) {
-        'PATCH' => _client
-            .patch(uri, headers: headers, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 90)),
-        'PUT' => _client
-            .put(uri, headers: headers, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 90)),
-        'DELETE' => _client
-            .delete(uri, headers: headers, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 90)),
-        'POST' => _client
-            .post(uri, headers: headers, body: jsonEncode(body))
-            .timeout(const Duration(seconds: 90)),
-        _ => _client
-            .get(uri, headers: headers)
-            .timeout(const Duration(seconds: 90)),
-      });
-    } on TimeoutException {
-      throw const MobileApiException(
-        'Connection timed out. Please check your internet connection and try again.',
-        statusCode: 504,
-      );
-    } catch (e) {
-      if (e is MobileApiException) rethrow;
-      throw const MobileApiException(
-        'Unable to connect to the rental service. Please check your internet connection and try again.',
-        statusCode: 503,
-      );
->>>>>>> Stashed changes
     }
 
     dynamic decoded;

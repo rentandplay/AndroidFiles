@@ -1,3 +1,4 @@
+import '../../widgets/liquid_glass.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -5,11 +6,15 @@ import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/mobile_api_service.dart';
 import '../../models/user_model.dart';
 import '../../providers/theme_provider.dart';
+import '../auth/id_verification_screen.dart';
 import '../auth/login_screen.dart';
-import '../../widgets/notification_widgets.dart';
+import '../shared/terms_dialog.dart';
 import '../../widgets/mobile_controls.dart';
+import '../../widgets/glass_app_bar.dart';
+import 'settings_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({
@@ -18,12 +23,16 @@ class ProfileScreen extends StatefulWidget {
     this.showAppBar = true,
     this.onOpenEquipment,
     this.onSignOut,
+    this.onViewRentals,
+    this.onViewHistory,
   });
 
   final bool showBackButton;
   final bool showAppBar;
   final VoidCallback? onOpenEquipment;
   final Future<void> Function()? onSignOut;
+  final VoidCallback? onViewRentals;
+  final VoidCallback? onViewHistory;
 
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
@@ -46,12 +55,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String? _profileImageUrl;
   late Future<UserModel?> _profileFuture;
   String? _profileUserId;
+  bool? _isAdminCached;
+
+  int _activeRentalsCount = 0;
+  int _historyRentalsCount = 0;
 
   @override
   void initState() {
     super.initState();
     _profileUserId = context.read<AuthService>().currentUser?.uid;
     _profileFuture = _loadUserData();
+    _loadRentalStats();
   }
 
   @override
@@ -66,7 +80,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _profileImageUrl = null;
     _nameController.clear();
     _phoneController.clear();
+    _activeRentalsCount = 0;
+    _historyRentalsCount = 0;
     _profileFuture = _loadUserData();
+    _loadRentalStats();
   }
 
   @override
@@ -88,6 +105,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final userModel = await authService.getCurrentUserModel();
     if (mounted && requestedUserId == _profileUserId) {
       setState(() {
+        _isAdminCached = userModel?.isStaff ?? false;
         _nameController.text = userModel?.name.trim().isNotEmpty == true
             ? userModel!.name.trim()
             : user?.displayName ?? '';
@@ -99,6 +117,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     }
     return userModel;
+  }
+
+  Future<void> _loadRentalStats() async {
+    try {
+      final user = Provider.of<AuthService>(context, listen: false).currentUser;
+      if (user == null) return;
+      final rentals = await MobileApiService.instance.listRentals();
+      if (!mounted) return;
+      setState(() {
+        _activeRentalsCount = rentals.where((r) => r.isOpen).length;
+        _historyRentalsCount = rentals.where((r) => !r.isOpen).length;
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _openSettings(UserModel? userModel) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          userModel: userModel,
+          onSignOut: widget.onSignOut,
+        ),
+      ),
+    );
+    if (mounted) {
+      setState(() {
+        _profileFuture = _loadUserData();
+      });
+      _loadRentalStats();
+    }
   }
 
   Future<void> _pickAndUploadImage() async {
@@ -243,35 +292,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
         isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
     final inputFill =
         isDark ? const Color(0xFF1A2638) : const Color(0xFFF8FAFC);
+    final topPadding = widget.showAppBar
+        ? MediaQuery.of(context).padding.top + kToolbarHeight
+        : 0.0;
 
     return Scaffold(
       backgroundColor: bgColor,
+      extendBodyBehindAppBar: widget.showAppBar,
       appBar: widget.showAppBar
-          ? AppBar(
-              backgroundColor: cardBg,
-              elevation: 0.5,
+          ? GlassAppBar(
               automaticallyImplyLeading: widget.showBackButton,
               leading: widget.showBackButton
-                  ? IconButton(
-                      icon: Icon(Icons.arrow_back, color: textPrimary),
-                      onPressed: () => Navigator.pop(context),
+                  ? HeaderActionPod(
+                      icon: Icons.arrow_back_rounded,
+                      tooltip: 'Back',
+                      onTap: () => Navigator.pop(context),
                     )
                   : null,
-              title: Text(
-                'Profile & settings',
-                style: TextStyle(
-                  color: textPrimary,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 20,
-                ),
-              ),
+              titleText: 'Profile',
               actions: [
-                if (user != null) RentalNotificationBell(color: textSecondary),
-                const SizedBox(width: 8),
+                if (user != null) const RentalNotificationBellPod(),
+                HeaderActionPod(
+                  icon: Icons.settings_outlined,
+                  tooltip: 'Settings',
+                  onTap: () async {
+                    final userModel = await _profileFuture;
+                    if (!context.mounted) return;
+                    _openSettings(userModel);
+                  },
+                ),
               ],
             )
           : null,
-      bottomNavigationBar: user == null
+      bottomNavigationBar: (user == null || _isAdminCached != true)
           ? null
           : SafeArea(
               top: false,
@@ -302,9 +355,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
             ),
-      body: FutureBuilder<UserModel?>(
-        future: _profileFuture,
-        builder: (context, snapshot) {
+      body: LiquidAmbientBackdrop(
+        child: FutureBuilder<UserModel?>(
+          future: _profileFuture,
+          builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -345,71 +399,82 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           return SingleChildScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: EdgeInsets.fromLTRB(16, topPadding + 12, 16, isAdmin ? 16 : 100),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. Sub-Navigation Tabs
-                _buildSubNavTabs(
-                  isAdmin,
-                  selectedTab,
-                  isDark,
-                  cardBg,
-                  cardBorder,
-                  textPrimary,
-                  textSecondary,
-                ),
-
-                if (isAdmin && widget.onOpenEquipment != null) ...[
-                  const SizedBox(height: 16),
-                  _buildEquipmentMenu(
+                if (isAdmin) ...[
+                  // 1. Sub-Navigation Tabs (Admin only)
+                  _buildSubNavTabs(
+                    isAdmin,
+                    selectedTab,
+                    isDark,
                     cardBg,
                     cardBorder,
                     textPrimary,
                     textSecondary,
                   ),
-                ],
 
-                const SizedBox(height: 14),
-
-                // 2. Tab Content View
-                if (isAdmin && selectedTab == 'Business')
-                  _buildBusinessTabCard(isDark, cardBg, cardBorder, textPrimary,
-                      textSecondary, inputFill,
-                      canEdit: isOwner)
-                else if (selectedTab == 'Appearance')
-                  _buildAppearanceTabCard(themeProvider, isDark, cardBg,
-                      cardBorder, textPrimary, textSecondary)
-                else if (isAdmin &&
-                    (selectedTab == 'Users' ||
-                        selectedTab == 'Account & security'))
-                  _buildUsersAccountTabCard(userModel, user, role, isDark,
-                      cardBg, cardBorder, textPrimary, textSecondary, inputFill)
-                else if (isAdmin && selectedTab == 'Preferences')
-                  _buildPreferencesTabCard(
-                      isDark, cardBg, cardBorder, textPrimary, textSecondary)
-                else if (!isAdmin && user == null)
-                  _buildGuestProfileCard(
-                      cardBg, cardBorder, textPrimary, textSecondary)
-                else if (!isAdmin)
-                  _buildCustomerProfileCard(userModel, user, isDark, cardBg,
-                      cardBorder, textPrimary, textSecondary)
-                else
-                  _buildUsersAccountTabCard(
-                      userModel,
-                      user,
-                      role,
-                      isDark,
+                  if (widget.onOpenEquipment != null) ...[
+                    const SizedBox(height: 16),
+                    _buildEquipmentMenu(
                       cardBg,
                       cardBorder,
                       textPrimary,
                       textSecondary,
-                      inputFill),
+                    ),
+                  ],
+
+                  const SizedBox(height: 14),
+
+                  // 2. Tab Content View
+                  if (selectedTab == 'Business')
+                    _buildBusinessTabCard(isDark, cardBg, cardBorder,
+                        textPrimary, textSecondary, inputFill,
+                        canEdit: isOwner)
+                  else if (selectedTab == 'Appearance')
+                    _buildAppearanceTabCard(themeProvider, isDark, cardBg,
+                        cardBorder, textPrimary, textSecondary)
+                  else if (selectedTab == 'Users' ||
+                      selectedTab == 'Account & security')
+                    _buildUsersAccountTabCard(userModel, user, role, isDark,
+                        cardBg, cardBorder, textPrimary, textSecondary,
+                        inputFill)
+                  else if (selectedTab == 'Preferences')
+                    _buildPreferencesTabCard(
+                        isDark, cardBg, cardBorder, textPrimary, textSecondary)
+                  else
+                    _buildUsersAccountTabCard(
+                        userModel,
+                        user,
+                        role,
+                        isDark,
+                        cardBg,
+                        cardBorder,
+                        textPrimary,
+                        textSecondary,
+                        inputFill),
+                ] else if (user == null) ...[
+                  _buildGuestProfileCard(
+                      cardBg, cardBorder, textPrimary, textSecondary),
+                ] else ...[
+                  _buildCustomerProfileCard(
+                    userModel,
+                    user,
+                    isDark,
+                    cardBg,
+                    cardBorder,
+                    textPrimary,
+                    textSecondary,
+                    authService,
+                  ),
+                ],
               ],
             ),
           );
         },
       ),
+    ),
     );
   }
 
@@ -953,6 +1018,97 @@ class _ProfileScreenState extends State<ProfileScreen> {
     Color cardBorder,
     Color textPrimary,
     Color textSecondary,
+    AuthService authService,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // 1. Header Card (Avatar, Name, Email, Verification)
+        _buildCustomerHeaderCard(
+          userModel,
+          user,
+          isDark,
+          cardBg,
+          cardBorder,
+          textPrimary,
+          textSecondary,
+        ),
+
+        const SizedBox(height: 12),
+
+        // 2. Activity / Rental Stats (Active, History, Joined)
+        _buildCustomerStatsRow(
+          userModel,
+          isDark,
+          cardBg,
+          cardBorder,
+          textPrimary,
+          textSecondary,
+        ),
+
+        // 3. Personal Information
+        _sectionHeader('PERSONAL INFORMATION', textSecondary),
+        _buildInfoCard(
+          userModel: userModel,
+          user: user,
+          isDark: isDark,
+          cardBg: cardBg,
+          cardBorder: cardBorder,
+          textPrimary: textPrimary,
+          textSecondary: textSecondary,
+        ),
+
+        // 4. Quick Shortcuts
+        _sectionHeader('QUICK SHORTCUTS', textSecondary),
+        _buildShortcutsCard(
+          userModel: userModel,
+          isDark: isDark,
+          cardBg: cardBg,
+          cardBorder: cardBorder,
+          textPrimary: textPrimary,
+          textSecondary: textSecondary,
+        ),
+
+        // 5. Integrated Sign Out Button
+        Padding(
+          padding: const EdgeInsets.only(top: 24, bottom: 24),
+          child: OutlinedButton.icon(
+            key: const ValueKey('profile-sign-out'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+              backgroundColor: cardBg,
+              minimumSize: const Size.fromHeight(48),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+              side: BorderSide(
+                color: Theme.of(context)
+                    .colorScheme
+                    .error
+                    .withValues(alpha: .35),
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            onPressed: _isLoading ? null : () => _confirmSignOut(authService),
+            icon: const Icon(Icons.logout_rounded, size: 18),
+            label: const Text(
+              'Sign out',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCustomerHeaderCard(
+    UserModel? userModel,
+    dynamic user,
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color textPrimary,
+    Color textSecondary,
   ) {
     final name = _profileValue(userModel?.name.trim().isNotEmpty == true
         ? userModel!.name
@@ -975,222 +1131,643 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: cardBorder),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Tooltip(
-                message: 'Change profile photo',
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    borderRadius: BorderRadius.circular(32),
-                    onTap: _isLoading ? null : _pickAndUploadImage,
-                    child: SizedBox(
-                      width: 64,
-                      height: 64,
-                      child: Stack(
-                        children: [
-                          Center(
-                            child: CircleAvatar(
-                              radius: 28,
-                              backgroundColor: isDark
-                                  ? const Color(0xFF1E2C42)
-                                  : const Color(0xFFF1F5F9),
-                              backgroundImage: avatarImage,
-                              child: avatarImage == null
-                                  ? Icon(Icons.person_rounded,
-                                      size: 32, color: textSecondary)
-                                  : null,
-                            ),
-                          ),
-                          Positioned(
-                            right: 0,
-                            bottom: 0,
-                            child: Container(
-                              width: 28,
-                              height: 28,
-                              decoration: BoxDecoration(
-                                color: mobileAccentText(context),
-                                shape: BoxShape.circle,
-                                border: Border.all(color: cardBg, width: 2),
-                              ),
-                              child: _isLoading
-                                  ? Padding(
-                                      padding: const EdgeInsets.all(6),
-                                      child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          color: isDark
-                                              ? const Color(0xFF0F172A)
-                                              : Colors.white),
-                                    )
-                                  : Icon(Icons.camera_alt_outlined,
-                                      size: 14,
-                                      color: isDark
-                                          ? const Color(0xFF0F172A)
-                                          : Colors.white),
-                            ),
-                          ),
-                        ],
+          Tooltip(
+            message: 'Change profile photo',
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(32),
+                onTap: _isLoading ? null : _pickAndUploadImage,
+                child: SizedBox(
+                  width: 64,
+                  height: 64,
+                  child: Stack(
+                    children: [
+                      Center(
+                        child: CircleAvatar(
+                          radius: 28,
+                          backgroundColor: isDark
+                              ? const Color(0xFF1E2C42)
+                              : const Color(0xFFF1F5F9),
+                          backgroundImage: avatarImage,
+                          child: avatarImage == null
+                              ? Icon(Icons.person_rounded,
+                                  size: 32, color: textSecondary)
+                              : null,
+                        ),
                       ),
-                    ),
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: mobileAccentText(context),
+                            shape: BoxShape.circle,
+                            border: Border.all(color: cardBg, width: 2),
+                          ),
+                          child: _isLoading
+                              ? Padding(
+                                  padding: const EdgeInsets.all(5),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: isDark
+                                        ? const Color(0xFF0F172A)
+                                        : Colors.white,
+                                  ),
+                                )
+                              : Icon(
+                                  Icons.camera_alt_outlined,
+                                  size: 13,
+                                  color: isDark
+                                      ? const Color(0xFF0F172A)
+                                      : Colors.white,
+                                ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(name,
-                        style: TextStyle(
-                            color:
-                                name == 'Not set' ? textSecondary : textPrimary,
-                            fontSize: 18,
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 4),
-                    Text(email,
-                        style: TextStyle(
-                            color: textSecondary, fontSize: 12, height: 1.35)),
-                  ],
-                ),
-              ),
-              if (!_isEditing) ...[
-                const SizedBox(width: 4),
-                IconButton(
-                  key: const ValueKey('profile-edit'),
-                  tooltip: 'Edit profile',
-                  onPressed: _isLoading
-                      ? null
-                      : () => setState(() => _isEditing = true),
-                  color: mobileAccentText(context),
-                  icon: const Icon(Icons.edit_outlined, size: 20),
-                ),
-              ],
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Divider(height: 1, color: cardBorder),
-          ),
-          if (_isEditing) ...[
-            TextField(
-              controller: _nameController,
-              enabled: !_isLoading,
-              textCapitalization: TextCapitalization.words,
-              textInputAction: TextInputAction.next,
-              maxLength: 150,
-              decoration: const InputDecoration(
-                  labelText: 'Full name',
-                  prefixIcon: Icon(Icons.person_outline)),
             ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _phoneController,
-              enabled: !_isLoading,
-              keyboardType: TextInputType.phone,
-              textInputAction: TextInputAction.done,
-              onSubmitted: (_) => FocusScope.of(context).unfocus(),
-              maxLength: 40,
-              decoration: const InputDecoration(
-                  labelText: 'Phone number (optional)',
-                  hintText: 'e.g. 0917 123 4567',
-                  prefixIcon: Icon(Icons.phone_outlined)),
-            ),
-            const SizedBox(height: 8),
-            Row(
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: OutlinedButton(
-                    style: OutlinedButton.styleFrom(
-                        minimumSize: const Size.fromHeight(48),
-                        foregroundColor: textPrimary),
-                    onPressed: _isLoading
-                        ? null
-                        : () => setState(() {
-                              _nameController.text =
-                                  userModel?.name.trim().isNotEmpty == true
-                                      ? userModel!.name
-                                      : user?.displayName?.toString() ?? '';
-                              _phoneController.text = userModel?.phone ?? '';
-                              _isEditing = false;
-                            }),
-                    child: const Text('Cancel'),
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: name == 'Not set' ? textSecondary : textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48),
-                      backgroundColor: mobileAccentText(context),
-                      foregroundColor:
-                          isDark ? const Color(0xFF0F172A) : Colors.white,
-                    ),
-                    onPressed: _isLoading ? null : _saveProfile,
-                    icon: _isLoading
-                        ? SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: isDark
-                                    ? const Color(0xFF0F172A)
-                                    : Colors.white))
-                        : const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Save'),
+                const SizedBox(height: 3),
+                Text(
+                  email,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: textSecondary,
+                    fontSize: 12,
+                    height: 1.25,
                   ),
                 ),
+                const SizedBox(height: 8),
+                _buildVerificationBadge(userModel, isDark),
               ],
             ),
-          ] else ...[
-            _customerDetailRow(Icons.phone_outlined, 'Phone number',
-                _profileValue(userModel?.phone), textPrimary, textSecondary),
-            const SizedBox(height: 14),
-            _customerDetailRow(
-              Icons.calendar_month_outlined,
-              'Member since',
-              userModel?.createdAt == null
-                  ? 'Not set'
-                  : DateFormat('MMMM yyyy', 'en').format(userModel!.createdAt!),
-              textPrimary,
-              textSecondary,
+          ),
+          const SizedBox(width: 6),
+          IconButton(
+            key: const ValueKey('profile-edit'),
+            tooltip: _isEditing ? 'Close editor' : 'Edit profile',
+            onPressed: _isLoading
+                ? null
+                : () => setState(() => _isEditing = !_isEditing),
+            color: mobileAccentText(context),
+            icon: Icon(
+              _isEditing ? Icons.close_rounded : Icons.edit_outlined,
+              size: 20,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVerificationBadge(UserModel? userModel, bool isDark) {
+    final isVerified = userModel?.hasAcknowledgedIdRequirement == true;
+    if (isVerified) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF132E1D) : const Color(0xFFE8F5E9),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? const Color(0xFF2E7D32) : const Color(0xFFA5D6A7),
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.verified_rounded, size: 13, color: Color(0xFF2E7D32)),
+            SizedBox(width: 4),
+            Text(
+              'Verified ID',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF2E7D32),
+              ),
             ),
           ],
+        ),
+      );
+    }
+
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => IdVerificationScreen(userModel: userModel),
+          ),
+        ).then((_) {
+          if (mounted) {
+            setState(() => _profileFuture = _loadUserData());
+          }
+        });
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: isDark ? const Color(0xFF2F2108) : const Color(0xFFFFF7ED),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isDark ? const Color(0xFFD97706) : const Color(0xFFFDBA74),
+          ),
+        ),
+        child: const Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.shield_outlined, size: 13, color: Color(0xFFD97706)),
+            SizedBox(width: 4),
+            Text(
+              'Verify ID',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFFD97706),
+              ),
+            ),
+            SizedBox(width: 2),
+            Icon(Icons.chevron_right_rounded,
+                size: 13, color: Color(0xFFD97706)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCustomerStatsRow(
+    UserModel? userModel,
+    bool isDark,
+    Color cardBg,
+    Color cardBorder,
+    Color textPrimary,
+    Color textSecondary,
+  ) {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildStatCard(
+            icon: Icons.timer_outlined,
+            iconColor: const Color(0xFFDF762D),
+            iconBg: isDark ? const Color(0xFF332015) : const Color(0xFFFEF3EA),
+            value: _activeRentalsCount.toString(),
+            label: 'Active',
+            cardBg: cardBg,
+            cardBorder: cardBorder,
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: widget.onViewRentals,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildStatCard(
+            icon: Icons.history_rounded,
+            iconColor: const Color(0xFF2563EB),
+            iconBg: isDark ? const Color(0xFF13233E) : const Color(0xFFEFF6FF),
+            value: _historyRentalsCount.toString(),
+            label: 'History',
+            cardBg: cardBg,
+            cardBorder: cardBorder,
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: widget.onViewHistory,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildStatCard(
+            icon: Icons.calendar_month_outlined,
+            iconColor: const Color(0xFF0D9488),
+            iconBg: isDark ? const Color(0xFF102D2A) : const Color(0xFFF0FDFA),
+            value: _memberSinceText(userModel),
+            label: 'Joined',
+            cardBg: cardBg,
+            cardBorder: cardBorder,
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: null,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String value,
+    required String label,
+    required Color cardBg,
+    required Color cardBorder,
+    required Color textPrimary,
+    required Color textSecondary,
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: cardBg,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: cardBorder),
+          ),
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: iconBg,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, size: 18, color: iconColor),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: textPrimary,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                  color: textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _memberSinceText(UserModel? userModel) {
+    if (userModel?.createdAt == null) return 'Recent';
+    try {
+      return DateFormat('MMM yyyy', 'en').format(userModel!.createdAt!);
+    } catch (_) {
+      return 'Recent';
+    }
+  }
+
+  Widget _buildInfoCard({
+    required UserModel? userModel,
+    required dynamic user,
+    required bool isDark,
+    required Color cardBg,
+    required Color cardBorder,
+    required Color textPrimary,
+    required Color textSecondary,
+  }) {
+    final name = _profileValue(userModel?.name.trim().isNotEmpty == true
+        ? userModel!.name
+        : user?.displayName?.toString());
+    final email = _profileValue(userModel?.email.trim().isNotEmpty == true
+        ? userModel!.email
+        : user?.email?.toString());
+    final phone = _profileValue(userModel?.phone);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardBorder),
+      ),
+      child: _isEditing
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: _nameController,
+                  enabled: !_isLoading,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  maxLength: 150,
+                  decoration: const InputDecoration(
+                    labelText: 'Full name',
+                    prefixIcon: Icon(Icons.person_outline),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                TextField(
+                  controller: _phoneController,
+                  enabled: !_isLoading,
+                  keyboardType: TextInputType.phone,
+                  textInputAction: TextInputAction.done,
+                  onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                  maxLength: 40,
+                  decoration: const InputDecoration(
+                    labelText: 'Phone number (optional)',
+                    hintText: 'e.g. 0917 123 4567',
+                    prefixIcon: Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          foregroundColor: textPrimary,
+                        ),
+                        onPressed: _isLoading
+                            ? null
+                            : () => setState(() {
+                                  _nameController.text =
+                                      userModel?.name.trim().isNotEmpty == true
+                                          ? userModel!.name
+                                          : user?.displayName?.toString() ?? '';
+                                  _phoneController.text =
+                                      userModel?.phone ?? '';
+                                  _isEditing = false;
+                                }),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size.fromHeight(46),
+                          backgroundColor: mobileAccentText(context),
+                          foregroundColor:
+                              isDark ? const Color(0xFF0F172A) : Colors.white,
+                        ),
+                        onPressed: _isLoading ? null : _saveProfile,
+                        icon: _isLoading
+                            ? SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: isDark
+                                      ? const Color(0xFF0F172A)
+                                      : Colors.white,
+                                ),
+                              )
+                            : const Icon(Icons.check_rounded, size: 18),
+                        label: const Text('Save'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            )
+          : Column(
+              children: [
+                _infoTile(
+                  icon: Icons.person_outline_rounded,
+                  label: 'Full Name',
+                  value: name,
+                  isDark: isDark,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                ),
+                Divider(height: 20, indent: 50, color: cardBorder),
+                _infoTile(
+                  icon: Icons.phone_outlined,
+                  label: 'Phone Number',
+                  value: phone,
+                  isDark: isDark,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                ),
+                Divider(height: 20, indent: 50, color: cardBorder),
+                _infoTile(
+                  icon: Icons.mail_outline_rounded,
+                  label: 'Email Address',
+                  value: email,
+                  isDark: isDark,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                ),
+                Divider(height: 20, indent: 50, color: cardBorder),
+                _infoTile(
+                  icon: Icons.badge_outlined,
+                  label: 'Account Role',
+                  value: 'Customer',
+                  isDark: isDark,
+                  textPrimary: textPrimary,
+                  textSecondary: textSecondary,
+                ),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildShortcutsCard({
+    required UserModel? userModel,
+    required bool isDark,
+    required Color cardBg,
+    required Color cardBorder,
+    required Color textPrimary,
+    required Color textSecondary,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: cardBorder),
+      ),
+      child: Column(
+        children: [
+          _shortcutTile(
+            icon: Icons.timer_outlined,
+            iconColor: const Color(0xFFDF762D),
+            iconBg: isDark ? const Color(0xFF332015) : const Color(0xFFFEF3EA),
+            title: 'My Active Rentals',
+            subtitle: 'View ongoing timers & return stations',
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: widget.onViewRentals,
+          ),
+          Divider(height: 1, indent: 64, color: cardBorder),
+          _shortcutTile(
+            icon: Icons.receipt_long_outlined,
+            iconColor: const Color(0xFF2563EB),
+            iconBg: isDark ? const Color(0xFF13233E) : const Color(0xFFEFF6FF),
+            title: 'Rental History & Receipts',
+            subtitle: 'Past rentals, payments, and return logs',
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: widget.onViewHistory,
+          ),
+          Divider(height: 1, indent: 64, color: cardBorder),
+          _shortcutTile(
+            icon: Icons.settings_outlined,
+            iconColor: const Color(0xFF7C3AED),
+            iconBg: isDark ? const Color(0xFF22163D) : const Color(0xFFF5F3FF),
+            title: 'Settings & Preferences',
+            subtitle: 'Dark mode, push alerts, password & ID',
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: () => _openSettings(userModel),
+          ),
+          Divider(height: 1, indent: 64, color: cardBorder),
+          _shortcutTile(
+            icon: Icons.description_outlined,
+            iconColor: const Color(0xFF0D9488),
+            iconBg: isDark ? const Color(0xFF102D2A) : const Color(0xFFF0FDFA),
+            title: 'Terms & Conditions',
+            subtitle: 'Rental guidelines and safety policies',
+            textPrimary: textPrimary,
+            textSecondary: textSecondary,
+            onTap: () => TermsDialog.show(context, onAccept: () {}),
+          ),
         ],
+      ),
+    );
+  }
+
+  Widget _shortcutTile({
+    required IconData icon,
+    required Color iconColor,
+    required Color iconBg,
+    required String title,
+    required String subtitle,
+    required Color textPrimary,
+    required Color textSecondary,
+    VoidCallback? onTap,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+      leading: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: iconBg,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: iconColor, size: 20),
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 14,
+          color: textPrimary,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: textSecondary),
+      ),
+      trailing:
+          Icon(Icons.chevron_right_rounded, color: textSecondary, size: 20),
+      onTap: onTap,
+    );
+  }
+
+  Widget _infoTile({
+    required IconData icon,
+    required String label,
+    required String value,
+    required bool isDark,
+    required Color textPrimary,
+    required Color textSecondary,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            color: isDark ? const Color(0xFF1E2838) : const Color(0xFFF1F5F9),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, size: 18, color: textSecondary),
+        ),
+        const SizedBox(width: 14),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(
+                  color: textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  color: value == 'Not set' ? textSecondary : textPrimary,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  height: 1.3,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _sectionHeader(String title, Color textSecondary) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 18, 4, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: textSecondary,
+          letterSpacing: 0.8,
+        ),
       ),
     );
   }
 
   String _profileValue(String? value) =>
       value?.trim().isNotEmpty == true ? value!.trim() : 'Not set';
-
-  Widget _customerDetailRow(IconData icon, String label, String value,
-          Color textPrimary, Color textSecondary) =>
-      Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, size: 20, color: textSecondary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: TextStyle(color: textSecondary, fontSize: 12)),
-                const SizedBox(height: 3),
-                Text(value,
-                    style: TextStyle(
-                        color: value == 'Not set' ? textSecondary : textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        ],
-      );
 
   // --- USERS & ACCOUNT TAB CARD ---
   Widget _buildUsersAccountTabCard(

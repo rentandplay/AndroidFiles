@@ -1,3 +1,4 @@
+import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,7 +13,6 @@ import '../../theme/app_theme.dart';
 import '../../widgets/home_discovery.dart';
 import '../../utils/catalog_price.dart';
 import '../../widgets/liquid_glass.dart';
-import '../../widgets/notification_widgets.dart';
 import '../../widgets/rent_play_wordmark.dart';
 import '../../widgets/rental_ui.dart';
 import '../auth/login_screen.dart';
@@ -150,30 +150,24 @@ class HomeScreenState extends State<HomeScreen> {
     final currentRequests = _currentRequests;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: isDark
-            ? const Color(0xFF131D2D).withValues(alpha: 0.85)
-            : Colors.white.withValues(alpha: 0.90),
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
-          ),
-        ),
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
+        loading: _loading,
         title: const RentPlayWordmark(),
+        centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: 'Search equipment',
+            icon: const Icon(Icons.search_rounded),
+            onPressed: widget.onBrowse,
+          ),
           if (user == null)
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: 8),
               child: Container(
                 height: 36,
                 decoration: BoxDecoration(
@@ -207,39 +201,35 @@ class HomeScreenState extends State<HomeScreen> {
               ),
             )
           else
-            const RentalNotificationBell(),
-          const SizedBox(width: 6),
+            const RentalNotificationBellPod(),
         ],
       ),
       body: LiquidAmbientBackdrop(
-        child: Column(
-          children: [
-            if (_loading) const LinearProgressIndicator(),
-            Expanded(
-              child: RefreshIndicator(
-                onRefresh: _loadHome,
-                child: ListView(
-                  keyboardDismissBehavior:
-                      ScrollViewKeyboardDismissBehavior.onDrag,
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.fromLTRB(0, 8, 0, 28),
-                  children: [
+        child: RefreshIndicator(
+          edgeOffset: topPadding,
+          onRefresh: _loadHome,
+          child: ListView(
+            keyboardDismissBehavior:
+                ScrollViewKeyboardDismissBehavior.onDrag,
+            physics: const AlwaysScrollableScrollPhysics(),
+            padding: EdgeInsets.fromLTRB(0, topPadding + 8, 0, 28),
+            children: [
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
+                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           user?.displayName?.trim().isNotEmpty == true
-                              ? 'Welcome back, ${user!.displayName!.trim().split(' ').first}!'
-                              : 'Welcome to Rent & Play!',
+                              ? 'Welcome back, ${user!.displayName!.trim().split(' ').first} 👋'
+                              : 'Welcome to Rent & Play! 👋',
                           style: Theme.of(context)
                               .textTheme
                               .headlineSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w800,
-                                fontSize: 22,
-                                letterSpacing: -.45,
+                                fontSize: 24,
+                                letterSpacing: -.5,
                               ),
                         ),
                         const SizedBox(height: 4),
@@ -318,10 +308,7 @@ class HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        ],
-      ),
-    ),
-    );
+        );
   }
 
   Widget _buildCarousel(BuildContext context) {
@@ -415,23 +402,31 @@ class HomeScreenState extends State<HomeScreen> {
                             children: [
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 5),
+                                    horizontal: 10, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: .22),
+                                  color: Colors.white.withValues(alpha: .24),
                                   borderRadius: BorderRadius.circular(16),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: .45),
+                                    color: Colors.white.withValues(alpha: .5),
                                     width: 1.0,
                                   ),
                                 ),
-                                child: const Text(
-                                  'FEATURED',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: .7,
-                                  ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.bolt_rounded,
+                                        size: 13, color: Colors.white),
+                                    SizedBox(width: 3),
+                                    Text(
+                                      'POPULAR',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: .7,
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const Spacer(),
@@ -441,46 +436,78 @@ class HomeScreenState extends State<HomeScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: const TextStyle(
                                   color: Colors.white,
-                                  fontSize: 19,
-                                  height: 1.05,
+                                  fontSize: 20,
+                                  height: 1.1,
                                   fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Tooltip(
-                                message: item.rateText,
-                                child: Text(
-                                  catalogPriceLabel(item),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color:
-                                        Colors.white.withValues(alpha: .95),
-                                    fontSize: 12,
-                                    height: 1.15,
-                                    fontWeight: FontWeight.w600,
-                                  ),
+                                  shadows: [
+                                    Shadow(
+                                      color: Colors.black26,
+                                      blurRadius: 6,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
                               ),
                               const SizedBox(height: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 4),
+                                    horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: Colors.white.withValues(alpha: 0.22),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color: Colors.black.withValues(alpha: 0.18),
+                                  borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.4),
+                                    color: Colors.white.withValues(alpha: 0.35),
                                     width: 1.0,
                                   ),
                                 ),
-                                child: const Text(
-                                  'View item  ›',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
+                                child: Tooltip(
+                                  message: item.rateText,
+                                  child: Text(
+                                    catalogPriceLabel(item),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                    ),
                                   ),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(18),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: const Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      'Rent Now',
+                                      style: TextStyle(
+                                        color: Color(0xFFDF762D),
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    SizedBox(width: 4),
+                                    Icon(
+                                      Icons.arrow_forward_rounded,
+                                      size: 14,
+                                      color: Color(0xFFDF762D),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ],
@@ -681,10 +708,11 @@ class HomeScreenState extends State<HomeScreen> {
             ? AppTheme.brandOrange
             : Theme.of(context).colorScheme.onSurfaceVariant;
 
-    return Card(
+    return GlassCard(
       margin: margin,
-      child: Padding(
-        padding: const EdgeInsets.all(13),
+      padding: const EdgeInsets.all(14),
+      borderRadius: 20,
+      blurSigma: 14,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -776,7 +804,6 @@ class HomeScreenState extends State<HomeScreen> {
             ],
           ],
         ),
-      ),
     );
   }
 
@@ -816,61 +843,62 @@ class HomeScreenState extends State<HomeScreen> {
         ),
       );
 
-  Widget _buildNoRentalsCard(BuildContext context) => Padding(
-        padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-        child: LiquidGlassContainer(
-          borderRadius: 20,
-          blurSigma: 14,
-          padding: const EdgeInsets.fromLTRB(14, 12, 12, 12),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: .15),
-                  borderRadius: BorderRadius.circular(13),
-                  border: Border.all(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: .25),
-                  ),
-                ),
-                child: Icon(Icons.shopping_bag_outlined,
-                    size: 20, color: Theme.of(context).colorScheme.primary),
+  Widget _buildNoRentalsCard(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
+      child: GlassCard(
+        borderRadius: 16,
+        blurSigma: 12,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: const Color(0xFFDF762D)
+                    .withValues(alpha: isDark ? 0.2 : 0.12),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Your next game awaits',
-                        style: TextStyle(
-                            fontSize: 14, fontWeight: FontWeight.w800)),
-                    const SizedBox(height: 2),
-                    Text('No active rentals right now.',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .onSurfaceVariant)),
-                  ],
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                size: 16,
+                color: Color(0xFFDF762D),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'No active rentals right now.',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.onSurfaceVariant,
                 ),
               ),
-              IconButton(
-                tooltip: 'Browse equipment',
-                onPressed: widget.onBrowse,
-                icon: Icon(Icons.arrow_forward_rounded,
-                    size: 20, color: Theme.of(context).colorScheme.primary),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
-          ),
+              child: Text(
+                'Ready to play',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.4,
+                  color: scheme.primary,
+                ),
+              ),
+            ),
+          ],
         ),
-      );
+      ),
+    );
+  }
 
   Widget _buildRentalsLoadingCard(BuildContext context) => const Card(
         margin: EdgeInsets.fromLTRB(18, 0, 18, 12),

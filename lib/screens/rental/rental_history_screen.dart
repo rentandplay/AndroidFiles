@@ -1,3 +1,5 @@
+import '../../widgets/liquid_glass.dart';
+import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -489,17 +491,27 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
   Widget build(BuildContext context) {
     final isSignedIn = Provider.of<AuthService>(context).currentUser != null;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.isAdmin ? 'All transactions' : 'Rental history'),
+      appBar: GlassAppBar(
+        titleText: widget.isAdmin ? 'All Transactions' : 'Rental History',
         actions: [
-          IconButton(
-            onPressed: _refresh,
+          if (!widget.isAdmin)
+            HeaderActionPod(
+              icon: _compactView
+                  ? Icons.view_agenda_outlined
+                  : Icons.view_headline_rounded,
+              tooltip: _compactView ? 'Standard view' : 'Compact view',
+              onTap: () => setState(() => _compactView = !_compactView),
+            ),
+          HeaderActionPod(
+            icon: Icons.refresh_rounded,
             tooltip: 'Refresh history',
-            icon: const Icon(Icons.refresh_rounded),
+            onTap: _refresh,
           ),
+          if (isSignedIn && !widget.isAdmin) const RentalNotificationBellPod(),
         ],
       ),
-      body: !widget.isAdmin && !isSignedIn
+      body: LiquidAmbientBackdrop(
+        child: !widget.isAdmin && !isSignedIn
           ? RentalEmptyState(
               title: 'Sign in to view your history',
               message:
@@ -648,6 +660,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                 );
               },
             ),
+        ),
     );
   }
 }

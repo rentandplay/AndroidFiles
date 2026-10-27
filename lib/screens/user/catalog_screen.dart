@@ -1,3 +1,4 @@
+import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
 import '../../services/mobile_api_service.dart';
 import 'package:flutter/material.dart';
@@ -5,13 +6,11 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
-import '../../theme/app_theme.dart';
 import '../../widgets/rent_play_wordmark.dart';
 import '../../widgets/liquid_glass.dart';
 import '../auth/login_screen.dart';
 import 'item_details_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
-import '../../widgets/notification_widgets.dart';
 import '../../widgets/mobile_controls.dart';
 import '../../utils/catalog_price.dart';
 
@@ -219,30 +218,19 @@ class CatalogScreenState extends State<CatalogScreen> {
             ? 1
             : 2;
     final isAdmin = _currentUserModel?.isStaff == true;
+    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
 
     return Scaffold(
       backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
-      appBar: AppBar(
-        centerTitle: true,
-        backgroundColor: isDark
-            ? const Color(0xFF131D2D).withValues(alpha: 0.85)
-            : Colors.white.withValues(alpha: 0.90),
-        surfaceTintColor: Colors.transparent,
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(
-            height: 1,
-            color: isDark
-                ? Colors.white.withValues(alpha: 0.08)
-                : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
-          ),
-        ),
+      extendBodyBehindAppBar: true,
+      appBar: GlassAppBar(
+        loading: _catalogLoading,
         title: const RentPlayWordmark(),
+        centerTitle: false,
         actions: [
           if (user == null)
             Padding(
-              padding: const EdgeInsets.only(right: 12),
+              padding: const EdgeInsets.only(right: 8),
               child: Container(
                 height: 36,
                 decoration: BoxDecoration(
@@ -297,78 +285,81 @@ class CatalogScreenState extends State<CatalogScreen> {
               ),
             )
           else ...[
-            const RentalNotificationBell(),
+            const RentalNotificationBellPod(),
             if (isAdmin)
-              PopupMenuButton<String>(
-                padding: EdgeInsets.zero,
-                icon: const Icon(Icons.more_vert, size: 22),
-                tooltip: 'More Options',
-                onSelected: (value) async {
-                  if (value == 'admin') {
-                    final navigator = Navigator.of(context);
-                    navigator.push(
-                      MaterialPageRoute(
-                        builder: (_) => AdminDashboardScreen(
-                          onSignedOut: () {
-                            navigator.pushAndRemoveUntil(
-                              MaterialPageRoute(
-                                builder: (_) => const LoginScreen(),
-                              ),
-                              (route) => false,
-                            );
-                          },
+              HeaderActionPod(
+                child: PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  icon: const Icon(Icons.more_vert, size: 20),
+                  tooltip: 'More Options',
+                  onSelected: (value) async {
+                    if (value == 'admin') {
+                      final navigator = Navigator.of(context);
+                      navigator.push(
+                        MaterialPageRoute(
+                          builder: (_) => AdminDashboardScreen(
+                            onSignedOut: () {
+                              navigator.pushAndRemoveUntil(
+                                MaterialPageRoute(
+                                  builder: (_) => const LoginScreen(),
+                                ),
+                                (route) => false,
+                              );
+                            },
+                          ),
                         ),
+                      );
+                    } else if (value == 'logout') {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Logged out successfully.')),
+                      );
+                      await authService.logout();
+                      if (mounted) setState(() => _currentUserModel = null);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'admin',
+                      child: Row(
+                        children: [
+                          Icon(Icons.admin_panel_settings_outlined,
+                              size: 20, color: Color(0xFFF57C00)),
+                          SizedBox(width: 10),
+                          Text('Staff Dashboard'),
+                        ],
                       ),
-                    );
-                  } else if (value == 'logout') {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Logged out successfully.')),
-                    );
-                    await authService.logout();
-                    if (mounted) setState(() => _currentUserModel = null);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'admin',
-                    child: Row(
-                      children: [
-                        Icon(Icons.admin_panel_settings_outlined,
-                            size: 20, color: Color(0xFFF57C00)),
-                        SizedBox(width: 10),
-                        Text('Staff Dashboard'),
-                      ],
                     ),
-                  ),
-                  const PopupMenuDivider(),
-                  const PopupMenuItem(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout, size: 20, color: Colors.red),
-                        SizedBox(width: 10),
-                        Text('Logout',
-                            style: TextStyle(
-                                color: Colors.red,
-                                fontWeight: FontWeight.bold)),
-                      ],
+                    const PopupMenuDivider(),
+                    const PopupMenuItem(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Icon(Icons.logout, size: 20, color: Colors.red),
+                          SizedBox(width: 10),
+                          Text('Logout',
+                              style: TextStyle(
+                                  color: Colors.red,
+                                  fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
           ],
-          const SizedBox(width: 4),
         ],
       ),
       body: LiquidAmbientBackdrop(
         child: RefreshIndicator(
+          edgeOffset: topPadding,
           onRefresh: _loadCatalog,
           child: CustomScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
-              if (_catalogLoading)
-                const SliverToBoxAdapter(child: LinearProgressIndicator()),
+              SliverToBoxAdapter(
+                child: SizedBox(height: topPadding + 6),
+              ),
               if (_catalogError.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -748,14 +739,24 @@ class CatalogScreenState extends State<CatalogScreen> {
             Stack(
               children: [
                 Container(
-                  height: 110,
+                  height: 112,
                   width: double.infinity,
                   decoration: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFF1E2D44).withValues(alpha: 0.6)
-                        : const Color(0xFFF1F5F9).withValues(alpha: 0.7),
+                    gradient: RadialGradient(
+                      center: Alignment.center,
+                      radius: 0.85,
+                      colors: [
+                        (isDark ? const Color(0xFF263750) : const Color(0xFFE2E8F0))
+                            .withValues(alpha: isDark ? 0.40 : 0.45),
+                        (isDark ? const Color(0xFF121B27) : const Color(0xFFF8FAFC))
+                            .withValues(alpha: 0.12),
+                      ],
+                    ),
                   ),
-                  child: item.buildImage(fit: BoxFit.contain, height: 110),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  child: Center(
+                    child: item.buildImage(fit: BoxFit.contain, height: 100),
+                  ),
                 ),
                 Positioned(
                   top: 0,
@@ -820,7 +821,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                               message: statusLabel,
                               child: Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 5),
+                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
                                   color: (isDark
                                           ? const Color(0xFF131D2D)
@@ -828,12 +829,13 @@ class CatalogScreenState extends State<CatalogScreen> {
                                       .withValues(alpha: .96),
                                   border: Border.all(
                                       color:
-                                          statusColor.withValues(alpha: .3)),
+                                          statusColor.withValues(alpha: .38),
+                                      width: 1.0),
                                   borderRadius: BorderRadius.circular(10),
                                   boxShadow: [
                                     BoxShadow(
                                       color:
-                                          Colors.black.withValues(alpha: 0.04),
+                                          Colors.black.withValues(alpha: 0.05),
                                       blurRadius: 4,
                                       offset: const Offset(0, 1),
                                     ),
@@ -848,6 +850,15 @@ class CatalogScreenState extends State<CatalogScreen> {
                                       decoration: BoxDecoration(
                                         shape: BoxShape.circle,
                                         color: statusColor,
+                                        boxShadow: statusKey == 'AVAILABLE'
+                                            ? [
+                                                BoxShadow(
+                                                  color: statusColor
+                                                      .withValues(alpha: 0.55),
+                                                  blurRadius: 5,
+                                                ),
+                                              ]
+                                            : null,
                                       ),
                                     ),
                                     const SizedBox(width: 5),
@@ -927,22 +938,26 @@ class CatalogScreenState extends State<CatalogScreen> {
                           gradient: LinearGradient(
                             colors: isDark
                                 ? [
-                                    const Color(0xFF263750),
-                                    const Color(0xFF192536),
+                                    const Color(0xFFDF762D).withValues(alpha: 0.28),
+                                    const Color(0xFF1E2838).withValues(alpha: 0.85),
                                   ]
                                 : [
-                                    const Color(0xFFFFF7ED),
-                                    const Color(0xFFFFEDD5),
+                                    const Color(0xFFFFF4EB),
+                                    const Color(0xFFFFE8D6),
                                   ],
                           ),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: (isDark
-                                    ? const Color(0xFFF0AD7C)
-                                    : const Color(0xFFDF762D))
-                                .withValues(alpha: 0.3),
-                            width: 1.0,
+                            color: const Color(0xFFDF762D).withValues(alpha: 0.35),
+                            width: 1.1,
                           ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFFDF762D).withValues(alpha: 0.12),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
                         ),
                         child: TextButton(
                           style: TextButton.styleFrom(
