@@ -2,15 +2,16 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-/// iOS 27 Liquid Glass Container
-/// Provides realistic optical refraction, specular highlights, frosted blur,
-/// and responsive depth for light and dark environments.
+/// Frosted & Liquid Glass Surface Container
+/// Engineered to prevent Impeller dark-edge vignette smudges and black-alpha
+/// gradient interpolation while delivering crisp specular borders, inner top-edge
+/// light refraction, and soft outer elevation depth.
 class LiquidGlassContainer extends StatelessWidget {
   const LiquidGlassContainer({
     super.key,
     required this.child,
     this.borderRadius = 22,
-    this.blurSigma = 16.0,
+    this.blurSigma = 0.0,
     this.padding,
     this.margin,
     this.width,
@@ -39,38 +40,41 @@ class LiquidGlassContainer extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Fluid liquid glass fill colors with very subtle warm orange/amber tint
+    // Multi-stop luminous frosted glass fill (never interpolates through black)
     final defaultGradient = customGradient ??
         LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
+          stops: const [0.0, 0.55, 1.0],
           colors: isDark
               ? [
-                  const Color(0xFF1E2635).withValues(alpha: 0.82),
-                  const Color(0xFF131A24).withValues(alpha: 0.68),
+                  const Color(0xFF1E293B).withValues(alpha: 0.94),
+                  const Color(0xFF162030).withValues(alpha: 0.90),
+                  const Color(0xFF111927).withValues(alpha: 0.88),
                 ]
               : [
-                  const Color(0xFFFFFDFC).withValues(alpha: 0.92),
-                  const Color(0xFFFAF4ED).withValues(alpha: 0.74),
+                  Colors.white.withValues(alpha: 0.96),
+                  const Color(0xFFFFFCF9).withValues(alpha: 0.92),
+                  const Color(0xFFFBF5EE).withValues(alpha: 0.88),
                 ],
         );
 
-    // Specular border highlights with subtle warm amber refraction
+    // Directional specular rim: bright top-left light catch, subtle warm edge
     final defaultBorderGradient = borderGradient ??
         LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          stops: const [0.0, 0.45, 1.0],
+          stops: const [0.0, 0.5, 1.0],
           colors: isDark
               ? [
-                  Colors.white.withValues(alpha: 0.32),
-                  const Color(0xFF856A54).withValues(alpha: 0.20),
-                  (glowColor ?? const Color(0xFFDF762D)).withValues(alpha: 0.35),
+                  Colors.white.withValues(alpha: 0.24),
+                  Colors.white.withValues(alpha: 0.09),
+                  (glowColor ?? const Color(0xFFDF762D)).withValues(alpha: 0.22),
                 ]
               : [
-                  Colors.white.withValues(alpha: 0.98),
-                  const Color(0xFFF3ECE4).withValues(alpha: 0.70),
-                  (glowColor ?? const Color(0xFFDF762D)).withValues(alpha: 0.28),
+                  Colors.white,
+                  const Color(0xFFEAE2D8).withValues(alpha: 0.85),
+                  (glowColor ?? const Color(0xFFDF762D)).withValues(alpha: 0.20),
                 ],
         );
 
@@ -87,45 +91,38 @@ class LiquidGlassContainer extends StatelessWidget {
       child: child,
     );
 
-    if (blurSigma > 0) {
-      content = ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: content,
-        ),
-      );
-    } else {
-      content = ClipRRect(borderRadius: radius, child: content);
-    }
+    content = ClipRRect(
+      borderRadius: radius,
+      child: content,
+    );
 
     Widget body = Container(
       margin: margin,
       decoration: BoxDecoration(
         borderRadius: radius,
         boxShadow: [
-          // Soft ambient drop shadow with faint warm amber hint
           BoxShadow(
             color: isDark
-                ? Colors.black.withValues(alpha: 0.38)
-                : const Color(0xFF2C1808).withValues(alpha: 0.06),
-            blurRadius: 18 + elevation * 4,
-            offset: Offset(0, 8 + elevation * 2),
-            spreadRadius: -2,
+                ? Colors.black.withValues(alpha: 0.32)
+                : const Color(0xFF0F172A).withValues(alpha: 0.05),
+            blurRadius: 16 + elevation * 3,
+            offset: Offset(0, 6 + elevation * 1.5),
+            blurStyle: BlurStyle.outer,
           ),
           if (glowColor != null)
             BoxShadow(
-              color: glowColor!.withValues(alpha: isDark ? 0.22 : 0.14),
-              blurRadius: 24,
+              color: glowColor!.withValues(alpha: isDark ? 0.18 : 0.10),
+              blurRadius: 18,
               offset: const Offset(0, 4),
+              blurStyle: BlurStyle.outer,
             ),
         ],
       ),
       child: CustomPaint(
-        painter: _LiquidGlassBorderPainter(
+        foregroundPainter: _LiquidGlassBorderPainter(
           borderRadius: borderRadius,
           borderGradient: defaultBorderGradient,
-          borderWidth: 1.2,
+          borderWidth: 1.15,
         ),
         child: content,
       ),
@@ -146,7 +143,7 @@ class LiquidGlassContainer extends StatelessWidget {
   }
 }
 
-/// Paints the ultra-crisp liquid glass specular border
+/// Paints the crisp liquid glass specular border on the foreground layer
 class _LiquidGlassBorderPainter extends CustomPainter {
   _LiquidGlassBorderPainter({
     required this.borderRadius,
@@ -181,7 +178,9 @@ class _LiquidGlassBorderPainter extends CustomPainter {
       oldDelegate.borderWidth != borderWidth;
 }
 
-/// Ambient mesh glow background with very subtle warm orange/amber atmospheric orbs
+/// Luminous ambient backdrop for Frosted & Liquid Glass screens.
+/// Uses color-matched zero-alpha stops (never 0x00000000 black transparent)
+/// so gradients remain pure, warm, and completely free of grey/black smudges.
 class LiquidAmbientBackdrop extends StatelessWidget {
   const LiquidAmbientBackdrop({super.key, required this.child});
 
@@ -191,112 +190,26 @@ class LiquidAmbientBackdrop extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Stack(
-      children: [
-        // Solid theme base with subtle warm porcelain/obsidian undertone
-        Positioned.fill(
-          child: Container(
-            color: isDark ? const Color(0xFF0D1219) : const Color(0xFFFBF8F5),
-          ),
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          stops: const [0.0, 0.45, 1.0],
+          colors: isDark
+              ? const [
+                  Color(0xFF111927),
+                  Color(0xFF0D131D),
+                  Color(0xFF0A0F18),
+                ]
+              : const [
+                  Color(0xFFFDFBF9),
+                  Color(0xFFF8F4EE),
+                  Color(0xFFF3EDE4),
+                ],
         ),
-
-        // Glowing fluid orb - Top Right (Warm Brand Amber Glow)
-        Positioned(
-          top: -110,
-          right: -70,
-          child: IgnorePointer(
-            child: Container(
-              width: 340,
-              height: 340,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    (isDark
-                            ? const Color(0xFFDF762D)
-                            : const Color(0xFFFFB273))
-                        .withValues(alpha: isDark ? 0.18 : 0.26),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        // Glowing fluid orb - Center Left (Warm Peach / Golden Nectar Glow)
-        Positioned(
-          top: 280,
-          left: -90,
-          child: IgnorePointer(
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    (isDark
-                            ? const Color(0xFFF59E0B)
-                            : const Color(0xFFFFD4A8))
-                        .withValues(alpha: isDark ? 0.10 : 0.18),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        // Glowing fluid orb - Bottom Right (Soft Warm Apricot Aura)
-        Positioned(
-          bottom: -70,
-          right: -50,
-          child: IgnorePointer(
-            child: Container(
-              width: 280,
-              height: 280,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    (isDark
-                            ? const Color(0xFFE26B1E)
-                            : const Color(0xFFFFE0C8))
-                        .withValues(alpha: isDark ? 0.10 : 0.16),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: -80,
-          right: -60,
-          child: IgnorePointer(
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    (isDark
-                            ? const Color(0xFF818CF8)
-                            : const Color(0xFFDDD6FE))
-                        .withValues(alpha: isDark ? 0.09 : 0.18),
-                    Colors.transparent,
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ),
-
-        // Child content layer
-        Positioned.fill(child: child),
-      ],
+      ),
+      child: child,
     );
   }
 }
@@ -314,11 +227,9 @@ class LiquidGlassTab {
   });
 }
 
-/// iOS 27 Liquid Glass Bottom Navigation Bar
-/// Inspired by the pure Flutter optical refraction architecture (Jaxon Evans).
-/// Renders true optical refraction, specular lens bevel, horizontal light reflection,
-/// and high-translucency glass body so content flowing underneath is clearly blurred and refracted.
-/// Supports both instant tab tapping and fluid horizontal dragging of the active pill.
+/// Floating Frosted & Liquid Glass Bottom Navigation Bar.
+/// Renders optical background blur with mirror tile mode (avoiding black edge sampling),
+/// outer ambient shadows, specular border highlights, and fluid pill selection.
 class LiquidGlassBottomNavBar extends StatefulWidget {
   final int selectedIndex;
   final List<LiquidGlassTab> tabs;
@@ -338,7 +249,7 @@ class LiquidGlassBottomNavBar extends StatefulWidget {
     this.activeColor,
     this.unselectedColor,
     this.borderRadius = 32.0,
-    this.blurSigma = 24.0,
+    this.blurSigma = 20.0,
   });
 
   @override
@@ -482,22 +393,35 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
     final primary = widget.activeColor ?? const Color(0xFFDF762D);
 
     final inactiveTextColor = widget.unselectedColor ??
-        (isDark ? const Color(0xFFF1F5F9) : const Color(0xFF1E293B));
-    final inactiveShadow = isDark
-        ? Shadow(color: Colors.black.withValues(alpha: 0.85), blurRadius: 4)
-        : Shadow(color: Colors.white.withValues(alpha: 0.95), blurRadius: 3);
+        (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155));
 
     final glassFill = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              const Color(0xFF1A2332).withValues(alpha: 0.50 * widget.opacity),
-              const Color(0xFF0D1420).withValues(alpha: 0.28 * widget.opacity),
+              const Color(0xFF1B2536).withValues(alpha: 0.88 * widget.opacity),
+              const Color(0xFF111826).withValues(alpha: 0.82 * widget.opacity),
             ]
           : [
-              Colors.white.withValues(alpha: 0.42 * widget.opacity),
-              Colors.white.withValues(alpha: 0.20 * widget.opacity),
+              Colors.white.withValues(alpha: 0.90 * widget.opacity),
+              const Color(0xFFFAF5EE).withValues(alpha: 0.84 * widget.opacity),
+            ],
+    );
+
+    final specularBorder = LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: isDark
+          ? [
+              Colors.white.withValues(alpha: 0.26),
+              Colors.white.withValues(alpha: 0.10),
+              primary.withValues(alpha: 0.24),
+            ]
+          : [
+              Colors.white,
+              const Color(0xFFEAE2D8).withValues(alpha: 0.90),
+              primary.withValues(alpha: 0.22),
             ],
     );
 
@@ -532,15 +456,17 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
           boxShadow: [
             BoxShadow(
               color: isDark
-                  ? Colors.black.withValues(alpha: 0.45)
+                  ? Colors.black.withValues(alpha: 0.42)
                   : const Color(0xFF0F172A).withValues(alpha: 0.08),
-              blurRadius: 22,
+              blurRadius: 24,
               offset: const Offset(0, 8),
+              blurStyle: BlurStyle.outer,
             ),
             BoxShadow(
-              color: primary.withValues(alpha: isDark ? 0.20 : 0.12),
+              color: primary.withValues(alpha: isDark ? 0.16 : 0.08),
               blurRadius: 16,
               offset: const Offset(0, 4),
+              blurStyle: BlurStyle.outer,
             ),
           ],
         ),
@@ -550,164 +476,152 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
             filter: ImageFilter.blur(
               sigmaX: widget.blurSigma,
               sigmaY: widget.blurSigma,
+              tileMode: TileMode.mirror,
             ),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                gradient: glassFill,
-                border: Border.all(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.22)
-                      : Colors.white.withValues(alpha: 0.85),
-                  width: 1.2,
-                ),
+            child: CustomPaint(
+              foregroundPainter: _LiquidGlassBorderPainter(
+                borderRadius: widget.borderRadius,
+                borderGradient: specularBorder,
+                borderWidth: 1.2,
               ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Top specular reflection sheen
-                  Positioned(
-                    top: 0,
-                    left: 20,
-                    right: 20,
-                    height: 1.2,
-                    child: IgnorePointer(
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(1),
-                          gradient: LinearGradient(
-                            colors: [
-                              Colors.white.withValues(alpha: 0.0),
-                              Colors.white.withValues(
-                                alpha: isDark ? 0.5 : 0.9,
-                              ),
-                              Colors.white.withValues(alpha: 0.0),
-                            ],
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  gradient: glassFill,
+                ),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Top specular reflection sheen
+                    Positioned(
+                      top: 0,
+                      left: 24,
+                      right: 24,
+                      height: 1.2,
+                      child: IgnorePointer(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(1),
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.0),
+                                Colors.white.withValues(
+                                  alpha: isDark ? 0.40 : 0.95,
+                                ),
+                                Colors.white.withValues(alpha: 0.0),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
 
-                  // Smooth Sliding & Draggable Orange Pill Indicator
-                  Positioned.fill(
-                    child: Padding(
-                      padding: const EdgeInsets.all(padding),
-                      child: AnimatedAlign(
-                        duration: _isDragging
-                            ? Duration.zero
-                            : const Duration(milliseconds: 280),
-                        curve: Curves.easeOutCubic,
-                        alignment: Alignment(alignX, 0.0),
-                        child: FractionallySizedBox(
-                          widthFactor: count > 0 ? 1.0 / count : 1.0,
-                          heightFactor: 1.0,
-                          child: RepaintBoundary(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFFFF8533),
-                                    Color(0xFFDF762D),
+                    // Smooth Sliding & Draggable Orange Pill Indicator
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.all(padding),
+                        child: AnimatedAlign(
+                          duration: _isDragging
+                              ? Duration.zero
+                              : const Duration(milliseconds: 280),
+                          curve: Curves.easeOutCubic,
+                          alignment: Alignment(alignX, 0.0),
+                          child: FractionallySizedBox(
+                            widthFactor: count > 0 ? 1.0 / count : 1.0,
+                            heightFactor: 1.0,
+                            child: RepaintBoundary(
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFFFF8838),
+                                      Color(0xFFDF762D),
+                                    ],
+                                  ),
+                                  borderRadius: innerRadius,
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.38),
+                                    width: 1.0,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(0xFFDF762D).withValues(
+                                        alpha: 0.30,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                      blurStyle: BlurStyle.outer,
+                                    ),
                                   ],
                                 ),
-                                borderRadius: innerRadius,
-                                border: Border.all(
-                                  color: Colors.white.withValues(alpha: 0.45),
-                                  width: 1.0,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: const Color(0xFFDF762D).withValues(
-                                      alpha: 0.40,
-                                    ),
-                                    blurRadius: 10,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
                               ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
 
-                  // Interactive Tab Items
-                  Positioned.fill(
-                    child: Padding(
-                      padding: const EdgeInsets.all(padding),
-                      child: Row(
-                        children: List.generate(count, (index) {
-                          final tab = widget.tabs[index];
-                          final isSelected = activeIndex == index;
+                    // Interactive Tab Items (crisp icons & labels, no muddy shadows)
+                    Positioned.fill(
+                      child: Padding(
+                        padding: const EdgeInsets.all(padding),
+                        child: Row(
+                          children: List.generate(count, (index) {
+                            final tab = widget.tabs[index];
+                            final isSelected = activeIndex == index;
 
-                          return Expanded(
-                            child: InkWell(
-                              borderRadius: innerRadius,
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                widget.onTabSelected(index);
-                              },
-                              child: Center(
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        isSelected
-                                            ? (tab.activeIcon ?? tab.icon)
-                                            : tab.icon,
-                                        size: 21,
-                                        color: isSelected
-                                            ? Colors.white
-                                            : inactiveTextColor,
-                                        shadows: isSelected
-                                            ? [
-                                                const Shadow(
-                                                  color: Color(0x66000000),
-                                                  blurRadius: 3,
-                                                ),
-                                              ]
-                                            : [inactiveShadow],
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        tab.label,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          fontSize: 10.5,
-                                          fontWeight: isSelected
-                                              ? FontWeight.w700
-                                              : FontWeight.w600,
+                            return Expanded(
+                              child: InkWell(
+                                borderRadius: innerRadius,
+                                onTap: () {
+                                  HapticFeedback.selectionClick();
+                                  widget.onTabSelected(index);
+                                },
+                                child: Center(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          isSelected
+                                              ? (tab.activeIcon ?? tab.icon)
+                                              : tab.icon,
+                                          size: 21,
                                           color: isSelected
                                               ? Colors.white
                                               : inactiveTextColor,
-                                          shadows: isSelected
-                                              ? [
-                                                  const Shadow(
-                                                    color: Color(0x66000000),
-                                                    blurRadius: 3,
-                                                  ),
-                                                ]
-                                              : [inactiveShadow],
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          tab.label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w700
+                                                : FontWeight.w600,
+                                            color: isSelected
+                                                ? Colors.white
+                                                : inactiveTextColor,
+                                            letterSpacing: -0.1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
-                            ),
-                          );
-                        }),
+                            );
+                          }),
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
@@ -717,10 +631,9 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
   }
 }
 
-
-
 /// Tier 1: Frosted Glass Card for content cards (equipment, rentals, settings groups).
-/// Combines high legibility with optical blur, subtle specular border, and ambient shadow.
+/// Uses a multi-stop frosted surface gradient, crisp foreground specular border,
+/// and outer ambient shadow so cards never suffer from Impeller dark-edge smudges.
 class GlassCard extends StatelessWidget {
   final Widget child;
   final double borderRadius;
@@ -738,7 +651,7 @@ class GlassCard extends StatelessWidget {
     this.padding,
     this.margin,
     this.onTap,
-    this.blurSigma = 14.0,
+    this.blurSigma = 0.0,
     this.glowColor,
     this.isSelected = false,
   });
@@ -751,14 +664,17 @@ class GlassCard extends StatelessWidget {
     final cardFill = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
+      stops: const [0.0, 0.6, 1.0],
       colors: isDark
           ? [
-              const Color(0xFF1A2434).withValues(alpha: 0.88),
-              const Color(0xFF121B26).withValues(alpha: 0.74),
+              const Color(0xFF1C2738).withValues(alpha: 0.95),
+              const Color(0xFF151F2E).withValues(alpha: 0.92),
+              const Color(0xFF111926).withValues(alpha: 0.90),
             ]
           : [
-              Colors.white.withValues(alpha: 0.92),
-              const Color(0xFFFAF6F0).withValues(alpha: 0.78),
+              Colors.white.withValues(alpha: 0.97),
+              const Color(0xFFFFFCF9).withValues(alpha: 0.94),
+              const Color(0xFFFBF6EF).withValues(alpha: 0.90),
             ],
     );
 
@@ -769,14 +685,17 @@ class GlassCard extends StatelessWidget {
         : LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
+            stops: const [0.0, 0.5, 1.0],
             colors: isDark
                 ? [
-                    Colors.white.withValues(alpha: 0.22),
-                    Colors.white.withValues(alpha: 0.06),
+                    Colors.white.withValues(alpha: 0.20),
+                    Colors.white.withValues(alpha: 0.08),
+                    const Color(0xFF334155).withValues(alpha: 0.35),
                   ]
                 : [
-                    Colors.white.withValues(alpha: 0.95),
-                    const Color(0xFFE2E8F0).withValues(alpha: 0.70),
+                    Colors.white,
+                    const Color(0xFFE6DFD5).withValues(alpha: 0.85),
+                    const Color(0xFFDCD3C8).withValues(alpha: 0.65),
                   ],
           );
 
@@ -789,17 +708,7 @@ class GlassCard extends StatelessWidget {
       child: child,
     );
 
-    if (blurSigma > 0) {
-      content = ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: content,
-        ),
-      );
-    } else {
-      content = ClipRRect(borderRadius: radius, child: content);
-    }
+    content = ClipRRect(borderRadius: radius, child: content);
 
     Widget body = Container(
       margin: margin,
@@ -808,25 +717,27 @@ class GlassCard extends StatelessWidget {
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? Colors.black.withValues(alpha: 0.35)
-                : const Color(0xFF0F172A).withValues(alpha: 0.05),
-            blurRadius: 16,
+                ? Colors.black.withValues(alpha: 0.30)
+                : const Color(0xFF0F172A).withValues(alpha: 0.045),
+            blurRadius: 14,
             offset: const Offset(0, 4),
+            blurStyle: BlurStyle.outer,
           ),
           if (isSelected || glowColor != null)
             BoxShadow(
               color: (glowColor ?? const Color(0xFFDF762D))
-                  .withValues(alpha: isDark ? 0.25 : 0.18),
-              blurRadius: 18,
+                  .withValues(alpha: isDark ? 0.22 : 0.14),
+              blurRadius: 16,
               offset: const Offset(0, 4),
+              blurStyle: BlurStyle.outer,
             ),
         ],
       ),
       child: CustomPaint(
-        painter: _LiquidGlassBorderPainter(
+        foregroundPainter: _LiquidGlassBorderPainter(
           borderRadius: borderRadius,
           borderGradient: cardBorder,
-          borderWidth: isSelected ? 1.5 : 1.0,
+          borderWidth: isSelected ? 1.5 : 1.1,
         ),
         child: content,
       ),
@@ -869,20 +780,42 @@ class GlassCategoryPill extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = activeColor ?? const Color(0xFFDF762D);
 
-    final bg = isSelected
-        ? primary.withValues(alpha: isDark ? 0.28 : 0.14)
-        : isDark
-            ? const Color(0xFF1E2838).withValues(alpha: 0.65)
-            : Colors.white.withValues(alpha: 0.75);
+    final bgGradient = isSelected
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
+                    primary.withValues(alpha: 0.28),
+                    primary.withValues(alpha: 0.18),
+                  ]
+                : [
+                    const Color(0xFFFFF3E8),
+                    const Color(0xFFFEE7D3),
+                  ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: isDark
+                ? [
+                    const Color(0xFF1E293B).withValues(alpha: 0.92),
+                    const Color(0xFF151E2C).withValues(alpha: 0.88),
+                  ]
+                : [
+                    Colors.white.withValues(alpha: 0.96),
+                    const Color(0xFFFBF6F0).withValues(alpha: 0.90),
+                  ],
+          );
 
     final border = isSelected
-        ? primary.withValues(alpha: 0.85)
+        ? primary.withValues(alpha: 0.75)
         : isDark
             ? Colors.white.withValues(alpha: 0.16)
-            : Colors.white.withValues(alpha: 0.95);
+            : const Color(0xFFE5DEC9).withValues(alpha: 0.75);
 
     final textColor = isSelected
-        ? primary
+        ? (isDark ? const Color(0xFFFF9E5E) : const Color(0xFFB85012))
         : isDark
             ? const Color(0xFFF1F5F9)
             : const Color(0xFF1E293B);
@@ -898,18 +831,19 @@ class GlassCategoryPill extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
-            color: bg,
+            gradient: bgGradient,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: border, width: isSelected ? 1.4 : 1.0),
+            border: Border.all(color: border, width: isSelected ? 1.3 : 1.0),
             boxShadow: [
               BoxShadow(
                 color: isSelected
-                    ? primary.withValues(alpha: 0.18)
+                    ? primary.withValues(alpha: 0.14)
                     : isDark
-                        ? Colors.black.withValues(alpha: 0.25)
-                        : const Color(0xFF0F172A).withValues(alpha: 0.04),
+                        ? Colors.black.withValues(alpha: 0.22)
+                        : const Color(0xFF0F172A).withValues(alpha: 0.035),
                 blurRadius: 10,
                 offset: const Offset(0, 3),
+                blurStyle: BlurStyle.outer,
               ),
             ],
           ),
@@ -920,13 +854,17 @@ class GlassCategoryPill extends StatelessWidget {
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: isSelected
-                      ? primary.withValues(alpha: 0.20)
+                      ? primary.withValues(alpha: isDark ? 0.24 : 0.16)
                       : isDark
                           ? Colors.white.withValues(alpha: 0.08)
                           : primary.withValues(alpha: 0.09),
                   shape: BoxShape.circle,
                 ),
-                child: Icon(icon, size: 16, color: isSelected ? primary : textColor),
+                child: Icon(
+                  icon,
+                  size: 16,
+                  color: isSelected ? primary : textColor,
+                ),
               ),
               const SizedBox(width: 8),
               Text(
@@ -970,12 +908,12 @@ class GlassFloatingDock extends StatelessWidget {
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              const Color(0xFF1A2332).withValues(alpha: 0.70),
-              const Color(0xFF0D1420).withValues(alpha: 0.48),
+              const Color(0xFF1B2536).withValues(alpha: 0.90),
+              const Color(0xFF111826).withValues(alpha: 0.84),
             ]
           : [
-              Colors.white.withValues(alpha: 0.78),
-              const Color(0xFFFAF6F0).withValues(alpha: 0.58),
+              Colors.white.withValues(alpha: 0.92),
+              const Color(0xFFFAF6F0).withValues(alpha: 0.86),
             ],
     );
 
@@ -984,14 +922,14 @@ class GlassFloatingDock extends StatelessWidget {
       end: Alignment.bottomRight,
       colors: isDark
           ? [
-              Colors.white.withValues(alpha: 0.28),
-              const Color(0xFFDF762D).withValues(alpha: 0.25),
-              Colors.white.withValues(alpha: 0.12),
+              Colors.white.withValues(alpha: 0.26),
+              const Color(0xFFDF762D).withValues(alpha: 0.22),
+              Colors.white.withValues(alpha: 0.10),
             ]
           : [
-              Colors.white.withValues(alpha: 0.98),
-              const Color(0xFFF3ECE4).withValues(alpha: 0.70),
-              const Color(0xFFDF762D).withValues(alpha: 0.28),
+              Colors.white,
+              const Color(0xFFEAE2D8).withValues(alpha: 0.85),
+              const Color(0xFFDF762D).withValues(alpha: 0.24),
             ],
     );
 
@@ -1005,33 +943,40 @@ class GlassFloatingDock extends StatelessWidget {
           boxShadow: [
             BoxShadow(
               color: isDark
-                  ? Colors.black.withValues(alpha: 0.45)
-                  : const Color(0xFF0F172A).withValues(alpha: 0.08),
+                  ? Colors.black.withValues(alpha: 0.40)
+                  : const Color(0xFF0F172A).withValues(alpha: 0.07),
               blurRadius: 22,
               offset: const Offset(0, 8),
+              blurStyle: BlurStyle.outer,
             ),
             BoxShadow(
-              color: const Color(0xFFDF762D).withValues(alpha: isDark ? 0.16 : 0.10),
+              color: const Color(0xFFDF762D)
+                  .withValues(alpha: isDark ? 0.14 : 0.08),
               blurRadius: 16,
               offset: const Offset(0, 4),
+              blurStyle: BlurStyle.outer,
             ),
           ],
         ),
         child: ClipRRect(
           borderRadius: radius,
           child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
-            child: Container(
-              padding: padding,
-              decoration: BoxDecoration(
-                borderRadius: radius,
-                gradient: glassFill,
+            filter: ImageFilter.blur(
+              sigmaX: 20.0,
+              sigmaY: 20.0,
+              tileMode: TileMode.mirror,
+            ),
+            child: CustomPaint(
+              foregroundPainter: _LiquidGlassBorderPainter(
+                borderRadius: 28,
+                borderGradient: specularBorder,
+                borderWidth: 1.2,
               ),
-              child: CustomPaint(
-                painter: _LiquidGlassBorderPainter(
-                  borderRadius: 28,
-                  borderGradient: specularBorder,
-                  borderWidth: 1.2,
+              child: Container(
+                padding: padding,
+                decoration: BoxDecoration(
+                  borderRadius: radius,
+                  gradient: glassFill,
                 ),
                 child: Center(child: child),
               ),
@@ -1061,7 +1006,11 @@ Future<T?> showFrostedModalBottomSheet<T>({
       return ClipRRect(
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 24.0, sigmaY: 24.0),
+          filter: ImageFilter.blur(
+            sigmaX: 22.0,
+            sigmaY: 22.0,
+            tileMode: TileMode.mirror,
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: LinearGradient(
@@ -1069,20 +1018,21 @@ Future<T?> showFrostedModalBottomSheet<T>({
                 end: Alignment.bottomCenter,
                 colors: isDark
                     ? [
-                        const Color(0xFF1A2332).withValues(alpha: 0.90),
-                        const Color(0xFF0D1420).withValues(alpha: 0.82),
+                        const Color(0xFF1A2332).withValues(alpha: 0.94),
+                        const Color(0xFF0F1622).withValues(alpha: 0.90),
                       ]
                     : [
-                        Colors.white.withValues(alpha: 0.94),
-                        const Color(0xFFFFFDFC).withValues(alpha: 0.88),
+                        Colors.white.withValues(alpha: 0.96),
+                        const Color(0xFFFFFCF9).withValues(alpha: 0.92),
                       ],
               ),
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(28)),
               border: Border(
                 top: BorderSide(
                   color: isDark
                       ? Colors.white.withValues(alpha: 0.22)
-                      : Colors.white.withValues(alpha: 0.95),
+                      : Colors.white,
                   width: 1.2,
                 ),
               ),
@@ -1091,6 +1041,7 @@ Future<T?> showFrostedModalBottomSheet<T>({
                   color: isDark ? Colors.black54 : Colors.black12,
                   blurRadius: 28,
                   offset: const Offset(0, -6),
+                  blurStyle: BlurStyle.outer,
                 ),
               ],
             ),

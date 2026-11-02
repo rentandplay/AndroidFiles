@@ -282,10 +282,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     final isDark = themeProvider.isDarkMode ||
         Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0B1320) : const Color(0xFFF8FAFC);
-    final cardBg = isDark ? const Color(0xFF131D2D) : Colors.white;
+    final bgColor = isDark ? const Color(0xFF0D131D) : const Color(0xFFFBF8F5);
+    final cardBg = isDark ? const Color(0xFF162030) : const Color(0xFFFFFDFB);
     final cardBorder =
-        isDark ? const Color(0xFF1E2C42) : const Color(0xFFE2E8F0);
+        isDark ? const Color(0xFF243248) : const Color(0xFFEAE2D8);
     final textPrimary =
         isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
     final textSecondary =
@@ -1122,15 +1122,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ? NetworkImage(_profileImageUrl!) as ImageProvider
             : null;
 
-    return Container(
+    return GlassCard(
       key: const ValueKey('customer-profile-card'),
-      width: double.infinity,
+      borderRadius: 20,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: cardBorder),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -1390,53 +1385,43 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color textSecondary,
     VoidCallback? onTap,
   }) {
-    return Material(
-      color: cardBg,
-      borderRadius: BorderRadius.circular(16),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: cardBorder),
+    return GlassCard(
+      borderRadius: 18,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: iconBg,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, size: 18, color: iconColor),
           ),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(7),
-                decoration: BoxDecoration(
-                  color: iconBg,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, size: 18, color: iconColor),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  color: textSecondary,
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w800,
+              color: textPrimary,
+            ),
           ),
-        ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+              color: textSecondary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1467,14 +1452,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         : user?.email?.toString());
     final phone = _profileValue(userModel?.phone);
 
-    return Container(
-      width: double.infinity,
+    return GlassCard(
+      borderRadius: 18,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cardBorder),
-      ),
       child: _isEditing
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1606,12 +1586,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     required Color textPrimary,
     required Color textSecondary,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cardBorder),
-      ),
+    return GlassCard(
+      borderRadius: 18,
       child: Column(
         children: [
           _shortcutTile(

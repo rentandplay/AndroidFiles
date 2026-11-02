@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/rental_model.dart';
 import '../../services/mobile_api_service.dart';
+import '../../widgets/glass_app_bar.dart';
+import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
 
 class ReturnEquipmentScreen extends StatefulWidget {
@@ -57,17 +59,18 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
   Widget build(BuildContext context) => PopScope(
         canPop: !_busy,
         child: Scaffold(
-          appBar: AppBar(title: const Text('Request return')),
+          appBar: const GlassAppBar(titleText: 'Request return'),
           bottomNavigationBar: RentalActionBar(
               label: 'Send return request', onPressed: _submit, busy: _busy),
-          body: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 712),
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.all(16),
-                child: Column(
+          body: LiquidAmbientBackdrop(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 712),
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       RentalSection(
@@ -134,10 +137,11 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
                       ],
                       const SizedBox(height: 16),
                     ]),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
       );
 }
 
@@ -286,7 +290,7 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
         _rental.dueDate.millisecondsSinceEpoch > 0 &&
         DateTime.now().isAfter(_rental.dueDate);
     return Scaffold(
-        appBar: AppBar(title: const Text('Return status'), actions: [
+        appBar: GlassAppBar(titleText: 'Return status', actions: [
           IconButton(
               tooltip: 'Refresh return status',
               onPressed: _refresh,
@@ -300,64 +304,66 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
                     icon: const Icon(Icons.assignment_return_outlined),
                     label: const Text('Send a new return request')))
             : null,
-        body: RefreshIndicator(
-            onRefresh: _refresh,
-            child: ListView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(16),
-                children: [
-                  RentalSection(
-                      child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                        Text(_rental.itemName,
-                            style: const TextStyle(
-                                fontSize: 22, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 4),
-                        Text(_rental.displayReference),
-                        const SizedBox(height: 16),
-                        RentalStatusBadge(
-                            status: _rental.hasPendingReturnRequest
-                                ? 'RETURN_REQUESTED'
-                                : _rental.normalizedStatus),
-                        const SizedBox(height: 20),
-                        _ReturnProgressTracker(step: _step()),
-                        const SizedBox(height: 18),
-                        RentalNotice(
-                            title: _title(),
-                            message: _message(),
-                            icon: Icons.assignment_return_outlined,
-                            isError: overdue || rejected),
-                        if (overdue) ...[
-                          const SizedBox(height: 12),
+        body: LiquidAmbientBackdrop(
+          child: RefreshIndicator(
+              onRefresh: _refresh,
+              child: ListView(
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    RentalSection(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                          Text(_rental.itemName,
+                              style: const TextStyle(
+                                  fontSize: 22, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(_rental.displayReference),
+                          const SizedBox(height: 16),
+                          RentalStatusBadge(
+                              status: _rental.hasPendingReturnRequest
+                                  ? 'RETURN_REQUESTED'
+                                  : _rental.normalizedStatus),
+                          const SizedBox(height: 20),
+                          _ReturnProgressTracker(step: _step()),
+                          const SizedBox(height: 18),
                           RentalNotice(
-                              title: 'Overdue',
-                              isError: true,
-                              message:
-                                  'The rental clock is still running until the admin records physical receipt.'),
-                        ],
-                        if (_error.isNotEmpty) ...[
+                              title: _title(),
+                              message: _message(),
+                              icon: Icons.assignment_return_outlined,
+                              isError: overdue || rejected),
+                          if (overdue) ...[
+                            const SizedBox(height: 12),
+                            RentalNotice(
+                                title: 'Overdue',
+                                isError: true,
+                                message:
+                                    'The rental clock is still running until the admin records physical receipt.'),
+                          ],
+                          if (_error.isNotEmpty) ...[
+                            const SizedBox(height: 12),
+                            RentalNotice(
+                                title: 'Could not refresh status',
+                                isError: true,
+                                message:
+                                    '$_error. Showing the last loaded status.'),
+                          ],
                           const SizedBox(height: 12),
-                          RentalNotice(
-                              title: 'Could not refresh status',
-                              isError: true,
-                              message:
-                                  '$_error. Showing the last loaded status.'),
-                        ],
-                        const SizedBox(height: 12),
-                        RentalValueRow(
-                            'Return by',
-                            _rental.dueDate.millisecondsSinceEpoch > 0
-                                ? _date(_rental.dueDate)
-                                : 'Not recorded'),
-                        if (_rental.receivedAt != null)
                           RentalValueRow(
-                              'Received by admin', _date(_rental.receivedAt)),
-                        if (_rental.balanceDue > 0)
-                          RentalValueRow(
-                              'Balance due', rentalMoney(_rental.balanceDue)),
-                      ])),
-                ])));
+                              'Return by',
+                              _rental.dueDate.millisecondsSinceEpoch > 0
+                                  ? _date(_rental.dueDate)
+                                  : 'Not recorded'),
+                          if (_rental.receivedAt != null)
+                            RentalValueRow(
+                                'Received by admin', _date(_rental.receivedAt)),
+                          if (_rental.balanceDue > 0)
+                            RentalValueRow(
+                                'Balance due', rentalMoney(_rental.balanceDue)),
+                        ])),
+                  ])),
+        ));
   }
 }
 

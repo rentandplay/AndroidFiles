@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
+import '../../widgets/glass_app_bar.dart';
+import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
 import 'active_rentals_screen.dart';
 
@@ -396,7 +398,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return PopScope(
       canPop: !_isSubmitting,
       child: Scaffold(
-        appBar: AppBar(title: const Text('Review request')),
+        appBar: const GlassAppBar(titleText: 'Review request'),
         bottomNavigationBar: RentalActionBar(
           summaryLabel:
               _paymentMethod == 'QR' ? 'Transfer total' : 'Due at handoff',
@@ -407,16 +409,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               ? _submitRentalRequest
               : null,
         ),
-        body: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 712),
-            child: Form(
-              key: _form,
-              child: SingleChildScrollView(
-                keyboardDismissBehavior:
-                    ScrollViewKeyboardDismissBehavior.onDrag,
-                padding: const EdgeInsets.all(16),
-                child: Column(
+        body: LiquidAmbientBackdrop(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 712),
+              child: Form(
+                key: _form,
+                child: SingleChildScrollView(
+                  keyboardDismissBehavior:
+                      ScrollViewKeyboardDismissBehavior.onDrag,
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       RentalSection(
@@ -846,11 +849,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ),
                       const SizedBox(height: 16),
                     ]),
+                  ),
+                ),
               ),
             ),
           ),
         ),
-      ),
     );
   }
 }

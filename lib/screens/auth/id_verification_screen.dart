@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../models/user_model.dart';
+import '../../widgets/glass_app_bar.dart';
+import '../../widgets/liquid_glass.dart';
+import '../../widgets/rental_ui.dart';
 import '../shared/terms_dialog.dart';
 import '../user/customer_home_screen.dart';
 
@@ -84,83 +87,48 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Rental Requirements & Terms'),
+      appBar: const GlassAppBar(
+        titleText: 'Rental Requirements & Terms',
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            Text(
-              'Identity & Rental Policy',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                color: Theme.of(context).primaryColor,
+      body: LiquidAmbientBackdrop(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header
+              Text(
+                'Identity & Rental Policy',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: scheme.primary,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Review our rental policies and physical ID requirement to proceed with equipment rentals.',
-              style:
-                  TextStyle(color: Colors.black87, fontSize: 13, height: 1.4),
-            ),
-            const SizedBox(height: 20),
-
-            // Physical Valid ID Notice Banner (Rule 1 Update)
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade50,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.blue.shade300),
+              const SizedBox(height: 6),
+              Text(
+                'Review our rental policies and physical ID requirement to proceed with equipment rentals.',
+                style: TextStyle(
+                    color: scheme.onSurfaceVariant, fontSize: 13, height: 1.4),
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.badge_outlined,
-                      color: Colors.blue.shade800, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Physical Valid ID Required',
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 15,
-                            color: Colors.blue.shade900,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Show one physical Government or Student ID to the operator when the item is handed over at your selected location.',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: Colors.blue.shade800,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
+              const SizedBox(height: 20),
+
+              // Physical Valid ID Notice Banner
+              const RentalNotice(
+                icon: Icons.badge_outlined,
+                title: 'Physical Valid ID Required',
+                message:
+                    'Show one physical Government or Student ID to the operator when the item is handed over at your selected location.',
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // Terms & Conditions Card
-            Card(
-              elevation: 2,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16)),
-              child: Padding(
+              // Terms & Conditions Card
+              GlassCard(
+                borderRadius: 18,
                 padding: const EdgeInsets.all(16.0),
                 child: Column(
                   children: [
@@ -168,7 +136,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                       children: [
                         Checkbox(
                           value: _acceptedTerms,
-                          activeColor: const Color(0xFFF57C00),
+                          activeColor: const Color(0xFFDF762D),
                           onChanged: (val) {
                             setState(() {
                               _acceptedTerms = val ?? false;
@@ -188,7 +156,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).primaryColor,
+                                    color: scheme.primary,
                                     decoration: TextDecoration.underline,
                                   ),
                                 ),
@@ -201,39 +169,39 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                   ],
                 ),
               ),
-            ),
 
-            const SizedBox(height: 28),
+              const SizedBox(height: 28),
 
-            // Submit Button
-            SizedBox(
-              height: 52,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF57C00), // Primary Orange
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              // Submit Button
+              SizedBox(
+                height: 52,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFDF762D),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    elevation: 0,
                   ),
-                  elevation: 2,
+                  onPressed:
+                      (_acceptedTerms && !_isSubmitting) ? _handleSubmit : null,
+                  child: _isSubmitting
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text(
+                          'Continue to Catalog',
+                          style: TextStyle(
+                              fontSize: 16, fontWeight: FontWeight.w800),
+                        ),
                 ),
-                onPressed:
-                    (_acceptedTerms && !_isSubmitting) ? _handleSubmit : null,
-                child: _isSubmitting
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
-                      )
-                    : const Text(
-                        'Continue to Catalog',
-                        style: TextStyle(
-                            fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

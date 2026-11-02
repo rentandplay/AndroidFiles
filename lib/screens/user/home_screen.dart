@@ -221,8 +221,8 @@ class HomeScreenState extends State<HomeScreen> {
                       children: [
                         Text(
                           user?.displayName?.trim().isNotEmpty == true
-                              ? 'Welcome back, ${user!.displayName!.trim().split(' ').first} 👋'
-                              : 'Welcome to Rent & Play! 👋',
+                              ? 'Welcome back, ${user!.displayName!.trim().split(' ').first}'
+                              : 'Welcome to Rent & Play',
                           style: Theme.of(context)
                               .textTheme
                               .headlineSmall
@@ -385,7 +385,7 @@ class HomeScreenState extends State<HomeScreen> {
                         gradient: RadialGradient(
                           colors: [
                             Colors.white.withValues(alpha: 0.28),
-                            Colors.transparent,
+                            Colors.white.withValues(alpha: 0.0),
                           ],
                         ),
                       ),
@@ -437,26 +437,20 @@ class HomeScreenState extends State<HomeScreen> {
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 20,
-                                  height: 1.1,
+                                  height: 1.12,
                                   fontWeight: FontWeight.w800,
-                                  shadows: [
-                                    Shadow(
-                                      color: Colors.black26,
-                                      blurRadius: 6,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
+                                  letterSpacing: -0.3,
                                 ),
                               ),
                               const SizedBox(height: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
+                                    horizontal: 9, vertical: 3.5),
                                 decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.18),
+                                  color: Colors.white.withValues(alpha: 0.22),
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.35),
+                                    color: Colors.white.withValues(alpha: 0.42),
                                     width: 1.0,
                                   ),
                                 ),
@@ -900,45 +894,41 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRentalsLoadingCard(BuildContext context) => const Card(
+  Widget _buildRentalsLoadingCard(BuildContext context) => const GlassCard(
         margin: EdgeInsets.fromLTRB(18, 0, 18, 12),
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Row(
-            children: [
-              SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2)),
-              SizedBox(width: 12),
-              Text('Loading your rentals…'),
-            ],
-          ),
+        padding: EdgeInsets.all(20),
+        child: Row(
+          children: [
+            SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2)),
+            SizedBox(width: 12),
+            Text('Loading your rentals…'),
+          ],
         ),
       );
 
-  Widget _buildRentalError(BuildContext context) => Card(
+  Widget _buildRentalError(BuildContext context) => GlassCard(
         margin: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Row(
-            children: [
-              const Icon(Icons.cloud_off_outlined, color: Colors.orange),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Could not load your rentals. Pull down to try again.',
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant),
-                ),
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            const Icon(Icons.cloud_off_outlined, color: Colors.orange),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Could not load your rentals. Pull down to try again.',
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
               ),
-              IconButton(
-                tooltip: 'Retry',
-                onPressed: _loadHome,
-                icon: const Icon(Icons.refresh),
-              ),
-            ],
-          ),
+            ),
+            IconButton(
+              tooltip: 'Retry',
+              onPressed: _loadHome,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
       );
 }

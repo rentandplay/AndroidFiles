@@ -188,257 +188,530 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
     );
   }
 
-  Future<void> _showDetails(RentalModel rental) => showModalBottomSheet<void>(
-        context: context,
-        isScrollControlled: true,
-        showDragHandle: true,
-        builder: (_) => SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 24),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
+  Future<void> _showDetails(RentalModel rental) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return showFrostedModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetContext) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 10, 20, 24),
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header: Equipment Icon, Item Name, Reference Code & Status Badge
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(rental.itemName,
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: 6),
-                  Text(
-                    rental.displayReference,
-                    style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  Container(
+                    width: 52,
+                    height: 52,
+                    decoration: BoxDecoration(
+                      color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.10),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.20),
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.sports_tennis_rounded,
+                      color: scheme.primary,
+                      size: 26,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Align(
-                      alignment: Alignment.centerLeft,
-                      child:
-                          RentalStatusBadge(status: rental.normalizedStatus)),
-                  const Divider(height: 28),
-                  if (widget.isAdmin)
-                    RentalValueRow('Customer', rental.customerName),
-                  RentalValueRow(
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          rental.itemName,
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.3,
+                              ),
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.08)
+                                    : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.white.withValues(alpha: 0.12)
+                                      : const Color(0xFFE2E8F0),
+                                ),
+                              ),
+                              child: Text(
+                                rental.displayReference,
+                                style: TextStyle(
+                                  fontFamily: 'monospace',
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: scheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            RentalStatusBadge(status: rental.normalizedStatus),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 18),
+
+              // Digital Receipt / Highlight Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: isDark
+                        ? [
+                            const Color(0xFF1E2D44).withValues(alpha: 0.65),
+                            const Color(0xFF142032).withValues(alpha: 0.75),
+                          ]
+                        : [
+                            Colors.white.withValues(alpha: 0.95),
+                            const Color(0xFFF8FAFC).withValues(alpha: 0.90),
+                          ],
+                  ),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : const Color(0xFFE2E8F0),
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isDark
+                          ? Colors.black.withValues(alpha: 0.25)
+                          : const Color(0xFF64748B).withValues(alpha: 0.06),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Rental Fee',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: scheme.onSurfaceVariant,
+                          ),
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          rentalMoney(rental.rateFee),
+                          style: TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                            color: isDark
+                                ? const Color(0xFFF0AD7C)
+                                : const Color(0xFFDF762D),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: scheme.primary.withValues(alpha: 0.10),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: scheme.primary.withValues(alpha: 0.20),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.payments_outlined,
+                            size: 15,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            _paymentLabel(rental),
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.primary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              if (rental.balanceDue > 0 || rental.refundDue > 0) ...[
+                const SizedBox(height: 10),
+                _settlementSummary(rental),
+              ],
+
+              const SizedBox(height: 16),
+
+              // Section 1: Handoff & Timeline
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF162235).withValues(alpha: 0.55)
+                      : Colors.white.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.location_on_outlined,
+                            size: 16, color: scheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Handoff & Schedule',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    if (widget.isAdmin)
+                      RentalValueRow('Customer', rental.customerName),
+                    RentalValueRow(
                       rental.isRentAndPlayPickup
                           ? 'Pickup location'
                           : 'Delivery location',
-                      rental.customerHandoffLocation),
-                  RentalValueRow('Rental date', _date(rental.startDate)),
-                  if (rental.dueDate.millisecondsSinceEpoch > 0)
-                    RentalValueRow('Due', _date(rental.dueDate)),
-                  if (rental.returnedDate != null)
-                    RentalValueRow('Returned', _date(rental.returnedDate!)),
-                  RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
-                  RentalValueRow('Payment', _paymentLabel(rental)),
-                  if (rental.balanceDue > 0)
-                    RentalValueRow(
-                        'Balance due', rentalMoney(rental.balanceDue)),
-                  if (rental.refundDue > 0)
-                    RentalValueRow('Refund due', rentalMoney(rental.refundDue)),
-                ],
+                      rental.customerHandoffLocation,
+                    ),
+                    RentalValueRow('Rental date', _date(rental.startDate)),
+                    if (rental.dueDate.millisecondsSinceEpoch > 0)
+                      RentalValueRow('Due', _date(rental.dueDate)),
+                    if (rental.returnedDate != null)
+                      RentalValueRow('Returned', _date(rental.returnedDate!)),
+                  ],
+                ),
               ),
-            ),
+
+              const SizedBox(height: 12),
+
+              // Section 2: Financial Breakdown
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF162235).withValues(alpha: 0.55)
+                      : Colors.white.withValues(alpha: 0.75),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : const Color(0xFFE2E8F0).withValues(alpha: 0.8),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.receipt_long_outlined,
+                            size: 16, color: scheme.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'Financial Summary',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
+                    RentalValueRow('Payment', _paymentLabel(rental)),
+                    if (rental.balanceDue > 0)
+                      RentalValueRow(
+                          'Balance due', rentalMoney(rental.balanceDue),
+                          emphasis: true),
+                    if (rental.refundDue > 0)
+                      RentalValueRow(
+                          'Refund due', rentalMoney(rental.refundDue),
+                          emphasis: true),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Dismiss / Close Button
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: FilledButton.tonal(
+                  onPressed: () => Navigator.of(sheetContext).pop(),
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                  child: const Text('Close',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _historyCard(RentalModel rental) {
     if (_compactView && !widget.isAdmin) return _compactHistoryCard(rental);
     final code = rental.displayReference;
     final attention = _needsAttention(rental);
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final stackedStatus = MediaQuery.sizeOf(context).width < 350 ||
         MediaQuery.textScalerOf(context).scale(16) > 19;
-    return Card(
+    return GlassCard(
       margin: const EdgeInsets.only(bottom: 12),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _showDetails(rental),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+      borderRadius: 20,
+      padding: const EdgeInsets.all(16),
+      onTap: () => _showDetails(rental),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  CircleAvatar(
-                    radius: 22,
-                    backgroundColor: scheme.primary.withValues(alpha: .1),
-                    child: Icon(Icons.sports_outlined,
-                        color: scheme.primary, size: 22),
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.10),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.18),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(rental.itemName,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 16, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 3),
-                        Text(code,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                                color: scheme.onSurfaceVariant, fontSize: 12)),
-                      ],
-                    ),
-                  ),
-                  if (!stackedStatus) ...[
-                    const SizedBox(width: 8),
-                    RentalStatusBadge(status: rental.normalizedStatus),
+                ),
+                child: Icon(Icons.sports_tennis_rounded,
+                    color: scheme.primary, size: 22),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(rental.itemName,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                            fontSize: 16, fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text(code,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                            color: scheme.onSurfaceVariant, fontSize: 12)),
                   ],
-                ],
+                ),
               ),
-              if (stackedStatus) ...[
-                const SizedBox(height: 10),
-                Align(
-                    alignment: Alignment.centerLeft,
-                    child: RentalStatusBadge(status: rental.normalizedStatus)),
+              if (!stackedStatus) ...[
+                const SizedBox(width: 8),
+                RentalStatusBadge(status: rental.normalizedStatus),
               ],
-              const Divider(height: 26),
-              Text('Rental date · ${_date(rental.startDate)}',
-                  style: TextStyle(
-                      color: scheme.onSurfaceVariant,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500)),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _amountSummary(
-                        'Rental fee', rentalMoney(rental.rateFee)),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Icon(
-                    attention ? Icons.info_outline : Icons.payments_outlined,
-                    size: 17,
-                    color: attention ? scheme.primary : scheme.onSurfaceVariant,
-                  ),
-                  const SizedBox(width: 7),
-                  Expanded(
-                    child: Text(
-                      attention
-                          ? _paymentLabel(rental)
-                          : 'Payment · ${_paymentLabel(rental)}',
-                      style: TextStyle(
-                        color: attention
-                            ? scheme.primary
-                            : scheme.onSurfaceVariant,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              if (rental.refundDue > 0 || rental.balanceDue > 0) ...[
-                const SizedBox(height: 8),
-                _settlementSummary(rental),
-              ],
-              const SizedBox(height: 4),
-              Align(
-                alignment: Alignment.centerRight,
-                child: Text('View details  ›',
-                    style: TextStyle(
-                        color: scheme.primary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700)),
+            ],
+          ),
+          if (stackedStatus) ...[
+            const SizedBox(height: 10),
+            Align(
+                alignment: Alignment.centerLeft,
+                child: RentalStatusBadge(status: rental.normalizedStatus)),
+          ],
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              height: 1,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : const Color(0xFFE2E8F0),
+            ),
+          ),
+          Text('Rental date · ${_date(rental.startDate)}',
+              style: TextStyle(
+                  color: scheme.onSurfaceVariant,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child:
+                    _amountSummary('Rental fee', rentalMoney(rental.rateFee)),
               ),
             ],
           ),
-        ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Icon(
+                attention ? Icons.info_outline : Icons.payments_outlined,
+                size: 17,
+                color: attention ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: 7),
+              Expanded(
+                child: Text(
+                  attention
+                      ? _paymentLabel(rental)
+                      : 'Payment · ${_paymentLabel(rental)}',
+                  style: TextStyle(
+                    color: attention ? scheme.primary : scheme.onSurfaceVariant,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (rental.refundDue > 0 || rental.balanceDue > 0) ...[
+            const SizedBox(height: 8),
+            _settlementSummary(rental),
+          ],
+          const SizedBox(height: 6),
+          Align(
+            alignment: Alignment.centerRight,
+            child: Text('View details  ›',
+                style: TextStyle(
+                    color: scheme.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700)),
+          ),
+        ],
       ),
     );
   }
 
   Widget _compactHistoryCard(RentalModel rental) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final day = DateFormat('MMM d, yyyy')
         .format(rental.startDate.toUtc().add(const Duration(hours: 8)));
-    return Card(
+    return GlassCard(
       key: ValueKey('history-compact-${rental.rentalId}'),
-      margin: const EdgeInsets.only(bottom: 9),
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: () => _showDetails(rental),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child:
-              Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              CircleAvatar(
-                radius: 18,
-                backgroundColor: scheme.primary.withValues(alpha: .09),
-                child: Icon(Icons.receipt_long_outlined,
-                    color: scheme.primary, size: 18),
+      margin: const EdgeInsets.only(bottom: 10),
+      borderRadius: 18,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      onTap: () => _showDetails(rental),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: scheme.primary.withValues(alpha: isDark ? 0.16 : 0.10),
+              borderRadius: BorderRadius.circular(11),
+              border: Border.all(
+                color: scheme.primary.withValues(alpha: isDark ? 0.28 : 0.18),
               ),
-              const SizedBox(width: 10),
-              Expanded(
-                  child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(rental.itemName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                          fontSize: 14, fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 3),
-                  Text('${rental.displayReference} · $day',
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                          fontSize: 11,
-                          height: 1.3,
-                          color: scheme.onSurfaceVariant)),
-                ],
-              )),
-              const SizedBox(width: 6),
-              Icon(Icons.chevron_right_rounded,
-                  color: scheme.onSurfaceVariant, size: 20),
-            ]),
-            const SizedBox(height: 9),
-            Wrap(
-                spacing: 10,
-                runSpacing: 6,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  RentalStatusBadge(status: rental.normalizedStatus),
-                  Text('Fee ${rentalMoney(rental.rateFee)}',
-                      style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: scheme.onSurfaceVariant)),
-                ]),
-            if (_needsAttention(rental)) ...[
-              const SizedBox(height: 7),
-              if (rental.balanceDue > 0 || rental.refundDue > 0)
-                _settlementSummary(rental)
-              else
-                Text(_paymentLabel(rental),
-                    style: TextStyle(
-                        color: scheme.primary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600)),
+            ),
+            child: Icon(Icons.sports_tennis_rounded,
+                color: scheme.primary, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+              child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(rental.itemName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text('${rental.displayReference} · $day',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                      fontSize: 11,
+                      height: 1.25,
+                      color: scheme.onSurfaceVariant)),
             ],
-          ]),
-        ),
-      ),
+          )),
+          const SizedBox(width: 6),
+          Icon(Icons.chevron_right_rounded,
+              color: scheme.onSurfaceVariant.withValues(alpha: 0.6), size: 20),
+        ]),
+        const SizedBox(height: 8),
+        Wrap(
+            spacing: 8,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              RentalStatusBadge(status: rental.normalizedStatus),
+              Text('Fee ${rentalMoney(rental.rateFee)}',
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.onSurfaceVariant)),
+            ]),
+        if (_needsAttention(rental)) ...[
+          const SizedBox(height: 6),
+          if (rental.balanceDue > 0 || rental.refundDue > 0)
+            _settlementSummary(rental)
+          else
+            Text(_paymentLabel(rental),
+                style: TextStyle(
+                    color: scheme.primary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600)),
+        ],
+      ]),
     );
   }
 
   Widget _settlementSummary(RentalModel rental) {
     final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     Widget amount(String label, Color color) => Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4.5),
           decoration: BoxDecoration(
-              color: color.withValues(alpha: .07),
-              borderRadius: BorderRadius.circular(7)),
+              color: color.withValues(alpha: isDark ? 0.14 : 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: color.withValues(alpha: 0.24))),
           child: Text(label,
               style: TextStyle(
                   color: color, fontSize: 11, fontWeight: FontWeight.w700)),
@@ -482,7 +755,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
           backgroundColor:
               Theme.of(context).colorScheme.primary.withValues(alpha: .09),
           shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
         onPressed: () => setState(() => _compactView = !_compactView),
       ));
@@ -494,14 +767,6 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
       appBar: GlassAppBar(
         titleText: widget.isAdmin ? 'All Transactions' : 'Rental History',
         actions: [
-          if (!widget.isAdmin)
-            HeaderActionPod(
-              icon: _compactView
-                  ? Icons.view_agenda_outlined
-                  : Icons.view_headline_rounded,
-              tooltip: _compactView ? 'Standard view' : 'Compact view',
-              onTap: () => setState(() => _compactView = !_compactView),
-            ),
           HeaderActionPod(
             icon: Icons.refresh_rounded,
             tooltip: 'Refresh history',
@@ -549,12 +814,6 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                 const filters = ['All', 'Returned', 'Needs attention'];
                 return Column(
                   children: [
-                    if (_nextCursor != null)
-                      OutlinedButton(
-                          onPressed: _loadingMore ? null : _loadMore,
-                          child: Text(_loadingMore
-                              ? 'Loading…'
-                              : 'Load more stored history')),
                     if (!widget.isAdmin) ...[
                       Padding(
                         padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
@@ -590,7 +849,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                         ),
                       ),
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
+                        padding: const EdgeInsets.fromLTRB(18, 6, 18, 10),
                         child: Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
@@ -642,6 +901,24 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                                 'Clear search and filters'),
                                           ),
                                   ),
+                                  if (_nextCursor != null) ...[
+                                    const SizedBox(height: 16),
+                                    Center(
+                                      child: OutlinedButton(
+                                        onPressed:
+                                            _loadingMore ? null : _loadMore,
+                                        style: OutlinedButton.styleFrom(
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(16),
+                                          ),
+                                        ),
+                                        child: Text(_loadingMore
+                                            ? 'Loading…'
+                                            : 'Load more stored history'),
+                                      ),
+                                    ),
+                                  ],
                                 ],
                               )
                             : ListView.builder(
@@ -650,9 +927,36 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                 physics: const AlwaysScrollableScrollPhysics(),
                                 padding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 24),
-                                itemCount: visible.length,
-                                itemBuilder: (context, index) =>
-                                    _historyCard(visible[index]),
+                                itemCount: visible.length +
+                                    (_nextCursor != null ? 1 : 0),
+                                itemBuilder: (context, index) {
+                                  if (index >= visible.length) {
+                                    return Padding(
+                                      padding: const EdgeInsets.only(
+                                          top: 8, bottom: 16),
+                                      child: Center(
+                                        child: OutlinedButton(
+                                          onPressed:
+                                              _loadingMore ? null : _loadMore,
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 20, vertical: 12),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(16),
+                                            ),
+                                          ),
+                                          child: Text(
+                                            _loadingMore
+                                                ? 'Loading…'
+                                                : 'Load more stored history',
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                  return _historyCard(visible[index]);
+                                },
                               ),
                       ),
                     ),

@@ -2,6 +2,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/rental_model.dart';
 import '../../services/mobile_api_service.dart';
+import '../../widgets/glass_app_bar.dart';
+import '../../widgets/liquid_glass.dart';
 
 class AlertsScreen extends StatefulWidget {
   const AlertsScreen({super.key});
@@ -81,43 +83,51 @@ class _AlertsScreenState extends State<AlertsScreen> {
     if (rental.refundDue > 0) {
       message += '\nRefund pending: ₱${rental.refundDue.toStringAsFixed(2)}';
     }
-    return Card(
+    return GlassCard(
+        margin: const EdgeInsets.only(bottom: 10),
         child: ListTile(
             leading: Icon(overdue ? Icons.timer_off : Icons.receipt_long,
                 color: overdue ? Colors.red : null),
-            title: Text(rental.itemName),
+            title: Text(rental.itemName,
+                style: const TextStyle(fontWeight: FontWeight.w700)),
             subtitle: Text(message),
             isThreeLine: true));
   }
 
   @override
   Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: const Text('Alerts & Rental Timers'), actions: [
+        appBar: GlassAppBar(titleText: 'Alerts & Rental Timers', actions: [
           IconButton(
               onPressed: _load,
               icon: const Icon(Icons.refresh),
               tooltip: 'Refresh')
         ]),
-        body: _loading
-            ? const Center(child: CircularProgressIndicator())
-            : RefreshIndicator(
-                onRefresh: _load,
-                child: ListView(padding: const EdgeInsets.all(16), children: [
-                  if (_error.isNotEmpty)
-                    Padding(
-                        padding: const EdgeInsets.only(bottom: 16),
-                        child: Text(_error,
-                            style: TextStyle(
-                                color: Theme.of(context).colorScheme.error))),
-                  if (_rentals.isEmpty) const Text('No rental updates yet.'),
-                  for (final rental in _rentals.where((rental) =>
-                      rental.isOpen ||
-                      rental.balanceDue > 0 ||
-                      rental.refundDue > 0))
-                    _rentalCard(rental),
-                  const SizedBox(height: 12),
-                  const Text(
-                      'Statuses refresh automatically. The admin records release and receipt times.'),
-                ])),
+        body: LiquidAmbientBackdrop(
+          child: _loading
+              ? const Center(child: CircularProgressIndicator())
+              : RefreshIndicator(
+                  onRefresh: _load,
+                  child: ListView(
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        if (_error.isNotEmpty)
+                          Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: Text(_error,
+                                  style: TextStyle(
+                                      color:
+                                          Theme.of(context).colorScheme.error))),
+                        if (_rentals.isEmpty)
+                          const Text('No rental updates yet.'),
+                        for (final rental in _rentals.where((rental) =>
+                            rental.isOpen ||
+                            rental.balanceDue > 0 ||
+                            rental.refundDue > 0))
+                          _rentalCard(rental),
+                        const SizedBox(height: 12),
+                        const Text(
+                            'Statuses refresh automatically. The admin records release and receipt times.'),
+                      ])),
+        ),
       );
 }

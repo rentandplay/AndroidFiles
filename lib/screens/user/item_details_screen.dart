@@ -169,31 +169,55 @@ class ItemDetailsScreen extends StatelessWidget {
             : 'Check scheduled availability',
         onPressed: () => _continueToRental(context),
       ),
-      body: SingleChildScrollView(
-        keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-        padding: EdgeInsets.fromLTRB(16, topPadding + 14, 16, 100),
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 680),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                RentalSection(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          height: 220,
-                          width: double.infinity,
-                          color: scheme.surfaceContainerHighest,
-                          child: item.buildImage(
-                            fit: BoxFit.contain,
-                            height: 220,
+      body: LiquidAmbientBackdrop(
+        child: SingleChildScrollView(
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(16, topPadding + 14, 16, 100),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 680),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  RentalSection(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(16),
+                          child: Container(
+                            height: 224,
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              gradient: RadialGradient(
+                                center: Alignment.center,
+                                radius: 0.85,
+                                colors: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? const [
+                                        Color(0xFF233248),
+                                        Color(0xFF151F2E),
+                                      ]
+                                    : const [
+                                        Color(0xFFFBF6EE),
+                                        Color(0xFFF3ECE1),
+                                      ],
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: Theme.of(context).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white.withValues(alpha: 0.10)
+                                    : const Color(0xFFE8E0D5),
+                              ),
+                            ),
+                            child: item.buildImage(
+                              fit: BoxFit.contain,
+                              height: 192,
+                            ),
                           ),
                         ),
-                      ),
                       const SizedBox(height: 18),
                       Text(
                         item.category,
@@ -309,8 +333,9 @@ class ItemDetailsScreen extends StatelessWidget {
                       ],
                     ],
                   ),
-                ),
-              ],
+                  ),
+                ],
+              ),
             ),
           ),
         ),

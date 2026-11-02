@@ -33,11 +33,11 @@ class HeaderActionPod extends StatelessWidget {
     final primaryText =
         isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
     final podBg = isDark
-        ? const Color(0xFF1E2838).withValues(alpha: 0.65)
-        : Colors.white.withValues(alpha: 0.68);
+        ? const Color(0xFF1E293B).withValues(alpha: 0.90)
+        : Colors.white.withValues(alpha: 0.92);
     final podBorder = isDark
-        ? Colors.white.withValues(alpha: 0.22)
-        : Colors.white.withValues(alpha: 0.95);
+        ? Colors.white.withValues(alpha: 0.18)
+        : const Color(0xFFE6DFD5).withValues(alpha: 0.90);
 
     Widget podContent = Container(
       width: size,
@@ -45,20 +45,15 @@ class HeaderActionPod extends StatelessWidget {
       decoration: BoxDecoration(
         color: podBg,
         shape: BoxShape.circle,
-        border: Border.all(color: podBorder, width: 1.2),
+        border: Border.all(color: podBorder, width: 1.1),
         boxShadow: [
           BoxShadow(
             color: isDark
-                ? Colors.black.withValues(alpha: 0.35)
-                : const Color(0xFF0F172A).withValues(alpha: 0.08),
+                ? Colors.black.withValues(alpha: 0.30)
+                : const Color(0xFF0F172A).withValues(alpha: 0.05),
             blurRadius: 10,
             offset: const Offset(0, 2),
-          ),
-          BoxShadow(
-            color: const Color(0xFFDF762D)
-                .withValues(alpha: isDark ? 0.08 : 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 1),
+            blurStyle: BlurStyle.outer,
           ),
         ],
       ),
@@ -164,7 +159,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => Size.fromHeight(
-      height + (bottom?.preferredSize.height ?? (loading ? 3.5 : 1.5)));
+      height + (bottom?.preferredSize.height ?? (loading ? 3.5 : 1.0)));
 
   @override
   Widget build(BuildContext context) {
@@ -172,42 +167,32 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
     final textPrimary =
         isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
 
-    // Highly translucent liquid-glass gradient matching LiquidGlassBottomNavBar
     final frostedGlassFill = LinearGradient(
       begin: Alignment.topCenter,
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              const Color(0xFF162030).withValues(alpha: 0.52),
-              const Color(0xFF0D1420).withValues(alpha: 0.30),
+              const Color(0xFF151E2E).withValues(alpha: 0.88),
+              const Color(0xFF0F1623).withValues(alpha: 0.80),
             ]
           : [
-              Colors.white.withValues(alpha: 0.42),
-              const Color(0xFFFFFDFC).withValues(alpha: 0.22),
+              Colors.white.withValues(alpha: 0.90),
+              const Color(0xFFFAF6F0).withValues(alpha: 0.82),
             ],
     );
 
-    // Specular refraction top reflection sheen
-    final topSpecularSheen = LinearGradient(
-      colors: [
-        Colors.white.withValues(alpha: isDark ? 0.22 : 0.90),
-        (isDark ? const Color(0xFFDF762D) : const Color(0xFFFFB273))
-            .withValues(alpha: isDark ? 0.25 : 0.38),
-        Colors.white.withValues(alpha: isDark ? 0.10 : 0.65),
-      ],
-    );
-
-    // Prismatic bottom refraction border with warm brand amber reflection
     final bottomRefractionBorder = LinearGradient(
       colors: [
-        Colors.white.withValues(alpha: isDark ? 0.25 : 0.95),
-        const Color(0xFFF3ECE4).withValues(alpha: isDark ? 0.15 : 0.60),
-        const Color(0xFFDF762D).withValues(alpha: isDark ? 0.30 : 0.30),
-        Colors.white.withValues(alpha: isDark ? 0.12 : 0.75),
+        isDark
+            ? Colors.white.withValues(alpha: 0.14)
+            : const Color(0xFFE8E0D5).withValues(alpha: 0.85),
+        const Color(0xFFDF762D).withValues(alpha: isDark ? 0.22 : 0.18),
+        isDark
+            ? Colors.white.withValues(alpha: 0.10)
+            : const Color(0xFFE8E0D5).withValues(alpha: 0.85),
       ],
     );
 
-    // Explicit system status-bar brightness ensures dark icons in Light mode and white in Dark mode
     final effectiveOverlayStyle = systemOverlayStyle ??
         SystemUiOverlayStyle(
           statusBarColor: Colors.transparent,
@@ -233,7 +218,7 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
 
     final effectiveBottom = bottom ??
         PreferredSize(
-          preferredSize: Size.fromHeight(loading ? 3.5 : 1.5),
+          preferredSize: Size.fromHeight(loading ? 3.5 : 1.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -244,24 +229,9 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
                   valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFDF762D)),
                 ),
               Container(
-                height: 1.2,
+                height: 1.0,
                 decoration: BoxDecoration(
                   gradient: bottomRefractionBorder,
-                  boxShadow: [
-                    BoxShadow(
-                      color: isDark
-                          ? Colors.black.withValues(alpha: 0.40)
-                          : const Color(0xFF0F172A).withValues(alpha: 0.06),
-                      blurRadius: 10,
-                      offset: const Offset(0, 2),
-                    ),
-                    BoxShadow(
-                      color: const Color(0xFFDF762D)
-                          .withValues(alpha: isDark ? 0.10 : 0.05),
-                      blurRadius: 6,
-                      offset: const Offset(0, 1),
-                    ),
-                  ],
                 ),
               ),
             ],
@@ -279,27 +249,14 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       elevation: 0,
       flexibleSpace: ClipRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 22.0, sigmaY: 22.0),
+          filter: ImageFilter.blur(
+            sigmaX: 20.0,
+            sigmaY: 20.0,
+            tileMode: TileMode.mirror,
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: frostedGlassFill,
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                // Top subtle specular reflection sheen
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: 1.5,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      gradient: topSpecularSheen,
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ),

@@ -137,7 +137,6 @@ class HomeDiscovery extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     return LiquidGlassContainer(
       borderRadius: 22,
-      blurSigma: 14,
       padding: const EdgeInsets.fromLTRB(8, 7, 16, 7),
       onTap: () => onCategorySelected(category),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
@@ -146,23 +145,11 @@ class HomeDiscovery extends StatelessWidget {
           height: 36,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: RadialGradient(
-              colors: [
-                accent.withValues(alpha: isDark ? 0.40 : 0.22),
-                accent.withValues(alpha: isDark ? 0.12 : 0.06),
-              ],
-            ),
+            color: accent.withValues(alpha: isDark ? 0.20 : 0.12),
             border: Border.all(
-              color: accent.withValues(alpha: isDark ? 0.50 : 0.35),
-              width: 1.2,
+              color: accent.withValues(alpha: isDark ? 0.40 : 0.28),
+              width: 1.0,
             ),
-            boxShadow: [
-              BoxShadow(
-                color: accent.withValues(alpha: 0.22),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
           ),
           child: Icon(_categoryIcon(category), color: accent, size: 18),
         ),
@@ -188,7 +175,6 @@ class HomeDiscovery extends StatelessWidget {
       width: width,
       child: LiquidGlassContainer(
         borderRadius: 22,
-        blurSigma: 14,
         onTap: () => onItemSelected(item),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -203,8 +189,8 @@ class HomeDiscovery extends StatelessWidget {
                       center: Alignment.center,
                       radius: 0.85,
                       colors: [
-                        accent.withValues(alpha: dark ? .26 : .14),
-                        accent.withValues(alpha: dark ? .04 : .01),
+                        accent.withValues(alpha: dark ? .22 : .12),
+                        accent.withValues(alpha: dark ? .03 : .01),
                       ],
                     ),
                   ),
@@ -225,8 +211,8 @@ class HomeDiscovery extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.white.withValues(alpha: dark ? 0.08 : 0.25),
-                            Colors.transparent,
+                            Colors.white.withValues(alpha: dark ? 0.06 : 0.40),
+                            Colors.white.withValues(alpha: 0.0),
                           ],
                         ),
                       ),
@@ -241,10 +227,10 @@ class HomeDiscovery extends StatelessWidget {
                         horizontal: 7, vertical: 3),
                     decoration: BoxDecoration(
                       color: (dark ? const Color(0xFF141D2C) : Colors.white)
-                          .withValues(alpha: 0.88),
+                          .withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(
-                        color: accent.withValues(alpha: 0.35),
+                        color: accent.withValues(alpha: 0.30),
                         width: 1.0,
                       ),
                     ),
@@ -285,10 +271,10 @@ class HomeDiscovery extends StatelessWidget {
                       color: (dark
                               ? const Color(0xFF1E2838)
                               : const Color(0xFFFFF7ED))
-                          .withValues(alpha: 0.85),
+                          .withValues(alpha: 0.90),
                       borderRadius: BorderRadius.circular(9),
                       border: Border.all(
-                        color: const Color(0xFFDF762D).withValues(alpha: 0.30),
+                        color: const Color(0xFFDF762D).withValues(alpha: 0.28),
                         width: 1.0,
                       ),
                     ),
@@ -307,23 +293,15 @@ class HomeDiscovery extends StatelessWidget {
                   const SizedBox(height: 9),
                   Row(children: [
                     Container(
-                        width: 7,
-                        height: 7,
-                        decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: available
-                                ? const Color(0xFF10B981)
-                                : scheme.onSurfaceVariant,
-                            boxShadow: available
-                                ? [
-                                    BoxShadow(
-                                      color: const Color(0xFF10B981)
-                                          .withValues(alpha: 0.6),
-                                      blurRadius: 5,
-                                      spreadRadius: 1,
-                                    ),
-                                  ]
-                                : null)),
+                      width: 7,
+                      height: 7,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: available
+                            ? const Color(0xFF10B981)
+                            : scheme.onSurfaceVariant,
+                      ),
+                    ),
                     const SizedBox(width: 6),
                     Expanded(
                         child: Text(available ? 'Available' : 'Unavailable',
@@ -358,13 +336,9 @@ class HomeDiscovery extends StatelessWidget {
 
   Widget _catalogNotice(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(
+        child: GlassCard(
+          borderRadius: 18,
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Theme.of(context).colorScheme.outline),
-          ),
           child: Row(children: [
             Icon(
                 loading
@@ -401,8 +375,6 @@ class HomeDiscovery extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: LiquidGlassContainer(
         borderRadius: 24,
-        blurSigma: 14,
-        glowColor: const Color(0xFFDF762D),
         padding: const EdgeInsets.all(18),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Row(
@@ -410,7 +382,7 @@ class HomeDiscovery extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDF762D).withValues(alpha: 0.15),
+                  color: const Color(0xFFDF762D).withValues(alpha: 0.14),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.help_outline_rounded,
@@ -432,49 +404,43 @@ class HomeDiscovery extends StatelessWidget {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: (dark
-                              ? const Color(0xFF1E2638)
-                              : Colors.white)
-                          .withValues(alpha: dark ? 0.6 : 0.7),
+                      color: (dark ? const Color(0xFF1E2838) : Colors.white)
+                          .withValues(alpha: dark ? 0.72 : 0.85),
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: dark
                             ? Colors.white.withValues(alpha: 0.10)
-                            : const Color(0xFFE2E8F0),
+                            : const Color(0xFFE8E2D9),
                       ),
                     ),
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                      Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
-                              ),
-                              borderRadius: BorderRadius.circular(10),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFDF762D)
-                                      .withValues(alpha: 0.3),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
+                          Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFF8A3D),
+                                    Color(0xFFDF762D)
+                                  ],
                                 ),
-                              ]),
-                          child:
-                              Icon(steps[i].$1, color: Colors.white, size: 18)),
-                      const SizedBox(height: 8),
-                      Text('${i + 1}. ${steps[i].$2}',
-                          style: const TextStyle(
-                              fontSize: 12, fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 4),
-                      Text(steps[i].$3,
-                          style: TextStyle(
-                              fontSize: 10,
-                              height: 1.4,
-                              color: scheme.onSurfaceVariant)),
-                    ]),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(steps[i].$1,
+                                  color: Colors.white, size: 18)),
+                          const SizedBox(height: 8),
+                          Text('${i + 1}. ${steps[i].$2}',
+                              style: const TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w800)),
+                          const SizedBox(height: 4),
+                          Text(steps[i].$3,
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  height: 1.4,
+                                  color: scheme.onSurfaceVariant)),
+                        ]),
                   )),
             ],
           ]),

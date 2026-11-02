@@ -746,10 +746,10 @@ class CatalogScreenState extends State<CatalogScreen> {
                       center: Alignment.center,
                       radius: 0.85,
                       colors: [
-                        (isDark ? const Color(0xFF263750) : const Color(0xFFE2E8F0))
-                            .withValues(alpha: isDark ? 0.40 : 0.45),
-                        (isDark ? const Color(0xFF121B27) : const Color(0xFFF8FAFC))
-                            .withValues(alpha: 0.12),
+                        (isDark ? const Color(0xFF233248) : const Color(0xFFF6EFE6))
+                            .withValues(alpha: isDark ? 0.55 : 0.70),
+                        (isDark ? const Color(0xFF151F2E) : const Color(0xFFFCF9F5))
+                            .withValues(alpha: 0.25),
                       ],
                     ),
                   ),
@@ -771,8 +771,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                           end: Alignment.bottomCenter,
                           colors: [
                             Colors.white
-                                .withValues(alpha: isDark ? 0.08 : 0.25),
-                            Colors.transparent,
+                                .withValues(alpha: isDark ? 0.06 : 0.35),
+                            Colors.white.withValues(alpha: 0.0),
                           ],
                         ),
                       ),

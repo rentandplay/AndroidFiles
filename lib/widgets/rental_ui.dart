@@ -1,7 +1,7 @@
-import 'liquid_glass.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'liquid_glass.dart';
 
 String rentalMoney(num? value) => value == null
     ? '—'
@@ -44,15 +44,20 @@ class RentalStatusBadge extends StatelessWidget {
           : const Color(0xFF9A471B),
     };
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: .1),
-        border: Border.all(color: color.withValues(alpha: .25)),
-        borderRadius: BorderRadius.circular(9),
+        color: color.withValues(alpha: .10),
+        border: Border.all(color: color.withValues(alpha: .26)),
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(rentalStatusLabel(status),
-          style: TextStyle(
-              color: color, fontSize: 12, fontWeight: FontWeight.w600)),
+      child: Text(
+        rentalStatusLabel(status),
+        style: TextStyle(
+          color: color,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
     );
   }
 }
@@ -90,7 +95,9 @@ class RentalSection extends StatelessWidget {
               Expanded(
                   child: Text(title!,
                       style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: -0.2))),
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.2))),
             ]),
             if (subtitle != null) ...[
               const SizedBox(height: 5),
@@ -129,8 +136,8 @@ class RentalNotice extends StatelessWidget {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
           color: color.withValues(alpha: .08),
-          border: Border.all(color: color.withValues(alpha: .2)),
-          borderRadius: BorderRadius.circular(12)),
+          border: Border.all(color: color.withValues(alpha: .22)),
+          borderRadius: BorderRadius.circular(14)),
       child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Icon(icon, color: color, size: 21),
         const SizedBox(width: 10),
@@ -158,7 +165,7 @@ class RentalValueRow extends StatelessWidget {
   final bool emphasis;
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 5),
+        padding: const EdgeInsets.symmetric(vertical: 5.5),
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
               child: Text(label,
@@ -166,13 +173,15 @@ class RentalValueRow extends StatelessWidget {
                       color: emphasis
                           ? null
                           : Theme.of(context).colorScheme.onSurfaceVariant,
-                      fontSize: 13))),
+                      fontSize: 13,
+                      fontWeight:
+                          emphasis ? FontWeight.w600 : FontWeight.w500))),
           const SizedBox(width: 16),
           Flexible(
               child: Text(value,
                   textAlign: TextAlign.end,
                   style: TextStyle(
-                      fontSize: emphasis ? 16 : 13,
+                      fontSize: emphasis ? 15 : 13,
                       fontWeight:
                           emphasis ? FontWeight.w800 : FontWeight.w600))),
         ]),
@@ -203,27 +212,27 @@ class RentalActionBar extends StatelessWidget {
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              const Color(0xFF162030).withValues(alpha: 0.88),
-              const Color(0xFF0D1420).withValues(alpha: 0.78),
+              const Color(0xFF162030).withValues(alpha: 0.92),
+              const Color(0xFF0E1522).withValues(alpha: 0.86),
             ]
           : [
-              Colors.white.withValues(alpha: 0.90),
-              const Color(0xFFFAF6F0).withValues(alpha: 0.80),
+              Colors.white.withValues(alpha: 0.94),
+              const Color(0xFFFAF6F0).withValues(alpha: 0.88),
             ],
     );
 
     final specularBorder = LinearGradient(
       colors: isDark
           ? [
-              Colors.white.withValues(alpha: 0.22),
-              const Color(0xFFDF762D).withValues(alpha: 0.25),
+              Colors.white.withValues(alpha: 0.20),
+              const Color(0xFFDF762D).withValues(alpha: 0.24),
               Colors.white.withValues(alpha: 0.10),
             ]
           : [
-              Colors.white.withValues(alpha: 0.95),
-              const Color(0xFFF3ECE4).withValues(alpha: 0.60),
-              const Color(0xFFDF762D).withValues(alpha: 0.25),
-              Colors.white.withValues(alpha: 0.80),
+              Colors.white,
+              const Color(0xFFEAE2D8).withValues(alpha: 0.85),
+              const Color(0xFFDF762D).withValues(alpha: 0.22),
+              Colors.white,
             ],
     );
 
@@ -232,7 +241,11 @@ class RentalActionBar extends StatelessWidget {
       padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
       child: ClipRect(
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+          filter: ImageFilter.blur(
+            sigmaX: 20.0,
+            sigmaY: 20.0,
+            tileMode: TileMode.mirror,
+          ),
           child: Container(
             decoration: BoxDecoration(
               gradient: glassFill,
@@ -240,9 +253,10 @@ class RentalActionBar extends StatelessWidget {
                 BoxShadow(
                   color: isDark
                       ? Colors.black.withValues(alpha: 0.35)
-                      : const Color(0xFF0F172A).withValues(alpha: 0.06),
+                      : const Color(0xFF0F172A).withValues(alpha: 0.05),
                   blurRadius: 16,
                   offset: const Offset(0, -4),
+                  blurStyle: BlurStyle.outer,
                 ),
               ],
             ),
@@ -252,7 +266,7 @@ class RentalActionBar extends StatelessWidget {
                   top: 0,
                   left: 0,
                   right: 0,
-                  height: 1.2,
+                  height: 1.1,
                   child: Container(
                     decoration: BoxDecoration(gradient: specularBorder),
                   ),
@@ -281,24 +295,34 @@ class RentalActionBar extends StatelessWidget {
                               child: Container(
                                 height: 50,
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
-                                  ),
+                                  gradient: onPressed == null || busy
+                                      ? null
+                                      : const LinearGradient(
+                                          colors: [
+                                            Color(0xFFFF8A3D),
+                                            Color(0xFFDF762D),
+                                          ],
+                                        ),
                                   borderRadius: BorderRadius.circular(16),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFDF762D)
-                                          .withValues(alpha: 0.35),
-                                      blurRadius: 12,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ],
+                                  boxShadow: onPressed == null || busy
+                                      ? null
+                                      : [
+                                          BoxShadow(
+                                            color: const Color(0xFFDF762D)
+                                                .withValues(alpha: 0.28),
+                                            blurRadius: 12,
+                                            offset: const Offset(0, 4),
+                                            blurStyle: BlurStyle.outer,
+                                          ),
+                                        ],
                                 ),
                                 child: FilledButton(
                                   onPressed: busy ? null : onPressed,
                                   style: FilledButton.styleFrom(
                                     minimumSize: const Size.fromHeight(50),
-                                    backgroundColor: Colors.transparent,
+                                    backgroundColor: onPressed == null || busy
+                                        ? null
+                                        : Colors.transparent,
                                     shadowColor: Colors.transparent,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(16),

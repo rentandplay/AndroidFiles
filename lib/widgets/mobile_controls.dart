@@ -131,7 +131,7 @@ class MobileFilterChip extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final foreground =
         selected ? mobileAccentText(context) : scheme.onSurfaceVariant;
-    final leading = icon ?? (selected ? Icons.check_rounded : null);
+    final leading = icon;
 
     final glassBg = selected
         ? (isDark
@@ -173,8 +173,8 @@ class MobileFilterChip extends StatelessWidget {
       backgroundColor: glassBg,
       selectedColor: glassBg,
       side: BorderSide(color: glassBorder, width: 1.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       onSelected: onSelected,
     );
   }

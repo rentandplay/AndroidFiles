@@ -6,6 +6,7 @@ import '../../providers/theme_provider.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/mobile_controls.dart';
 import '../../widgets/glass_app_bar.dart';
+import '../../widgets/liquid_glass.dart';
 import '../auth/forgot_password_screen.dart';
 import '../auth/id_verification_screen.dart';
 import '../auth/login_screen.dart';
@@ -111,10 +112,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     final isDark = themeProvider.isDarkMode ||
         Theme.of(context).brightness == Brightness.dark;
-    final bgColor = isDark ? const Color(0xFF0B1320) : const Color(0xFFF8FAFC);
-    final cardBg = isDark ? const Color(0xFF131D2D) : Colors.white;
+    final bgColor = isDark ? const Color(0xFF0D131D) : const Color(0xFFFBF8F5);
+    final cardBg = isDark ? const Color(0xFF162030) : const Color(0xFFFFFDFB);
     final cardBorder =
-        isDark ? const Color(0xFF1E2C42) : const Color(0xFFE2E8F0);
+        isDark ? const Color(0xFF243248) : const Color(0xFFEAE2D8);
     final textPrimary =
         isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
     final textSecondary =
@@ -136,18 +137,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         titleText: 'Settings',
       ),
-      body: ListView(
-        padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 32),
-        children: [
-          // 1. APPEARANCE
-          _sectionHeader('APPEARANCE & THEME'),
-          Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: cardBorder),
-            ),
-            child: SwitchListTile(
+      body: LiquidAmbientBackdrop(
+        child: ListView(
+          padding: EdgeInsets.fromLTRB(16, topPadding + 16, 16, 32),
+          children: [
+            // 1. APPEARANCE
+            _sectionHeader('APPEARANCE & THEME'),
+            GlassCard(
+              borderRadius: 18,
+              child: SwitchListTile(
               contentPadding:
                   const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               secondary: Container(
@@ -190,12 +188,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // 2. NOTIFICATIONS
           _sectionHeader('NOTIFICATIONS'),
-          Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: cardBorder),
-            ),
+          GlassCard(
+            borderRadius: 18,
             child: Column(
               children: [
                 SwitchListTile(
@@ -275,12 +269,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // 3. ACCOUNT & SECURITY
           _sectionHeader('ACCOUNT & SECURITY'),
-          Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: cardBorder),
-            ),
+          GlassCard(
+            borderRadius: 18,
             child: Column(
               children: [
                 ListTile(
@@ -404,12 +394,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // 4. ABOUT & LEGAL
           _sectionHeader('ABOUT & SUPPORT'),
-          Container(
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: cardBorder),
-            ),
+          GlassCard(
+            borderRadius: 18,
             child: Column(
               children: [
                 ListTile(
@@ -539,6 +525,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ],
         ],
+        ),
       ),
     );
   }
