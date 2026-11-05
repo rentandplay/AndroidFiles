@@ -139,13 +139,13 @@ void main() {
     await tapVisible(tester, find.text('Customer'));
     await tester.tap(find.text('Juan Dela Cruz · CUST-001').last);
     await tester.pumpAndSettle();
-    await tapVisible(tester, find.text('Preview price'));
-    expect(api.calls.last['path'], '/pricing/quote');
+    expect(api.calls.any((call) => call['path'] == '/pricing/quote'), isTrue);
+    expect(find.text('Price summary'), findsOneWidget);
     await tapVisible(
         tester, find.widgetWithText(FilledButton, 'Create walk-in rental'));
     await tester.tap(find.text('Confirm'));
     await tester.pumpAndSettle();
-    final saved = api.calls.last;
+    final saved = api.calls.firstWhere((c) => c['path'] == '/rental-bookings');
     expect(saved['path'], '/rental-bookings');
     expect(saved['customerId'], 'walkin');
     expect(saved['rentalChannel'], 'WALK_IN');
@@ -180,8 +180,8 @@ void main() {
             },
             action: 'release',
             workspace: const {})));
+    await tester.pumpAndSettle();
     expect(find.text('Rental reference'), findsOneWidget);
-    await tapVisible(tester, find.text('Verify customer rental'));
     expect(api.calls.single['transactionCode'], 'R-0001');
     expect(api.calls.single['manualReason'], contains('walk-in'));
     for (final text in [
@@ -237,7 +237,7 @@ void main() {
             },
             action: 'release',
             workspace: const {})));
-    await tapVisible(tester, find.text('Verify customer rental'));
+    await tester.pumpAndSettle();
     for (final text in [
       'The receiver matches the rental customer.',
       'Customer agreed to the duration, total, late fees, and physical return inspection.',
@@ -261,6 +261,47 @@ void main() {
         true);
     await tapVisible(tester, find.text('Check confirmation'));
     expect(find.text('ESP32 Counter Terminal'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'staff can tap duration preset chips to quickly update rental duration and auto-quote',
+      (tester) async {
+    final api = WalkInApi();
+    await tester.pumpWidget(MaterialApp(
+        home: RentalAdminActionScreen(
+            api: api,
+            row: const {},
+            action: 'booking',
+            workspace: const {
+              'customers': [
+                {
+                  'id': 'walkin',
+                  'full_name': 'Juan Dela Cruz',
+                  'customer_code': 'CUST-001',
+                  'phone': '09171234567',
+                  'is_active': true
+                }
+              ],
+              'items': [
+                {
+                  'id': 'unit',
+                  'name': 'Basketball',
+                  'item_code': 'EQUIP-001',
+                  'qr_token': 'unit-qr-code',
+                  'status': 'AVAILABLE',
+                  'is_active': true
+                }
+              ],
+            })));
+    await tapVisible(tester, find.text('Available equipment'));
+    await tester.tap(find.text('Basketball · EQUIP-001').last);
+    await tester.pumpAndSettle();
+    expect(find.text('1 hr'), findsOneWidget);
+    expect(find.text('2 hrs'), findsOneWidget);
+    expect(find.text('Whole day'), findsOneWidget);
+    await tapVisible(tester, find.text('2 hrs'));
+    expect(find.text('120'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }

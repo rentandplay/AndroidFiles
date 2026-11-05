@@ -806,6 +806,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   late ReleaseVerification _verification;
   bool _previewing = false;
   int _quoteVersion = 0;
+  Timer? _quoteTimer;
   final _transaction = TextEditingController(),
       _inventory = TextEditingController(),
       _reason = TextEditingController(),
@@ -830,6 +831,14 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   final List<Map<String, dynamic>> _foundCustomers = [];
   Timer? _customerSearchTimer;
   int _customerSearchVersion = 0;
+  void _scheduleAutoQuote() {
+    if (_action != 'booking') return;
+    _quoteTimer?.cancel();
+    _quoteTimer = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      _preview(silent: true);
+    });
+  }
   void _searchCustomer(String value) {
     setState(() => _customerSearch = value);
     _customerSearchTimer?.cancel();
@@ -907,6 +916,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
           _quote = null;
           _previewing = false;
         });
+        _scheduleAutoQuote();
       }
     });
     _location.addListener(() {
@@ -915,6 +925,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
           _quote = null;
           _quoteVersion++;
         });
+        _scheduleAutoQuote();
       }
     });
     if (_action == 'release') {
@@ -924,6 +935,11 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         _reason.text =
             'Staff-assisted walk-in handover. Customer identity checked in person.';
         _transaction.text = _text(_row['rental_code']);
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && _action == 'release' && _walkIn && _verification.step == 0) {
+            _verification.verify();
+          }
+        });
       } else {
         _transaction.text = widget.scannedCode ?? '';
       }
@@ -954,6 +970,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   @override
   void dispose() {
     _customerSearchTimer?.cancel();
+    _quoteTimer?.cancel();
     _quoteVersion++;
     _verification.removeListener(_verificationChanged);
     _verification.dispose();
@@ -1075,6 +1092,10 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               icon: Icons.check_circle_outline,
               message:
                   'The operator prepared this unit at the shop. At the selected location, confirm the customer, payment and physical handoff.'),
+          if (_walkIn) ...[
+            const SizedBox(height: 8),
+            RentalValueRow('Rental reference', recordReference(_row)),
+          ],
           const SizedBox(height: 16),
           RentalSection(
               title: 'Confirm the handoff',
@@ -1202,6 +1223,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _customerSearch = '';
       _changed = true;
     });
+    _scheduleAutoQuote();
   }
 
   Map<String, dynamic> _bookingPayload() => {
@@ -1218,12 +1240,16 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             : _location.text.trim(),
         'paymentMethod': _method
       };
-  Future<void> _preview() async {
-    if (!_form.currentState!.validate() || _previewing) return;
+  Future<void> _preview({bool silent = false}) async {
+    if (_action != 'booking' || _previewing) return;
+    if (_itemId == null) return;
+    final mins = int.tryParse(_minutes.text.trim());
+    if (mins == null || mins <= 0) return;
+    if (_fulfillmentMode == 'DELIVERY' && _location.text.trim().isEmpty) return;
     final version = ++_quoteVersion;
     setState(() {
       _previewing = true;
-      _error = '';
+      if (!silent) _error = '';
       _quote = null;
     });
     try {
@@ -1234,7 +1260,10 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       }
     } catch (error) {
       if (mounted && version == _quoteVersion) {
-        setState(() => _error = '$error');
+        setState(() {
+          if (!silent) _error = '$error';
+          _quote = null;
+        });
       }
     } finally {
       if (mounted && version == _quoteVersion) {
@@ -1454,9 +1483,31 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             _transaction.clear();
           }
         });
+        if (_walkIn) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted && _action == 'release' && _walkIn && _verification.step == 0) {
+              _verification.verify();
+            }
+          });
+        }
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content:
                 Text('Equipment verified and ready for shop handover.')));
+      } else if (_action == 'booking' &&
+          _fulfillmentMode == 'SHOP_HANDOVER' &&
+          _scheduledStartAt == null) {
+        final newRental = _map(response['rental']);
+        setState(() {
+          _row = {..._row, ...newRental};
+          _action = 'prepare-delivery';
+          _key = MobileApiService.operationKey();
+          _busy = false;
+          _reason.clear();
+          _inventory.text = _text(newRental['item_code']);
+        });
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Walk-in rental saved. Verify the assigned equipment to release.')));
       } else {
         Navigator.pop(context, true);
       }
@@ -1712,27 +1763,90 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                             const SizedBox(height: 12)
                           ],
                           if (_action == 'booking') ...[
-                            DropdownButtonFormField<String>(
-                                initialValue: _itemId,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                    labelText: 'Available equipment'),
-                                items: [
-                                  for (final row in items)
-                                    DropdownMenuItem(
-                                        value: _text(row['id']),
-                                        child: Text(
-                                            '${row['name']} · ${row['item_code']}'))
-                                ],
-                                validator: (value) =>
-                                    value == null ? 'Select equipment' : null,
-                                onChanged: _busy || _previewing
-                                    ? null
-                                    : (value) => setState(() {
-                                          _itemId = value;
-                                          _quote = null;
-                                          _quoteVersion++;
-                                        })),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                      initialValue: _itemId,
+                                      isExpanded: true,
+                                      decoration: const InputDecoration(
+                                          labelText: 'Available equipment'),
+                                      items: [
+                                        for (final row in items)
+                                          DropdownMenuItem(
+                                              value: _text(row['id']),
+                                              child: Text(
+                                                  '${row['name']} · ${row['item_code']}',
+                                                  overflow: TextOverflow.ellipsis))
+                                      ],
+                                      validator: (value) =>
+                                          value == null ? 'Select equipment' : null,
+                                      onChanged: _busy || _previewing
+                                          ? null
+                                          : (value) {
+                                              setState(() {
+                                                _itemId = value;
+                                                _quote = null;
+                                                _quoteVersion++;
+                                              });
+                                              _scheduleAutoQuote();
+                                            }),
+                                ),
+                                const SizedBox(width: 8),
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 8),
+                                  child: IconButton.filledTonal(
+                                    tooltip: 'Scan equipment QR',
+                                    icon: const Icon(Icons.qr_code_scanner),
+                                    onPressed: _busy || _previewing
+                                        ? null
+                                        : () async {
+                                            final messenger =
+                                                ScaffoldMessenger.of(context);
+                                            final scanned =
+                                                await Navigator.push<String>(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    const QrCaptureScreen(
+                                                        title:
+                                                            'Scan equipment QR'),
+                                              ),
+                                            );
+                                            if (scanned != null && mounted) {
+                                              final match = items.firstWhere(
+                                                (item) =>
+                                                    item['qr_token'] ==
+                                                        scanned ||
+                                                    item['item_code'] ==
+                                                        scanned ||
+                                                    item['id'] == scanned,
+                                                orElse: () => const {},
+                                              );
+                                              if (match.isNotEmpty) {
+                                                setState(() {
+                                                  _itemId = _text(match['id']);
+                                                  _quote = null;
+                                                  _quoteVersion++;
+                                                });
+                                                _scheduleAutoQuote();
+                                                messenger.showSnackBar(SnackBar(
+                                                  content: Text(
+                                                      'Selected: ${match['name']} (${match['item_code']})'),
+                                                ));
+                                              } else {
+                                                messenger.showSnackBar(SnackBar(
+                                                  content: Text(
+                                                      'No available equipment matching: $scanned'),
+                                                ));
+                                              }
+                                            }
+                                          },
+                                  ),
+                                ),
+                              ],
+                            ),
                             const RentalNotice(
                                 message:
                                     'Walk-in customers can rent without an app. Search and reuse their profile before adding a new one.'),
@@ -1759,8 +1873,10 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                     value == null ? 'Select customer' : null,
                                 onChanged: _busy || _previewing
                                     ? null
-                                    : (value) =>
-                                        setState(() => _customerId = value)),
+                                    : (value) {
+                                        setState(() => _customerId = value);
+                                        _scheduleAutoQuote();
+                                      }),
                             OutlinedButton.icon(
                                 onPressed: _busy || _previewing
                                     ? null
@@ -1782,11 +1898,14 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                 ],
                                 onChanged: _busy || _previewing
                                     ? null
-                                    : (value) => setState(() {
+                                    : (value) {
+                                        setState(() {
                                           _fulfillmentMode = value!;
                                           _quote = null;
                                           _quoteVersion++;
-                                        })),
+                                        });
+                                        _scheduleAutoQuote();
+                                      }),
                             ListTile(
                                 title: Text(_scheduledStartAt == null
                                     ? 'Rent now'
@@ -1801,6 +1920,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                               _scheduledStartAt = null;
                                               _quote = null;
                                               _quoteVersion++;
+                                              _scheduleAutoQuote();
                                             })),
                                 onTap: _busy
                                     ? null
@@ -1839,9 +1959,42 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                           _quote = null;
                                           _quoteVersion++;
                                         });
+                                        _scheduleAutoQuote();
                                       }),
                             _field(_minutes, 'Duration in minutes',
                                 numeric: true),
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12),
+                              child: Wrap(
+                                spacing: 8,
+                                runSpacing: 4,
+                                children: [
+                                  for (final (mins, label) in const [
+                                    (30, '30m'),
+                                    (60, '1 hr'),
+                                    (120, '2 hrs'),
+                                    (240, '4 hrs'),
+                                    (480, 'Whole day'),
+                                  ])
+                                    ActionChip(
+                                      label: Text(label),
+                                      avatar: (int.tryParse(_minutes.text.trim()) == mins)
+                                          ? const Icon(Icons.check, size: 16)
+                                          : null,
+                                      onPressed: _busy || _previewing
+                                          ? null
+                                          : () {
+                                              _minutes.text = mins.toString();
+                                              setState(() {
+                                                _quote = null;
+                                                _quoteVersion++;
+                                              });
+                                              _scheduleAutoQuote();
+                                            },
+                                    ),
+                                ],
+                              ),
+                            ),
                             if (_fulfillmentMode == 'DELIVERY')
                               _field(_location,
                                   'Resort name, address, and delivery instructions'),
@@ -1857,8 +2010,39 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                 ],
                                 onChanged: _busy || _previewing
                                     ? null
-                                    : (value) =>
-                                        setState(() => _method = value!)),
+                                    : (value) {
+                                        setState(() => _method = value!);
+                                        _scheduleAutoQuote();
+                                      }),
+                            if (_previewing && _quote == null)
+                              const Padding(
+                                padding: EdgeInsets.symmetric(vertical: 8),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                            strokeWidth: 2)),
+                                    SizedBox(width: 8),
+                                    Text('Calculating price…',
+                                        style: TextStyle(
+                                            color: Colors.grey, fontSize: 13)),
+                                  ],
+                                ),
+                              ),
+                            if (_quote == null && !_previewing)
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: _busy || _previewing
+                                      ? null
+                                      : () => _preview(silent: false),
+                                  icon: const Icon(Icons.calculate_outlined,
+                                      size: 18),
+                                  label: const Text('Preview price'),
+                                ),
+                              ),
                             if (_quote != null)
                               RentalSection(
                                   title: 'Price summary',
@@ -1867,6 +2051,12 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                         _money(_quote!['rental_fee'])),
                                     RentalValueRow('Package duration',
                                         '${_quote!['billed_minutes']} minutes'),
+                                    if (_quote!['overtime_rate'] != null)
+                                      RentalValueRow('Late penalty',
+                                          '${_money(_quote!['overtime_rate'])} per ${_quote!['overtime_unit_minutes'] ?? 60}m'),
+                                    if (_quote!['grace_minutes'] != null)
+                                      RentalValueRow('Grace period',
+                                          '${_quote!['grace_minutes']} minutes'),
                                   ])),
                             const RentalNotice(
                                 message:
