@@ -9,10 +9,12 @@ import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../theme/app_theme.dart';
+import '../../widgets/google_logo_icon.dart';
 import '../../utils/account_validation.dart';
 import 'id_verification_screen.dart';
 import 'login_screen.dart';
 import '../shared/terms_dialog.dart';
+import '../user/customer_home_screen.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -260,6 +262,37 @@ class _RegisterScreenState extends State<RegisterScreen> {
         });
       }
       _showMessage(_errorMessage(error), isError: true);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignUp() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final userModel = await authService.signInWithGoogle();
+      if (!mounted || userModel == null) return;
+      if (!userModel.hasAcknowledgedIdRequirement ||
+          !userModel.hasAcceptedTerms) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => IdVerificationScreen(userModel: userModel),
+          ),
+        );
+      } else {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const CustomerHomeScreen()),
+          (route) => false,
+        );
+      }
+    } catch (error) {
+      if (!mounted) return;
+      _showMessage('Google Sign-In failed: ${_errorMessage(error)}',
+          isError: true);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -800,6 +833,48 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       _isLoading ? 'Creating account…' : 'Create account',
                       style: const TextStyle(
                           fontWeight: FontWeight.w700, fontSize: 15),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        'OR',
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const Expanded(child: Divider(color: Color(0xFFE2E8F0))),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      backgroundColor: const Color(0xFFFDFDFE),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      side: const BorderSide(color: Color(0xFFCBD5E1)),
+                    ),
+                    onPressed: _isLoading ? null : _handleGoogleSignUp,
+                    icon: const GoogleLogoIcon(size: 20),
+                    label: const Text(
+                      'Continue with Google',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.black87,
+                      ),
                     ),
                   ),
                 ),

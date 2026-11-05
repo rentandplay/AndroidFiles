@@ -10,18 +10,27 @@ import 'screens/startup_router.dart';
 import 'services/notification_service.dart';
 import 'widgets/notification_widgets.dart';
 
+Future<void> _ensureFirebaseInitialized() async {
+  if (Firebase.apps.isNotEmpty) return;
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } on FirebaseException catch (e) {
+    if (e.code != 'duplicate-app') rethrow;
+  }
+}
+
 @pragma('vm:entry-point')
 Future<void> rentalNotificationBackground(RemoteMessage message) async {
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await _ensureFirebaseInitialized();
 }
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting();
 
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
+  await _ensureFirebaseInitialized();
 
   FirebaseMessaging.onBackgroundMessage(rentalNotificationBackground);
   runApp(const RentAndPlayApp());

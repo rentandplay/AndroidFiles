@@ -1,12 +1,16 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import 'mobile_api_service.dart';
 import 'notification_service.dart';
 
 class AuthService extends ChangeNotifier {
+  static const String _googleServerClientId =
+      '641470891206-ddjsvpekoka0rmhjfl1thu9ss4udufgm.apps.googleusercontent.com';
+
   AuthService() {
     _subscription = _auth.authStateChanges().listen((_) => notifyListeners());
   }
@@ -71,7 +75,25 @@ class AuthService extends ChangeNotifier {
     final address = email.toLowerCase();
     final credential = await _auth.signInWithEmailAndPassword(
         email: address, password: password);
-    await _api.profile(method: 'POST', body: {});
+    final result = await _api.profile(method: 'POST', body: {});
+    final user = credential.user ?? currentUser;
+    final existingMap = result['user'] is Map
+        ? Map<String, dynamic>.from(result['user'] as Map)
+        : const <String, dynamic>{};
+    final savedUrl = (existingMap['profileImageUrl'] ?? '').toString().trim();
+    final authPhotoUrl = (user?.photoURL ?? '').trim();
+    if (savedUrl.isEmpty && authPhotoUrl.isNotEmpty) {
+      try {
+        await _api.profile(
+          method: 'PATCH',
+          body: {'profileImageUrl': authPhotoUrl},
+        );
+      } catch (_) {}
+    } else if (savedUrl.isNotEmpty && savedUrl != authPhotoUrl) {
+      try {
+        await user?.updatePhotoURL(savedUrl);
+      } catch (_) {}
+    }
     notifyListeners();
     return credential;
   }
@@ -92,23 +114,69 @@ class AuthService extends ChangeNotifier {
   Future<UserModel?> signInWithGoogle() async {
     if (kIsWeb) {
       // Firebase Auth owns the browser OAuth flow and reads the Google provider
-      // configuration from the Firebase project. google_sign_in's web plugin
-      // needs a separate clientId, which is not configured for this app.
+      // configuration from the Firebase project.
       await _auth.signInWithPopup(GoogleAuthProvider());
     } else {
-      final googleUser = await GoogleSignIn().signIn();
-      if (googleUser == null) return null;
-      final googleAuth = await googleUser.authentication;
-      await _auth.signInWithCredential(GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken, idToken: googleAuth.idToken));
+      try {
+        final googleSignIn = GoogleSignIn(
+          serverClientId: _googleServerClientId,
+          scopes: const ['email', 'profile'],
+        );
+        await googleSignIn.signOut().catchError((_) => null);
+        final googleUser = await googleSignIn.signIn();
+        if (googleUser == null) return null;
+        final googleAuth = await googleUser.authentication;
+        await _auth.signInWithCredential(GoogleAuthProvider.credential(
+          accessToken: googleAuth.accessToken,
+          idToken: googleAuth.idToken,
+        ));
+      } on PlatformException catch (e) {
+        final details = '${e.code} ${e.message ?? ''}'.toLowerCase();
+        if (details.contains('canceled') || details.contains('cancelled')) {
+          return null;
+        }
+        // Fallback to Firebase Auth's web/provider OAuth flow if Google Play
+        // Services rejects a local build's SHA certificate (ApiException: 10).
+        await _auth.signInWithProvider(GoogleAuthProvider());
+      }
     }
-    await _api.profile(method: 'POST', body: {});
+    var result = await _api.profile(method: 'POST', body: {});
+    final user = currentUser;
+    final photoUrl = user?.photoURL?.trim() ?? '';
+    final existingMap = result['user'] is Map
+        ? Map<String, dynamic>.from(result['user'] as Map)
+        : const <String, dynamic>{};
+    final savedUrl = (existingMap['profileImageUrl'] ?? '').toString().trim();
+    if (savedUrl.isEmpty && photoUrl.isNotEmpty) {
+      try {
+        result = await _api.profile(
+          method: 'PATCH',
+          body: {'profileImageUrl': photoUrl},
+        );
+      } catch (_) {}
+    } else if (savedUrl.isNotEmpty && savedUrl != photoUrl) {
+      // Preserve the user's saved Supabase profile picture across Google logins
+      try {
+        await user?.updatePhotoURL(savedUrl);
+      } catch (_) {}
+    }
     notifyListeners();
+    if (result['user'] is Map) {
+      return UserModel.fromMap(
+        Map<String, dynamic>.from(result['user'] as Map),
+        uid: currentUser?.uid,
+      );
+    }
     return getCurrentUserModel();
   }
 
   Future<void> logout() async {
     if (currentUser != null) await NotificationDevices.unregister(_api);
+    if (!kIsWeb) {
+      await GoogleSignIn(serverClientId: _googleServerClientId)
+          .signOut()
+          .catchError((_) => null);
+    }
     await _auth.signOut();
     notifyListeners();
   }
@@ -117,8 +185,22 @@ class AuthService extends ChangeNotifier {
     final user = currentUser;
     if (user == null) return null;
     final result = await _api.profile();
-    return UserModel.fromMap(Map<String, dynamic>.from(result['user'] as Map),
-        uid: user.uid);
+    var model = UserModel.fromMap(
+      Map<String, dynamic>.from(result['user'] as Map),
+      uid: user.uid,
+    );
+    final savedUrl = (model.profileImageUrl ?? '').trim();
+    final authPhotoUrl = (user.photoURL ?? '').trim();
+    if (savedUrl.isEmpty && authPhotoUrl.isNotEmpty) {
+      model = model.copyWith(profileImageUrl: authPhotoUrl);
+      unawaited(
+        _api.profile(
+          method: 'PATCH',
+          body: {'profileImageUrl': authPhotoUrl},
+        ).catchError((_) => <String, dynamic>{}),
+      );
+    }
+    return model;
   }
 
   Stream<UserModel?> streamUserProfile(String uid) async* {
@@ -153,17 +235,23 @@ class AuthService extends ChangeNotifier {
   }
 
   Future<void> updateProfileImageUrl(String imageUrl) async {
-    if (currentUser == null) {
+    final user = currentUser;
+    if (user == null) {
       throw const MobileApiException('Sign in to update your profile picture.',
           statusCode: 401);
     }
     await _api.profile(method: 'PATCH', body: {'profileImageUrl': imageUrl});
+    try {
+      await user.updatePhotoURL(imageUrl);
+      await user.reload();
+    } catch (_) {}
     notifyListeners();
   }
 
   Future<UserModel> updateCustomerProfile({
     required String name,
     required String phone,
+    String? profileImageUrl,
   }) async {
     final user = currentUser;
     if (user == null) {
@@ -173,6 +261,8 @@ class AuthService extends ChangeNotifier {
     final result = await _api.profile(method: 'PATCH', body: {
       'name': name.trim(),
       'phone': phone.trim(),
+      if (profileImageUrl != null && profileImageUrl.trim().isNotEmpty)
+        'profileImageUrl': profileImageUrl.trim(),
     });
     await user.reload();
     notifyListeners();

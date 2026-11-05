@@ -3,26 +3,34 @@ import 'package:flutter/material.dart';
 const String rentalTermsVersion = '2026-10-13-v1';
 
 class TermsDialog extends StatelessWidget {
-  final VoidCallback onAccept;
+  final VoidCallback? onAccept;
   final VoidCallback? onDecline;
   final String? termsText;
+  final bool readOnly;
 
   const TermsDialog({
     super.key,
-    required this.onAccept,
+    this.onAccept,
     this.onDecline,
     this.termsText,
+    this.readOnly = false,
   });
 
-  static Future<bool?> show(BuildContext context,
-      {required VoidCallback onAccept, VoidCallback? onDecline, String? termsText}) {
+  static Future<bool?> show(
+    BuildContext context, {
+    VoidCallback? onAccept,
+    VoidCallback? onDecline,
+    String? termsText,
+    bool readOnly = false,
+  }) {
     return showDialog<bool>(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: readOnly,
       builder: (context) => TermsDialog(
         onAccept: onAccept,
         onDecline: onDecline,
         termsText: termsText,
+        readOnly: readOnly,
       ),
     );
   }
@@ -85,27 +93,34 @@ class TermsDialog extends StatelessWidget {
           ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () {
-            Navigator.of(context).pop(false);
-            if (onDecline != null) onDecline!();
-          },
-          child: const Text('Decline', style: TextStyle(color: Colors.grey)),
-        ),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Theme.of(context).primaryColor,
-            foregroundColor: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-          ),
-          onPressed: () {
-            onAccept();
-            Navigator.of(context).pop(true);
-          },
-          child: const Text('Accept & Agree'),
-        ),
-      ],
+      actions: readOnly
+          ? [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ]
+          : [
+              TextButton(
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                  if (onDecline != null) onDecline!();
+                },
+                child: const Text('Decline', style: TextStyle(color: Colors.grey)),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Theme.of(context).primaryColor,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+                onPressed: () {
+                  onAccept?.call();
+                  Navigator.of(context).pop(true);
+                },
+                child: const Text('Accept & Agree'),
+              ),
+            ],
     );
   }
 

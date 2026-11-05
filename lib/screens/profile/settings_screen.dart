@@ -84,7 +84,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     fontWeight: FontWeight.bold, color: textPrimary)),
             const SizedBox(height: 6),
             Text(
-              'Location: Los Baños, Laguna\nEmail: support@rentandplay.ph\nOperating hours: 8:00 AM - 8:00 PM',
+              'Location: Los Baños, Laguna\nEmail: rentandplay0@gmail.com\nOperating hours: 8:00 AM - 8:00 PM',
               style: TextStyle(color: textSecondary, height: 1.4),
             ),
             const SizedBox(height: 12),
@@ -427,8 +427,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   onTap: () {
                     TermsDialog.show(
                       context,
-                      onAccept: () {},
-                      onDecline: () {},
+                      readOnly: true,
+
                     );
                   },
                 ),

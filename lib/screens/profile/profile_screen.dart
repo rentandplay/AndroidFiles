@@ -1,7 +1,6 @@
 import '../../widgets/liquid_glass.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -104,16 +103,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final requestedUserId = user?.uid;
     final userModel = await authService.getCurrentUserModel();
     if (mounted && requestedUserId == _profileUserId) {
+      final modelPhotoUrl = userModel?.profileImageUrl?.trim() ?? '';
+      final authPhotoUrl = user?.photoURL?.trim() ?? '';
+      final resolvedUrl = modelPhotoUrl.startsWith('http')
+          ? modelPhotoUrl
+          : (authPhotoUrl.startsWith('http') ? authPhotoUrl : null);
       setState(() {
         _isAdminCached = userModel?.isStaff ?? false;
         _nameController.text = userModel?.name.trim().isNotEmpty == true
             ? userModel!.name.trim()
             : user?.displayName ?? '';
         _phoneController.text = userModel?.phone ?? '';
-        _profileImageUrl = userModel?.profileImageUrl != null &&
-                userModel!.profileImageUrl!.startsWith('http')
-            ? userModel.profileImageUrl
-            : null;
+        _profileImageUrl = resolvedUrl;
       });
     }
     return userModel;
@@ -153,8 +154,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _pickAndUploadImage() async {
     try {
       final picker = ImagePicker();
-      final pickedFile =
-          await picker.pickImage(source: ImageSource.gallery, imageQuality: 80);
+      final pickedFile = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 512,
+        maxHeight: 512,
+        imageQuality: 85,
+      );
       if (pickedFile == null) return;
 
       final bytes = await pickedFile.readAsBytes();
@@ -170,23 +175,31 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       setState(() => _isLoading = true);
 
-      final ref = FirebaseStorage.instance
-          .ref()
-          .child('profile_pics')
-          .child('${user.uid}.jpg');
-      await ref.putData(bytes);
-      final url = await ref.getDownloadURL();
+      final isPng = pickedFile.path.toLowerCase().endsWith('.png');
+      final url = await MobileApiService.instance.uploadProfilePicture(
+        uid: user.uid,
+        bytes: bytes,
+        contentType: isPng ? 'image/png' : 'image/jpeg',
+      );
 
       await authService.updateProfileImageUrl(url);
+      final currentModel = await _profileFuture;
 
       if (!mounted) return;
       setState(() {
         _profileImageUrl = url;
+        if (currentModel != null) {
+          _profileFuture = SynchronousFuture<UserModel?>(
+            currentModel.copyWith(profileImageUrl: url),
+          );
+        }
         _isLoading = false;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile picture updated successfully!')),
+        const SnackBar(
+          content: Text('Profile picture saved to Supabase successfully!'),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -219,13 +232,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final updatedProfile = await authService.updateCustomerProfile(
         name: name,
         phone: _phoneController.text,
+        profileImageUrl: _profileImageUrl,
       );
 
       if (!mounted || updatedProfile.uid != _profileUserId) return;
+      final mergedProfile = (_profileImageUrl != null &&
+              _profileImageUrl!.isNotEmpty &&
+              (updatedProfile.profileImageUrl ?? '').isEmpty)
+          ? updatedProfile.copyWith(profileImageUrl: _profileImageUrl)
+          : updatedProfile;
       setState(() {
-        _nameController.text = updatedProfile.name;
-        _phoneController.text = updatedProfile.phone;
-        _profileFuture = SynchronousFuture<UserModel?>(updatedProfile);
+        _nameController.text = mergedProfile.name;
+        _phoneController.text = mergedProfile.phone;
+        if ((mergedProfile.profileImageUrl ?? '').startsWith('http')) {
+          _profileImageUrl = mergedProfile.profileImageUrl;
+        }
+        _profileFuture = SynchronousFuture<UserModel?>(mergedProfile);
         _isEditing = false;
         _isLoading = false;
       });
@@ -1101,6 +1123,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  ImageProvider? _resolveAvatarImage(UserModel? userModel, dynamic user) {
+    if (_imageBytes != null) {
+      return MemoryImage(_imageBytes!);
+    }
+    final candidates = <String?>[
+      _profileImageUrl,
+      userModel?.profileImageUrl,
+      user?.photoURL?.toString(),
+    ];
+    for (final raw in candidates) {
+      final url = raw?.trim() ?? '';
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return NetworkImage(url);
+      }
+    }
+    return null;
+  }
+
   Widget _buildCustomerHeaderCard(
     UserModel? userModel,
     dynamic user,
@@ -1116,11 +1156,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final email = _profileValue(userModel?.email.trim().isNotEmpty == true
         ? userModel!.email
         : user?.email?.toString());
-    final avatarImage = _imageBytes != null
-        ? MemoryImage(_imageBytes!) as ImageProvider
-        : _profileImageUrl != null
-            ? NetworkImage(_profileImageUrl!) as ImageProvider
-            : null;
+    final avatarImage = _resolveAvatarImage(userModel, user);
 
     return GlassCard(
       key: const ValueKey('customer-profile-card'),
@@ -1631,7 +1667,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             subtitle: 'Rental guidelines and safety policies',
             textPrimary: textPrimary,
             textSecondary: textSecondary,
-            onTap: () => TermsDialog.show(context, onAccept: () {}),
+            onTap: () => TermsDialog.show(context, readOnly: true),
           ),
         ],
       ),
@@ -1775,12 +1811,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 radius: 48,
                 backgroundColor:
                     isDark ? const Color(0xFF1E2C42) : Colors.grey.shade200,
-                backgroundImage: _imageBytes != null
-                    ? MemoryImage(_imageBytes!)
-                    : (_profileImageUrl != null
-                        ? NetworkImage(_profileImageUrl!) as ImageProvider
-                        : null),
-                child: (_imageBytes == null && _profileImageUrl == null)
+                backgroundImage: _resolveAvatarImage(userModel, user),
+                child: _resolveAvatarImage(userModel, user) == null
                     ? Icon(Icons.person, size: 50, color: textSecondary)
                     : null,
               ),

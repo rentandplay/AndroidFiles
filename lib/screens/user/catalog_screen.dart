@@ -31,7 +31,6 @@ class CatalogScreenState extends State<CatalogScreen> {
   bool _availableOnly = false;
   bool _savedOnly = false;
   bool _availableFirst = true;
-  bool _dismissGuestHero = false;
   final Set<String> _savedItemIds = {};
   String? _savedOwnerId;
   List<ItemModel> catalogItems = [];
@@ -375,95 +374,6 @@ class CatalogScreenState extends State<CatalogScreen> {
                     ),
                   ),
                 ),
-              if (user == null && !_dismissGuestHero)
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                    child: LiquidGlassContainer(
-                      borderRadius: 22,
-                      blurSigma: 16,
-                      glowColor: const Color(0xFFDF762D),
-                      padding: const EdgeInsets.all(14),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.center,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    colors: [
-                                      Color(0xFFFF8A3D),
-                                      Color(0xFFDF762D)
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFDF762D)
-                                          .withValues(alpha: 0.3),
-                                      blurRadius: 6,
-                                    ),
-                                  ],
-                                ),
-                                child: const Icon(Icons.auto_awesome_rounded,
-                                    size: 18, color: Colors.white),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const Text(
-                                      'Rent & Play Equipment',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: -0.2,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Browse games & gear. Sign in anytime to book!',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: scheme.onSurfaceVariant,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              IconButton(
-                                tooltip: 'Dismiss banner',
-                                visualDensity: VisualDensity.compact,
-                                icon: const Icon(Icons.close_rounded, size: 18),
-                                onPressed: () =>
-                                    setState(() => _dismissGuestHero = true),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                _heroPill(context, Icons.bolt_rounded,
-                                    'Instant Booking'),
-                                const SizedBox(width: 6),
-                                _heroPill(context, Icons.verified_user_outlined,
-                                    'Insured Gear'),
-                                const SizedBox(width: 6),
-                                _heroPill(context, Icons.card_giftcard_rounded,
-                                    '10% Off First Rent'),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
               SliverToBoxAdapter(
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
@@ -671,35 +581,6 @@ class CatalogScreenState extends State<CatalogScreen> {
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _heroPill(BuildContext context, IconData icon, String text) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.08)
-            : const Color(0xFF0F172A).withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isDark
-              ? Colors.white.withValues(alpha: 0.14)
-              : const Color(0xFFE2E8F0),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 13, color: const Color(0xFFDF762D)),
-          const SizedBox(width: 5),
-          Text(
-            text,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-          ),
-        ],
       ),
     );
   }

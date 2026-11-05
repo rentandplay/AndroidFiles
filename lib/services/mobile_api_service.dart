@@ -58,6 +58,7 @@ class MobileApiService {
 
   static final MobileApiService instance = MobileApiService();
 
+  static const bool _hasExplicitBaseUrl = bool.hasEnvironment('API_BASE_URL');
   static const String _configuredBaseUrl = String.fromEnvironment(
     'API_BASE_URL',
     defaultValue: 'https://rent-and-play.onrender.com/api',
@@ -65,17 +66,29 @@ class MobileApiService {
 
   static final List<String> _candidateBaseUrls = () {
     final list = <String>[
-      _configuredBaseUrl,
+      if (_hasExplicitBaseUrl) _configuredBaseUrl,
       'https://rent-and-play.onrender.com/api',
-      'http://192.168.1.35:3000/api',
       'http://127.0.0.1:3000/api',
       'http://10.0.2.2:3000/api',
     ];
-    return list.toSet().toList();
+    return list.where((url) => url.isNotEmpty).toSet().toList();
   }();
 
   static String _activeBaseUrl = _configuredBaseUrl;
 
+  static const String _supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://yuhforhnrnfpzzhulgzt.supabase.co',
+  );
+  static const String _supabaseStorageBucket = String.fromEnvironment(
+    'SUPABASE_STORAGE_BUCKET',
+    defaultValue: 'rental-media',
+  );
+  static const String _supabaseStorageKey = String.fromEnvironment(
+    'SUPABASE_STORAGE_KEY',
+    defaultValue:
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl1aGZvcmhucm5mcHp6aHVsZ3p0Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MjI2NDU0NywiZXhwIjoyMTA3ODQwNTQ3fQ.-OjDjMT5jRw8GnDYP5VAjCGHmNp8fGteEGKlqItqfEI',
+  );
 
   final FirebaseAuth _auth;
   final http.Client _client;
@@ -243,29 +256,32 @@ class MobileApiService {
         '${(baseUrlOverride ?? _activeBaseUrl).replaceAll(RegExp(r'/+$'), '')}$path',
       );
 
+  static bool _isLocalCandidate(Uri uri) {
+    final host = uri.host.toLowerCase();
+    return host == '127.0.0.1' ||
+        host == 'localhost' ||
+        host == '10.0.2.2' ||
+        host.startsWith('192.168.');
+  }
+
   Future<http.Response> _executeHttp(
     String method,
     Uri uri,
     Map<String, String> headers,
     Map<String, dynamic>? body,
   ) {
-    return switch (method) {
-      'PATCH' => _client
-          .patch(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 60)),
-      'PUT' => _client
-          .put(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 60)),
-      'DELETE' => _client
-          .delete(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 60)),
-      'POST' => _client
-          .post(uri, headers: headers, body: jsonEncode(body))
-          .timeout(const Duration(seconds: 60)),
-      _ => _client
-          .get(uri, headers: headers)
-          .timeout(const Duration(seconds: 60)),
-    };
+    final encodedBody = body != null ? jsonEncode(body) : null;
+    final timeout = _isLocalCandidate(uri)
+        ? const Duration(milliseconds: 1500)
+        : const Duration(seconds: 12);
+    return (switch (method) {
+      'PATCH' => _client.patch(uri, headers: headers, body: encodedBody),
+      'PUT' => _client.put(uri, headers: headers, body: encodedBody),
+      'DELETE' => _client.delete(uri, headers: headers, body: encodedBody),
+      'POST' => _client.post(uri, headers: headers, body: encodedBody),
+      _ => _client.get(uri, headers: headers),
+    })
+        .timeout(timeout);
   }
 
   Future<Map<String, dynamic>> _request(
@@ -306,7 +322,10 @@ class MobileApiService {
       try {
         final uri = _uri(path, candidate);
         response = await _executeHttp(method, uri, headers, body);
-        _activeBaseUrl = candidate;
+        if (_activeBaseUrl != candidate) {
+          _activeBaseUrl = candidate;
+          resetRentalEventStream();
+        }
         break;
       } catch (e) {
         lastError = e;
@@ -360,6 +379,41 @@ class MobileApiService {
   Future<Map<String, dynamic>> profile(
           {String method = 'GET', Map<String, dynamic>? body}) =>
       _request('/mobile/profile', method: method, body: body);
+
+  Future<String> uploadProfilePicture({
+    required String uid,
+    required List<int> bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    final safeUid = uid.replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_');
+    final ext = contentType.contains('png') ? 'png' : 'jpg';
+    final objectPath = 'profile_pics/$safeUid.$ext';
+    final uploadUri = Uri.parse(
+      '$_supabaseUrl/storage/v1/object/$_supabaseStorageBucket/$objectPath',
+    );
+    final response = await _client
+        .post(
+          uploadUri,
+          headers: {
+            'apikey': _supabaseStorageKey,
+            'Authorization': 'Bearer $_supabaseStorageKey',
+            'Content-Type': contentType,
+            'x-upsert': 'true',
+          },
+          body: bytes,
+        )
+        .timeout(const Duration(seconds: 15));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw MobileApiException(
+        'Could not upload profile photo to Supabase Storage (${response.statusCode}).',
+        statusCode: response.statusCode,
+      );
+    }
+
+    final cacheBust = DateTime.now().millisecondsSinceEpoch;
+    return '$_supabaseUrl/storage/v1/object/public/$_supabaseStorageBucket/$objectPath?t=$cacheBust';
+  }
 
   Future<void> sendRegistrationEmailCode(String email) async {
     await _request('/mobile/registration/email-code',
@@ -426,32 +480,43 @@ class MobileApiService {
     String? paymentProofImageDataUrl,
     String? paymentReference,
   }) async {
-    await _ensureCustomerProfile();
-    final result = await _request(
-      '/mobile/rentals',
-      method: 'POST',
-      body: {
-        'itemId': itemId,
-        if (stockGroupId != null && stockGroupId.isNotEmpty)
-          'stockGroupId': stockGroupId,
-        'durationMinutes': durationMinutes,
-        if (scheduledStartAt != null)
-          'scheduledStartAt': scheduledStartAt.toUtc().toIso8601String(),
-        'deliveryLocation': deliveryLocation,
-        'paymentMethod': paymentMethod.toUpperCase(),
-        'requestKey': requestKey,
-        'expectedQuote': expectedQuote,
-        'acceptedRentalTerms': acceptedRentalTerms,
-        'rentalTermsVersion': rentalTermsVersion,
-        if (paymentMethod.toUpperCase() == 'QR' &&
-            paymentProofImageDataUrl != null)
-          'paymentProof': {
-            'imageDataUrl': paymentProofImageDataUrl,
-            if (paymentReference != null && paymentReference.trim().isNotEmpty)
-              'reference': paymentReference.trim(),
-          },
-      },
-    );
+    final payload = <String, dynamic>{
+      'itemId': itemId,
+      if (stockGroupId != null && stockGroupId.isNotEmpty)
+        'stockGroupId': stockGroupId,
+      'durationMinutes': durationMinutes,
+      if (scheduledStartAt != null)
+        'scheduledStartAt': scheduledStartAt.toUtc().toIso8601String(),
+      'deliveryLocation': deliveryLocation,
+      'paymentMethod': paymentMethod.toUpperCase(),
+      'requestKey': requestKey,
+      'expectedQuote': expectedQuote,
+      'acceptedRentalTerms': acceptedRentalTerms,
+      'rentalTermsVersion': rentalTermsVersion,
+      if (paymentMethod.toUpperCase() == 'QR' &&
+          paymentProofImageDataUrl != null)
+        'paymentProof': {
+          'imageDataUrl': paymentProofImageDataUrl,
+          if (paymentReference != null && paymentReference.trim().isNotEmpty)
+            'reference': paymentReference.trim(),
+        },
+    };
+    Map<String, dynamic> result;
+    try {
+      result = await _request(
+        '/mobile/rentals',
+        method: 'POST',
+        body: payload,
+      );
+    } on MobileApiException catch (error) {
+      if (error.statusCode != 403 && error.statusCode != 404) rethrow;
+      await _ensureCustomerProfile();
+      result = await _request(
+        '/mobile/rentals',
+        method: 'POST',
+        body: payload,
+      );
+    }
     final rental = result['rental'];
     if (rental is! Map) {
       throw const MobileApiException(
