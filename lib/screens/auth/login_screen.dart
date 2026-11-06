@@ -94,7 +94,8 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (!userModel.hasAcknowledgedIdRequirement ||
-            !userModel.hasAcceptedTerms) {
+            !userModel.hasAcceptedTerms ||
+            userModel.phone.trim().isEmpty) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => IdVerificationScreen(userModel: userModel),
@@ -207,7 +208,8 @@ class _LoginScreenState extends State<LoginScreen> {
         }
 
         if (!userModel.hasAcknowledgedIdRequirement ||
-            !userModel.hasAcceptedTerms) {
+            !userModel.hasAcceptedTerms ||
+            userModel.phone.trim().isEmpty) {
           Navigator.of(context).pushReplacement(
             MaterialPageRoute(
               builder: (_) => IdVerificationScreen(userModel: userModel),

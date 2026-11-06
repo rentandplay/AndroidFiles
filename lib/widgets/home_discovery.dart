@@ -1,3 +1,4 @@
+import 'premium_animations.dart';
 import 'package:flutter/material.dart';
 
 import '../models/item_model.dart';
@@ -78,10 +79,13 @@ class HomeDiscovery extends StatelessWidget {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(children: [
-              for (final category in categories)
+              for (var i = 0; i < categories.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: _categoryChip(context, category),
+                  child: StaggeredSlideFade(
+                    index: i,
+                    child: _categoryChip(context, categories[i]),
+                  ),
                 ),
             ]),
           ),
@@ -95,10 +99,13 @@ class HomeDiscovery extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                for (final item in suggestions)
+                for (var i = 0; i < suggestions.length; i++)
                   Padding(
                     padding: const EdgeInsets.only(right: 12, bottom: 4),
-                    child: _equipmentCard(context, item),
+                    child: StaggeredSlideFade(
+                      index: i,
+                      child: _equipmentCard(context, suggestions[i]),
+                    ),
                   ),
               ],
             ),
@@ -135,10 +142,11 @@ class HomeDiscovery extends StatelessWidget {
   Widget _categoryChip(BuildContext context, String category) {
     final accent = _categoryColor(category);
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    return LiquidGlassContainer(
-      borderRadius: 22,
-      padding: const EdgeInsets.fromLTRB(8, 7, 16, 7),
+    return PremiumPressable(
       onTap: () => onCategorySelected(category),
+      child: LiquidGlassContainer(
+        borderRadius: 22,
+        padding: const EdgeInsets.fromLTRB(8, 7, 16, 7),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
           width: 36,
@@ -160,7 +168,8 @@ class HomeDiscovery extends StatelessWidget {
                 fontWeight: FontWeight.w700,
                 color: isDark ? Colors.white : const Color(0xFF1E293B))),
       ]),
-    );
+    ),
+  );
   }
 
   Widget _equipmentCard(BuildContext context, ItemModel item) {
@@ -173,9 +182,10 @@ class HomeDiscovery extends StatelessWidget {
     final width = (MediaQuery.sizeOf(context).width * .48).clamp(165.0, 210.0);
     return SizedBox(
       width: width,
-      child: LiquidGlassContainer(
-        borderRadius: 22,
+      child: PremiumPressable(
         onTap: () => onItemSelected(item),
+        child: LiquidGlassContainer(
+          borderRadius: 22,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -196,7 +206,10 @@ class HomeDiscovery extends StatelessWidget {
                   ),
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
                   child: Center(
-                    child: item.buildImage(fit: BoxFit.contain, height: 95),
+                    child: Hero(
+                      tag: 'item-image-${item.id}',
+                      child: item.buildImage(fit: BoxFit.contain, height: 95),
+                    ),
                   ),
                 ),
                 Positioned(
@@ -331,7 +344,8 @@ class HomeDiscovery extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _catalogNotice(BuildContext context) => Padding(

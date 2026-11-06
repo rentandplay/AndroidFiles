@@ -3,11 +3,16 @@ import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 
 class RentPlayWordmark extends StatelessWidget {
-  const RentPlayWordmark({super.key});
+  final bool isLightOnDark;
+
+  const RentPlayWordmark({
+    super.key,
+    this.isLightOnDark = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = isLightOnDark || Theme.of(context).brightness == Brightness.dark;
 
     return Semantics(
       label: 'Rent & Play',

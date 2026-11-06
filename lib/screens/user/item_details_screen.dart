@@ -212,9 +212,12 @@ class ItemDetailsScreen extends StatelessWidget {
                                     : const Color(0xFFE8E0D5),
                               ),
                             ),
-                            child: item.buildImage(
-                              fit: BoxFit.contain,
-                              height: 192,
+                            child: Hero(
+                              tag: 'item-image-',
+                              child: item.buildImage(
+                                fit: BoxFit.contain,
+                                height: 192,
+                              ),
                             ),
                           ),
                         ),

@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   String _selectedResort = '';
   DateTime? _scheduledStartAt;
   final _customResortController = TextEditingController();
+  final _phoneController = TextEditingController();
+  String _customerName = '';
   String _paymentMethod = 'CASH';
   bool _isSubmitting = false, _quoteLoading = true, _paymentConfirmed = false;
   bool _acceptedRentalTerms = false;
@@ -97,6 +100,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     _loadQuote();
     _loadPaymentInstructions();
     _loadTerms();
+    _loadUserProfile();
   }
 
   Future<void> _loadTerms() async {
@@ -124,6 +128,31 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } catch (_) {
       if (mounted) setState(() => _paymentInstructions = const {});
     }
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final user = await authService.getCurrentUserModel();
+      if (user != null && mounted) {
+        setState(() {
+          _customerName = user.name;
+          if (_phoneController.text.isEmpty && user.phone.isNotEmpty) {
+            _phoneController.text = user.phone;
+          }
+        });
+      }
+    } catch (_) {}
+  }
+
+  String _normalizedPhone(String value) {
+    final digits = value.replaceAll(RegExp(r'\D'), '');
+    final mobile = digits.startsWith('63')
+        ? digits.substring(2)
+        : digits.startsWith('0')
+            ? digits.substring(1)
+            : digits;
+    return '+63$mobile';
   }
 
   Future<ImageSource?> _selectPaymentProofSource() =>
@@ -229,6 +258,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void dispose() {
     _quoteVersion++;
     _customResortController.dispose();
+    _phoneController.dispose();
     _paymentReferenceController.dispose();
     super.dispose();
   }
@@ -347,6 +377,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (_paymentMethod == 'QR' && _paymentProofImage == null) {
         throw const MobileApiException(
             'Upload a screenshot of the successful InstaPay / GCash transfer.');
+      }
+      final normalizedPhone = _normalizedPhone(_phoneController.text);
+      try {
+        final authService = Provider.of<AuthService>(context, listen: false);
+        await authService.updateCustomerProfile(
+          name: _customerName.isNotEmpty
+              ? _customerName
+              : (user.displayName ?? 'Customer'),
+          phone: normalizedPhone,
+        );
+      } catch (e) {
+        debugPrint('Could not update customer phone on checkout: $e');
       }
       await _api.createRentalRequest(
         itemId: widget.item.id,
@@ -614,6 +656,54 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                 ],
                               ],
                             ]),
+                      ),
+                      RentalSection(
+                        title: 'Delivery contact',
+                        icon: Icons.phone_android_outlined,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Staff will call or text this number upon arrival at your resort.',
+                              style: TextStyle(
+                                color: scheme.onSurfaceVariant,
+                                fontSize: 13,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            TextFormField(
+                              controller: _phoneController,
+                              enabled: !_isSubmitting,
+                              keyboardType: TextInputType.phone,
+                              textInputAction: TextInputAction.next,
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                  RegExp(r'[+0-9() .-]'),
+                                ),
+                                LengthLimitingTextInputFormatter(20),
+                              ],
+                              decoration: const InputDecoration(
+                                labelText: 'Contact phone number *',
+                                hintText: '0912 345 6789',
+                                prefixIcon: Icon(Icons.phone_outlined),
+                              ),
+                              validator: (value) {
+                                final phone = (value ?? '').trim();
+                                if (phone.isEmpty) {
+                                  return 'Enter a contact number for delivery.';
+                                }
+                                final clean = phone.replaceAll(
+                                    RegExp(r'[\s().-]'), '');
+                                if (!RegExp(r'^(?:\+?63|0)?9\d{9}$')
+                                    .hasMatch(clean)) {
+                                  return 'Enter a valid Philippine number (e.g. 0912 345 6789).';
+                                }
+                                return null;
+                              },
+                            ),
+                          ],
+                        ),
                       ),
                       RentalSection(
                         title: 'Price summary',

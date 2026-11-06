@@ -2,7 +2,6 @@
   "project_info": {
     "project_number": "641470891206",
     "project_id": "rent-and-play",
-    "firebase_url": "https://rent-and-play-default-rtdb.firebaseio.com",
     "storage_bucket": "rent-and-play.firebasestorage.app"
   },
   "client": [
@@ -20,6 +19,14 @@
           "android_info": {
             "package_name": "com.example.rent_and_play_app",
             "certificate_hash": "2f3fdbbdc8171ed1176d04bb690b7e7aacee884f"
+          }
+        },
+        {
+          "client_id": "641470891206-l0vco41c97kf04ju1km9k8jd2lhtp3ct.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.rent_and_play_app",
+            "certificate_hash": "bcbe359af37ceb4b89d4f039d3b60aa65446d1ed"
           }
         },
         {

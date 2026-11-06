@@ -1,3 +1,6 @@
+import '../../widgets/brand_hero_header.dart';
+import 'package:flutter/services.dart';
+import '../../widgets/premium_animations.dart';
 import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
 import '../../services/mobile_api_service.dart';
@@ -7,7 +10,6 @@ import '../../models/item_model.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
 import '../../widgets/rent_play_wordmark.dart';
-import '../../widgets/liquid_glass.dart';
 import '../auth/login_screen.dart';
 import 'item_details_screen.dart';
 import '../admin/admin_dashboard_screen.dart';
@@ -193,12 +195,15 @@ class CatalogScreenState extends State<CatalogScreen> {
     required bool selected,
     required ValueChanged<bool> onSelected,
   }) {
-    return MobileFilterChip(
-      key: ValueKey(id),
-      selected: selected,
-      icon: icon,
-      label: label,
-      onSelected: onSelected,
+    return PremiumPressable(
+      onTap: () => onSelected(!selected),
+      child: MobileFilterChip(
+        key: ValueKey(id),
+        selected: selected,
+        icon: icon,
+        label: label,
+        onSelected: onSelected,
+      ),
     );
   }
 
@@ -217,148 +222,252 @@ class CatalogScreenState extends State<CatalogScreen> {
             ? 1
             : 2;
     final isAdmin = _currentUserModel?.isStaff == true;
-    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
-      extendBodyBehindAppBar: true,
-      appBar: GlassAppBar(
-        loading: _catalogLoading,
-        title: const RentPlayWordmark(),
-        centerTitle: false,
-        actions: [
-          if (user == null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Color(0xFFFF8A3D),
-                      Color(0xFFDF762D),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFDF762D).withValues(alpha: 0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.35),
-                    width: 1.0,
-                  ),
-                ),
-                child: TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20)),
-                  ),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    );
-                  },
-                  icon: const Icon(Icons.login_rounded,
-                      size: 16, color: Colors.white),
-                  label: const Text(
-                    'Login',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              ),
-            )
-          else ...[
-            const RentalNotificationBellPod(),
-            if (isAdmin)
-              HeaderActionPod(
-                child: PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  icon: const Icon(Icons.more_vert, size: 20),
-                  tooltip: 'More Options',
-                  onSelected: (value) async {
-                    if (value == 'admin') {
-                      final navigator = Navigator.of(context);
-                      navigator.push(
-                        MaterialPageRoute(
-                          builder: (_) => AdminDashboardScreen(
-                            onSignedOut: () {
-                              navigator.pushAndRemoveUntil(
-                                MaterialPageRoute(
-                                  builder: (_) => const LoginScreen(),
-                                ),
-                                (route) => false,
-                              );
-                            },
-                          ),
-                        ),
-                      );
-                    } else if (value == 'logout') {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Logged out successfully.')),
-                      );
-                      await authService.logout();
-                      if (mounted) setState(() => _currentUserModel = null);
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'admin',
-                      child: Row(
-                        children: [
-                          Icon(Icons.admin_panel_settings_outlined,
-                              size: 20, color: Color(0xFFF57C00)),
-                          SizedBox(width: 10),
-                          Text('Staff Dashboard'),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuDivider(),
-                    const PopupMenuItem(
-                      value: 'logout',
-                      child: Row(
-                        children: [
-                          Icon(Icons.logout, size: 20, color: Colors.red),
-                          SizedBox(width: 10),
-                          Text('Logout',
-                              style: TextStyle(
-                                  color: Colors.red,
-                                  fontWeight: FontWeight.bold)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-          ],
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
       ),
-      body: LiquidAmbientBackdrop(
-        child: RefreshIndicator(
-          edgeOffset: topPadding,
+      child: Scaffold(
+        backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
+        body: RefreshIndicator(
+          edgeOffset: MediaQuery.of(context).padding.top + 50,
           onRefresh: _loadCatalog,
           child: CustomScrollView(
             keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              // 1. Signature Midnight Navy & Glowing Orange Swoosh Hero Header with Wave Bottom
               SliverToBoxAdapter(
-                child: SizedBox(height: topPadding + 6),
+                child: ClipPath(
+                  clipper: const BrowseHeroBottomWaveClipper(),
+                  child: NavyOrangeHeroBackground(
+                    child: SafeArea(
+                      bottom: false,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Top row: rent&play wordmark + Login button
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const RentPlayWordmark(isLightOnDark: true),
+                                if (user == null)
+                                  HeroLoginButton(
+                                    onPressed: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                    ),
+                                  )
+                                else
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const RentalNotificationBellPod(
+                                        podBg: Color(0x28FFFFFF),
+                                        podBorder: Color(0x40FFFFFF),
+                                        iconColor: Colors.white,
+                                      ),
+                                      if (isAdmin) ...[
+                                        const SizedBox(width: 6),
+                                        HeaderActionPod(
+                                          podBg: Colors.white.withValues(alpha: 0.16),
+                                          podBorder: Colors.white.withValues(alpha: 0.25),
+                                          iconColor: Colors.white,
+                                          child: PopupMenuButton<String>(
+                                            padding: EdgeInsets.zero,
+                                            icon: const Icon(Icons.more_vert, size: 20),
+                                            tooltip: 'More Options',
+                                            onSelected: (value) async {
+                                              if (value == 'admin') {
+                                                final navigator = Navigator.of(context);
+                                                navigator.push(
+                                                  MaterialPageRoute(
+                                                    builder: (_) => AdminDashboardScreen(
+                                                      onSignedOut: () {
+                                                        navigator.pushAndRemoveUntil(
+                                                          MaterialPageRoute(
+                                                            builder: (_) => const LoginScreen(),
+                                                          ),
+                                                          (route) => false,
+                                                        );
+                                                      },
+                                                    ),
+                                                  ),
+                                                );
+                                              } else if (value == 'logout') {
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text('Logged out successfully.')),
+                                                );
+                                                await authService.logout();
+                                                if (mounted) setState(() => _currentUserModel = null);
+                                              }
+                                            },
+                                            itemBuilder: (context) => [
+                                              const PopupMenuItem(
+                                                value: 'admin',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.admin_panel_settings_outlined,
+                                                        size: 20, color: Color(0xFFF57C00)),
+                                                    SizedBox(width: 10),
+                                                    Text('Staff Dashboard'),
+                                                  ],
+                                                ),
+                                              ),
+                                              const PopupMenuDivider(),
+                                              const PopupMenuItem(
+                                                value: 'logout',
+                                                child: Row(
+                                                  children: [
+                                                    Icon(Icons.logout, size: 20, color: Colors.red),
+                                                    SizedBox(width: 10),
+                                                    Text('Logout',
+                                                        style: TextStyle(
+                                                            color: Colors.red,
+                                                            fontWeight: FontWeight.bold)),
+                                                  ],
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          // Search bar + separate filter/tune button matching reference
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: BrowseHeroSearchBar(
+                              controller: _searchController,
+                              onChanged: (value) => setState(() => _searchQuery = value),
+                              trailing: Material(
+                                color: Colors.transparent,
+                                child: Container(
+                                  width: 48,
+                                  height: 48,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.16),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 3),
+                                      ),
+                                    ],
+                                  ),
+                                  child: PopupMenuButton<String>(
+                                    tooltip: 'Sort equipment',
+                                    icon: const Icon(Icons.tune_rounded, size: 22, color: Color(0xFF0F172A)),
+                                    initialValue: _availableFirst ? 'available' : 'name',
+                                    onSelected: (value) => setState(() => _availableFirst = value == 'available'),
+                                    itemBuilder: (_) => [
+                                      CheckedPopupMenuItem(
+                                        value: 'available',
+                                        checked: _availableFirst,
+                                        child: const Text('Available first'),
+                                      ),
+                                      CheckedPopupMenuItem(
+                                        value: 'name',
+                                        checked: !_availableFirst,
+                                        child: const Text('Name A–Z'),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          // Horizontal Category Chips row spanning full screen width
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            physics: const BouncingScrollPhysics(),
+                            child: Row(
+                              children: [
+                                for (final category in categories)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: BrowseCategoryChip(
+                                      label: category,
+                                      isSelected: selectedCategory == category,
+                                      onSelected: () => setState(() => selectedCategory = category),
+                                    ),
+                                  ),
+                                const SizedBox(width: 8),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
+
+              // 2. White Surface with Filters & Items Count
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _filterChip(
+                              id: 'catalog-available-filter',
+                              selected: _availableOnly,
+                              icon: _availableOnly
+                                  ? Icons.check_circle_rounded
+                                  : Icons.check_circle_outline,
+                              label: 'Available only',
+                              onSelected: (selected) =>
+                                  setState(() => _availableOnly = selected),
+                            ),
+                            if (user != null) ...[
+                              const SizedBox(width: 8),
+                              _filterChip(
+                                id: 'catalog-saved-filter',
+                                selected: _savedOnly,
+                                icon: _savedOnly
+                                    ? Icons.favorite_rounded
+                                    : Icons.favorite_border_rounded,
+                                label: 'Saved (${_savedItemIds.length})',
+                                onSelected: (selected) =>
+                                    setState(() => _savedOnly = selected),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2),
+                        child: Text(
+                          '${filteredItems.length} items',
+                          style: TextStyle(
+                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
               if (_catalogError.isNotEmpty)
                 SliverToBoxAdapter(
                   child: Padding(
@@ -374,136 +483,6 @@ class CatalogScreenState extends State<CatalogScreen> {
                     ),
                   ),
                 ),
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  child: Row(children: [
-                    Expanded(
-                        child: MobileSearchField(
-                      controller: _searchController,
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                      hintText: 'Search equipment',
-                    )),
-                    const SizedBox(width: 8),
-                    Material(
-                      color: Colors.transparent,
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: isDark
-                              ? const Color(0xFF192536).withValues(alpha: 0.78)
-                              : Colors.white.withValues(alpha: 0.90),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.16)
-                                : const Color(0xFFE2E8F0),
-                            width: 1.1,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: isDark
-                                  ? Colors.black.withValues(alpha: 0.25)
-                                  : const Color(0xFF0F172A)
-                                      .withValues(alpha: 0.04),
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: PopupMenuButton<String>(
-                          tooltip: 'Sort equipment',
-                          icon: Icon(Icons.sort_rounded,
-                              size: 20, color: scheme.onSurfaceVariant),
-                          initialValue: _availableFirst ? 'available' : 'name',
-                          onSelected: (value) => setState(
-                              () => _availableFirst = value == 'available'),
-                          itemBuilder: (_) => [
-                            CheckedPopupMenuItem(
-                                value: 'available',
-                                checked: _availableFirst,
-                                child: const Text('Available first')),
-                            CheckedPopupMenuItem(
-                                value: 'name',
-                                checked: !_availableFirst,
-                                child: const Text('Name A–Z')),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ]),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: Container(
-                  height: 48 + (textScale - 1) * 16,
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: categories.length,
-                    itemBuilder: (context, index) {
-                      final category = categories[index];
-                      final isSelected = selectedCategory == category;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: MobileCategoryChip(
-                          label: category,
-                          selected: isSelected,
-                          onSelected: () =>
-                              setState(() => selectedCategory = category),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 2),
-                  child: Row(
-                    children: [
-                      _filterChip(
-                        id: 'catalog-available-filter',
-                        selected: _availableOnly,
-                        icon: _availableOnly
-                            ? Icons.check_circle_rounded
-                            : Icons.check_circle_outline,
-                        label: 'Available only',
-                        onSelected: (selected) =>
-                            setState(() => _availableOnly = selected),
-                      ),
-                      if (user != null) ...[
-                        const SizedBox(width: 8),
-                        _filterChip(
-                          id: 'catalog-saved-filter',
-                          selected: _savedOnly,
-                          icon: _savedOnly
-                              ? Icons.favorite_rounded
-                              : Icons.favorite_border_rounded,
-                          label: 'Saved (${_savedItemIds.length})',
-                          onSelected: (selected) =>
-                              setState(() => _savedOnly = selected),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-              SliverToBoxAdapter(
-                  child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 4, 18, 4),
-                child: Text(
-                    '${filteredItems.length} item${filteredItems.length == 1 ? '' : 's'}',
-                    style: TextStyle(
-                        color: scheme.onSurfaceVariant,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.1)),
-              )),
               if (filteredItems.isEmpty)
                 SliverFillRemaining(
                   hasScrollBody: false,
@@ -573,7 +552,10 @@ class CatalogScreenState extends State<CatalogScreen> {
                       mainAxisSpacing: 14,
                     ),
                     delegate: SliverChildBuilderDelegate(
-                      (context, index) => _buildItemCard(filteredItems[index]),
+                      (context, index) => StaggeredSlideFade(
+                        index: index,
+                        child: _buildItemCard(filteredItems[index]),
+                      ),
                       childCount: filteredItems.length,
                     ),
                   ),
@@ -608,13 +590,10 @@ class CatalogScreenState extends State<CatalogScreen> {
             _ => 'Unavailable',
           };
 
-    return LiquidGlassContainer(
-      borderRadius: 22,
-      blurSigma: 12,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(22),
-        onTap: () => _openItemDetails(item),
-        child: Column(
+    return HoverLiftCard(
+      onTap: () => _openItemDetails(item),
+      builder: (context, isHovered) {
+        return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Stack(
@@ -636,7 +615,15 @@ class CatalogScreenState extends State<CatalogScreen> {
                   ),
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   child: Center(
-                    child: item.buildImage(fit: BoxFit.contain, height: 100),
+                    child: AnimatedScale(
+                      scale: isHovered ? 1.06 : 1.0,
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOutCubic,
+                      child: Hero(
+                        tag: 'item-image-${item.id}',
+                        child: item.buildImage(fit: BoxFit.contain, height: 100),
+                      ),
+                    ),
                   ),
                 ),
                 Positioned(
@@ -814,51 +801,52 @@ class CatalogScreenState extends State<CatalogScreen> {
                       height: 38 *
                           (MediaQuery.textScalerOf(context).scale(13) / 13)
                               .clamp(1.0, double.infinity),
-                      child: Container(
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: isDark
-                                ? [
-                                    const Color(0xFFDF762D).withValues(alpha: 0.28),
-                                    const Color(0xFF1E2838).withValues(alpha: 0.85),
-                                  ]
-                                : [
-                                    const Color(0xFFFFF4EB),
-                                    const Color(0xFFFFE8D6),
-                                  ],
-                          ),
+                          color: isHovered
+                              ? const Color(0xFFE46618)
+                              : (isDark
+                                  ? const Color(0xFF1E2838)
+                                  : const Color(0xFFFFF4EB)),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: const Color(0xFFDF762D).withValues(alpha: 0.35),
+                            color: const Color(0xFFDF762D).withValues(alpha: isHovered ? 0.80 : 0.35),
                             width: 1.1,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFDF762D).withValues(alpha: 0.12),
-                              blurRadius: 6,
+                              color: const Color(0xFFDF762D).withValues(alpha: isHovered ? 0.28 : 0.10),
+                              blurRadius: isHovered ? 8 : 4,
                               offset: const Offset(0, 2),
                             ),
                           ],
                         ),
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            foregroundColor: mobileAccentText(context),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          onPressed: () => _openItemDetails(item),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: Row(children: [
-                            const Expanded(
-                                child: Text('View details',
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700))),
-                            const SizedBox(width: 4),
-                            const Icon(Icons.arrow_forward_rounded, size: 16),
+                            Expanded(
+                              child: Text(
+                                'View details',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: isHovered ? Colors.white : const Color(0xFFDF762D),
+                                ),
+                              ),
+                            ),
+                            AnimatedSlide(
+                              offset: Offset(isHovered ? 0.22 : 0.0, 0.0),
+                              duration: const Duration(milliseconds: 180),
+                              curve: Curves.easeOutCubic,
+                              child: Icon(
+                                Icons.arrow_forward_rounded,
+                                size: 16,
+                                color: isHovered ? Colors.white : const Color(0xFFDF762D),
+                              ),
+                            ),
                           ]),
                         ),
                       ),
@@ -868,8 +856,8 @@ class CatalogScreenState extends State<CatalogScreen> {
               ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 }

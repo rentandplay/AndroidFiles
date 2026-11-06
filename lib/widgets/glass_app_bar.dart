@@ -15,6 +15,8 @@ class HeaderActionPod extends StatelessWidget {
   final Color? iconColor;
   final double size;
   final EdgeInsetsGeometry? margin;
+  final Color? podBg;
+  final Color? podBorder;
 
   const HeaderActionPod({
     super.key,
@@ -25,27 +27,31 @@ class HeaderActionPod extends StatelessWidget {
     this.iconColor,
     this.size = 38,
     this.margin,
+    this.podBg,
+    this.podBorder,
   }) : assert(child != null || icon != null, 'Must provide child or icon');
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryText =
-        isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
-    final podBg = isDark
-        ? const Color(0xFF1E293B).withValues(alpha: 0.90)
-        : Colors.white.withValues(alpha: 0.92);
-    final podBorder = isDark
-        ? Colors.white.withValues(alpha: 0.18)
-        : const Color(0xFFE6DFD5).withValues(alpha: 0.90);
+        iconColor ?? (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
+    final effectivePodBg = podBg ??
+        (isDark
+            ? const Color(0xFF1E293B).withValues(alpha: 0.90)
+            : Colors.white.withValues(alpha: 0.92));
+    final effectivePodBorder = podBorder ??
+        (isDark
+            ? Colors.white.withValues(alpha: 0.18)
+            : const Color(0xFFE6DFD5).withValues(alpha: 0.90));
 
     Widget podContent = Container(
       width: size,
       height: size,
       decoration: BoxDecoration(
-        color: podBg,
+        color: effectivePodBg,
         shape: BoxShape.circle,
-        border: Border.all(color: podBorder, width: 1.1),
+        border: Border.all(color: effectivePodBorder, width: 1.1),
         boxShadow: [
           BoxShadow(
             color: isDark
@@ -95,17 +101,29 @@ class HeaderActionPod extends StatelessWidget {
 
 /// A notification bell enclosed in a frosted glass action pod with real-time unread badge.
 class RentalNotificationBellPod extends StatelessWidget {
-  const RentalNotificationBellPod({super.key});
+  final Color? podBg;
+  final Color? podBorder;
+  final Color? iconColor;
+
+  const RentalNotificationBellPod({
+    super.key,
+    this.podBg,
+    this.podBorder,
+    this.iconColor,
+  });
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primaryText =
-        isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A);
+        iconColor ?? (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
     final count =
         context.watch<RentalNotificationService?>()?.unreadCount ?? 0;
 
     return HeaderActionPod(
+      podBg: podBg,
+      podBorder: podBorder,
+      iconColor: primaryText,
       tooltip: count > 0 ? '$count unread notifications' : 'Notifications',
       onTap: () => Navigator.push(
         context,

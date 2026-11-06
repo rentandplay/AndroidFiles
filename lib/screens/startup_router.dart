@@ -9,6 +9,7 @@ import '../services/mobile_api_service.dart';
 import '../services/admin_firestore_service.dart';
 import 'auth/required_password_change_screen.dart';
 import 'admin/admin_dashboard_screen.dart';
+import 'auth/id_verification_screen.dart';
 import 'auth/login_screen.dart';
 import 'user/customer_home_screen.dart';
 
@@ -80,6 +81,12 @@ class _StartupRouterState extends State<StartupRouter> {
             .timeout(const Duration(seconds: 3));
       } catch (_) {}
       return AdminDashboardScreen(onSignedOut: _returnToLogin);
+    }
+
+    if (!user.hasAcknowledgedIdRequirement ||
+        !user.hasAcceptedTerms ||
+        user.phone.trim().isEmpty) {
+      return IdVerificationScreen(userModel: user);
     }
 
     return const CustomerHomeScreen();

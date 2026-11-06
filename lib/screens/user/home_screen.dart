@@ -1,3 +1,6 @@
+import '../../widgets/brand_hero_header.dart';
+import '../../widgets/premium_animations.dart';
+import 'package:flutter/services.dart';
 import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
 
@@ -150,100 +153,106 @@ class HomeScreenState extends State<HomeScreen> {
     final currentRequests = _currentRequests;
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
 
-    return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
-      extendBodyBehindAppBar: true,
-      appBar: GlassAppBar(
-        loading: _loading,
-        title: const RentPlayWordmark(),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            tooltip: 'Search equipment',
-            icon: const Icon(Icons.search_rounded),
-            onPressed: widget.onBrowse,
-          ),
-          if (user == null)
-            Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: Container(
-                height: 36,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
-                  ),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFDF762D).withValues(alpha: 0.35),
-                      blurRadius: 8,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                child: TextButton(
-                  style: TextButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20)),
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const LoginScreen()),
-                  ),
-                  child: const Text('Sign in',
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700, color: Colors.white)),
-                ),
-              ),
-            )
-          else
-            const RentalNotificationBellPod(),
-        ],
+    final safeTop = MediaQuery.of(context).padding.top;
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.transparent,
       ),
-      body: LiquidAmbientBackdrop(
-        child: RefreshIndicator(
-          edgeOffset: topPadding,
+      child: Scaffold(
+        backgroundColor: const Color(0xFF030814),
+        body: RefreshIndicator(
+          edgeOffset: safeTop + 54,
           onRefresh: _loadHome,
           child: ListView(
-            keyboardDismissBehavior:
-                ScrollViewKeyboardDismissBehavior.onDrag,
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: EdgeInsets.fromLTRB(0, topPadding + 8, 0, 28),
+            padding: EdgeInsets.zero,
             children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 10, 20, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              // 1. Signature Midnight Navy & Glowing Orange Swoosh Header
+              NavyOrangeHeroBackground(
+                child: SafeArea(
+                  bottom: false,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          user?.displayName?.trim().isNotEmpty == true
-                              ? 'Welcome back, ${user!.displayName!.trim().split(' ').first}'
-                              : 'Welcome to Rent & Play',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w800,
-                                fontSize: 24,
-                                letterSpacing: -.5,
+                        const RentPlayWordmark(isLightOnDark: true),
+                        if (user == null)
+                          HeroLoginButton(
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            ),
+                          )
+                        else
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              HeaderActionPod(
+                                podBg: Colors.white.withValues(alpha: 0.16),
+                                podBorder: Colors.white.withValues(alpha: 0.25),
+                                iconColor: Colors.white,
+                                tooltip: 'Search equipment',
+                                icon: Icons.search_rounded,
+                                onTap: widget.onBrowse,
                               ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Find something fun for your next day out.',
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
-                              ?.copyWith(
-                                  color: scheme.onSurfaceVariant, fontSize: 13),
-                        ),
+                              const SizedBox(width: 6),
+                              const RentalNotificationBellPod(
+                                podBg: Color(0x28FFFFFF),
+                                podBorder: Color(0x40FFFFFF),
+                                iconColor: Colors.white,
+                              ),
+                            ],
+                          ),
                       ],
                     ),
                   ),
+                ),
+              ),
+
+              // 2. White Asymmetrical Curved Body Sheet with True Organic S-Wave
+              Transform.translate(
+                offset: const Offset(0, -32),
+                child: ClipPath(
+                  clipper: const HomeCurvedTopClipper(),
+                  child: Container(
+                    color: isDark ? const Color(0xFF0B1320) : const Color(0xFFF8FAFC),
+                    padding: const EdgeInsets.only(top: 44, bottom: 32),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                user?.displayName?.trim().isNotEmpty == true
+                                    ? 'Welcome back, ${user!.displayName!.trim().split(' ').first}'
+                                    : 'Welcome to Rent & Play',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .headlineSmall
+                                    ?.copyWith(
+                                      fontWeight: FontWeight.w800,
+                                      fontSize: 24,
+                                      letterSpacing: -.5,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Find something fun for your next day out.',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .bodyMedium
+                                    ?.copyWith(
+                                        color: scheme.onSurfaceVariant, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ),
                   _buildCarousel(context),
                   if (_featuredItems.length > 1) ...[
                     const SizedBox(height: 12),
@@ -308,7 +317,12 @@ class HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-        );
+        ),
+      ],
+    ),
+  ),
+),
+);
   }
 
   Widget _buildCarousel(BuildContext context) {
@@ -326,7 +340,9 @@ class HomeScreenState extends State<HomeScreen> {
           final item = _featuredItems[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: LiquidGlassContainer(
+            child: PremiumPressable(
+              onTap: () => widget.onItemSelected(item),
+              child: LiquidGlassContainer(
               borderRadius: 24,
               blurSigma: 16,
               glowColor: const Color(0xFFDF762D),
@@ -509,10 +525,13 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                         Expanded(
                           flex: 5,
-                          child: item.buildImage(
-                            fit: BoxFit.contain,
-                            height: 136,
-                            width: 145,
+                          child: Hero(
+                            tag: 'item-image-${item.id}',
+                            child: item.buildImage(
+                              fit: BoxFit.contain,
+                              height: 136,
+                              width: 145,
+                            ),
                           ),
                         ),
                       ],
@@ -521,7 +540,8 @@ class HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-          );
+          ),
+        );
         },
       ),
     );
@@ -842,7 +862,9 @@ class HomeScreenState extends State<HomeScreen> {
     final scheme = Theme.of(context).colorScheme;
     return Padding(
       padding: const EdgeInsets.fromLTRB(18, 0, 18, 12),
-      child: GlassCard(
+      child: PremiumPressable(
+        onTap: widget.onBrowse,
+        child: GlassCard(
         borderRadius: 16,
         blurSigma: 12,
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -872,26 +894,30 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: scheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                'Ready to play',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.4,
-                  color: scheme.primary,
+            PulsingGlowBadge(
+              glowColor: scheme.primary,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: scheme.primary.withValues(alpha: isDark ? 0.2 : 0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'Ready to play',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.4,
+                    color: scheme.primary,
+                  ),
                 ),
               ),
             ),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildRentalsLoadingCard(BuildContext context) => const GlassCard(
