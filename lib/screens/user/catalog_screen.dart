@@ -212,7 +212,6 @@ class CatalogScreenState extends State<CatalogScreen> {
     final authService = Provider.of<AuthService>(context);
     final user = authService.currentUser;
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final scheme = Theme.of(context).colorScheme;
     final textScale = (MediaQuery.textScalerOf(context).scale(15) / 15)
         .clamp(1.0, double.infinity);
     final width = MediaQuery.sizeOf(context).width;
@@ -569,9 +568,9 @@ class CatalogScreenState extends State<CatalogScreen> {
 
   Widget _buildItemCard(ItemModel item) {
     final isSaved = _savedItemIds.contains(item.id);
-    final scheme = Theme.of(context).colorScheme;
     final textScaler = MediaQuery.textScalerOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final scheme = Theme.of(context).colorScheme;
     final statusKey = item.status.toUpperCase();
     final statusColor = switch (statusKey) {
       'AVAILABLE' =>

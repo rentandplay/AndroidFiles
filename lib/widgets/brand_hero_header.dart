@@ -38,44 +38,39 @@ class NavyOrangeWavePainter extends CustomPainter {
     canvas.drawRect(rect, Paint()..shader = glowShader);
 
     // 3. Primary Luminous Orange 3D Wave Ribbon
-    // Smooth bezier ribbon flowing through the upper-right section with soft organic curves
     final ribbonPath = Path();
-    ribbonPath.moveTo(size.width * 0.52, size.height * 0.50);
+    ribbonPath.moveTo(size.width * 0.54, size.height * 0.48);
     ribbonPath.cubicTo(
-      size.width * 0.66, size.height * 0.36,
-      size.width * 0.80, size.height * 0.32,
-      size.width * 1.05, size.height * 0.50,
+      size.width * 0.68, size.height * 0.36,
+      size.width * 0.80, size.height * 0.36,
+      size.width * 1.06, size.height * 0.62,
     );
+    ribbonPath.lineTo(size.width * 1.08, size.height * 0.96);
     ribbonPath.cubicTo(
-      size.width * 1.08, size.height * 0.68,
-      size.width * 0.96, size.height * 0.82,
-      size.width * 0.84, size.height * 0.76,
-    );
-    ribbonPath.cubicTo(
-      size.width * 0.72, size.height * 0.70,
-      size.width * 0.62, size.height * 0.62,
-      size.width * 0.52, size.height * 0.50,
+      size.width * 0.86, size.height * 0.76,
+      size.width * 0.70, size.height * 0.68,
+      size.width * 0.54, size.height * 0.48,
     );
     ribbonPath.close();
 
     final ribbonGradient = const LinearGradient(
-      begin: Alignment.topLeft,
+      begin: Alignment.topCenter,
       end: Alignment.bottomRight,
       colors: [
         Color(0x00FF8A3D),
-        Color(0xEEFF9E58),
+        Color(0xFFFF9E58),
         Color(0xFFFF7A1A),
-        Color(0xCCDF762D),
-        Color(0x00BA4708),
+        Color(0xFFDF762D),
+        Color(0xFFBA4708),
       ],
-      stops: [0.0, 0.25, 0.55, 0.82, 1.0],
+      stops: [0.0, 0.22, 0.50, 0.80, 1.0],
     ).createShader(rect);
 
     canvas.drawPath(
       ribbonPath,
       Paint()
         ..shader = ribbonGradient
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5.0),
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
     );
 
     // 4. Secondary Floating Upper Ribbon Accent
@@ -83,13 +78,14 @@ class NavyOrangeWavePainter extends CustomPainter {
     accentPath.moveTo(size.width * 0.68, size.height * 0.22);
     accentPath.cubicTo(
       size.width * 0.78, size.height * 0.16,
-      size.width * 0.90, size.height * 0.22,
-      size.width * 1.06, size.height * 0.40,
+      size.width * 0.88, size.height * 0.24,
+      size.width * 1.08, size.height * 0.46,
     );
+    accentPath.lineTo(size.width * 1.10, size.height * 0.40);
     accentPath.cubicTo(
-      size.width * 0.96, size.height * 0.26,
-      size.width * 0.82, size.height * 0.14,
-      size.width * 0.68, size.height * 0.22,
+      size.width * 0.90, size.height * 0.18,
+      size.width * 0.80, size.height * 0.12,
+      size.width * 0.70, size.height * 0.18,
     );
     accentPath.close();
 
@@ -99,7 +95,7 @@ class NavyOrangeWavePainter extends CustomPainter {
       colors: [
         Color(0x00FFFFFF),
         Color(0x55FFCBA4),
-        Color(0x28DF762D),
+        Color(0x33DF762D),
         Color(0x00000000),
       ],
     ).createShader(rect);
@@ -108,18 +104,18 @@ class NavyOrangeWavePainter extends CustomPainter {
 
     // 5. Specular Crest Highlight Line along the wave crest
     final crestPath = Path();
-    crestPath.moveTo(size.width * 0.54, size.height * 0.50);
+    crestPath.moveTo(size.width * 0.56, size.height * 0.48);
     crestPath.cubicTo(
-      size.width * 0.68, size.height * 0.38,
-      size.width * 0.82, size.height * 0.34,
-      size.width * 1.03, size.height * 0.52,
+      size.width * 0.70, size.height * 0.38,
+      size.width * 0.82, size.height * 0.38,
+      size.width * 1.04, size.height * 0.62,
     );
 
     final crestPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0
       ..shader = const LinearGradient(
-        begin: Alignment.topLeft,
+        begin: Alignment.topCenter,
         end: Alignment.bottomRight,
         colors: [
           Color(0x00FFFFFF),

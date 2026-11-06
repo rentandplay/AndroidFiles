@@ -73,7 +73,7 @@ class _HoverLiftCardState extends State<HoverLiftCard> {
           curve: Curves.easeOutCubic,
           margin: widget.margin,
           transform: Matrix4.translationValues(0.0, translateY, 0.0)
-            ..scale(scale),
+            ..scale(scale, scale, 1.0),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
             color: isDark ? const Color(0xFF131D2D) : Colors.white,
