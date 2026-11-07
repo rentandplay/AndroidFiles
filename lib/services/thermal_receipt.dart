@@ -25,7 +25,9 @@ String _date(dynamic value) {
 }
 
 /// Same saved fields and Manila dates as the web thermal receipt. No QR secrets.
-List<Map<String, dynamic>> thermalReceiptLines(Map<String, dynamic> row) {
+List<Map<String, dynamic>> thermalReceiptLines(Map<String, dynamic> row, {Map<String, dynamic>? receiptSettings}) {
+  final settings = receiptSettings ?? const <String, dynamic>{};
+  String setting(String key, String fallback) => settings[key]?.toString() ?? fallback;
   final reference = recordReference(row);
   if (!RegExp(r'^R-[A-Z0-9]+$', caseSensitive: false).hasMatch(reference)) {
     throw StateError(
@@ -40,9 +42,10 @@ List<Map<String, dynamic>> thermalReceiptLines(Map<String, dynamic> row) {
   void field(String label, dynamic value) =>
       line('$label: ${_clean(value).isEmpty ? 'Not recorded' : _clean(value)}');
   void divider() => lines.add({'text': '', 'separator': true});
-  line('RENT & PLAY', {'bold': true, 'center': true, 'size': 26});
-  line('Lakewoods Subdivision', {'center': true});
-  line('Los Banos, Laguna', {'center': true});
+  line(setting('receipt_header_title', 'RENT & PLAY'), {'bold': true, 'center': true, 'size': 26});
+  line(setting('receipt_branch_line', 'Lakewoods Subdivision'), {'center': true});
+  line(setting('receipt_city_line', 'Los Banos, Laguna'), {'center': true});
+  if (settings.containsKey('receipt_contact_line')) line(setting('receipt_contact_line', ''), {'center': true});
   line('RENTAL RECEIPT', {'bold': true, 'center': true});
   line(reference, {'bold': true, 'center': true, 'size': 26});
   divider();
@@ -96,7 +99,6 @@ List<Map<String, dynamic>> thermalReceiptLines(Map<String, dynamic> row) {
   }
   line('Keep this rental reference.');
   line('Timer stops when staff receives the item.');
-  line(
-      'Return is subject to inspection. Damage or missing parts may affect final charges.');
+  line(setting('receipt_footer_note', 'Return is subject to inspection. Damage or missing parts may affect final charges.'));
   return lines;
 }

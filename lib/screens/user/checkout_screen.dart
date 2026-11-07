@@ -1,4 +1,9 @@
 import 'dart:convert';
+import 'dart:async';
+import '../../services/business_settings.dart';
+import '../../services/server_clock.dart';
+import '../../services/payment_proof_image.dart';
+import '../../widgets/live_business_settings.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -41,8 +46,29 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   int _quoteVersion = 0;
   String _requestKey = MobileApiService.operationKey();
   String? _dynamicRentalTermsText;
+  bool _termsLoaded = false;
+  String _termsError = '';
+  int _termsLoadVersion = 0, _paymentLoadVersion = 0;
   String _currentRentalTermsVersion = mobileRentalTermsVersion;
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
+
+  late final BusinessSettings _business;
+  StreamSubscription<Map<String, dynamic>>? _settingsEvents;
+  bool get _cashAllowed => _paymentInstructions?['accept_cash'] != false;
+  bool get _qrAvailable => (_paymentInstructions?['instapay_qr_data_url'] ??
+          _paymentInstructions?['gcash_qr_data_url'] ??
+          '')
+      .toString()
+      .trim()
+      .isNotEmpty;
+  bool get _paymentAvailable =>
+      _paymentInstructions != null && (_cashAllowed || _qrAvailable);
+  bool get _handoffAllowed =>
+      _business.loaded &&
+      _business.isOpen(_scheduledStartAt ?? ServerClock.instance.now);
+  void _businessUpdated() {
+    if (mounted) setState(() {});
+  }
 
   bool get _hasDailyBaseRate =>
       widget.item.rateOptions.any((rate) => rate['id'] == 'admin-base-daily');
@@ -97,6 +123,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         : _durationChoices.contains(60)
             ? 60
             : _durationChoices.first;
+    _business = BusinessSettings(_api)..addListener(_businessUpdated);
+    _settingsEvents = _api.watchRentalEvents().listen((event) {
+      if (event['event'] == 'ready' || event['event'] == 'settings.changed') {
+        _loadPaymentInstructions();
+        _loadTerms();
+        if (!_isSubmitting) _loadQuote();
+      }
+    });
     _loadQuote();
     _loadPaymentInstructions();
     _loadTerms();
@@ -104,29 +138,62 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   Future<void> _loadTerms() async {
+    final version = ++_termsLoadVersion;
     try {
       final res = await _api.terms();
-      if (mounted) {
+      if (mounted && version == _termsLoadVersion) {
         setState(() {
-          final rentalText = res['rentalTerms'] as String?;
+          final previousVersion = _currentRentalTermsVersion;
+          final rentalText = res['rental_terms'] as String?;
           if (rentalText != null && rentalText.trim().isNotEmpty) {
             _dynamicRentalTermsText = rentalText.trim();
           }
-          final rentalVer = res['rentalTermsVersion'] as String?;
+          final rentalVer = res['rental_terms_version'] as String?;
           if (rentalVer != null && rentalVer.trim().isNotEmpty) {
             _currentRentalTermsVersion = rentalVer.trim();
           }
+          _termsLoaded = rentalText != null &&
+              rentalText.trim().isNotEmpty &&
+              rentalVer != null &&
+              rentalVer.trim().isNotEmpty;
+          _termsError = _termsLoaded
+              ? ''
+              : 'Could not load the current rental agreement. Please retry.';
+          if (previousVersion != _currentRentalTermsVersion) {
+            _acceptedRentalTerms = false;
+          }
         });
       }
-    } catch (_) {}
+    } catch (_) {
+      if (mounted && version == _termsLoadVersion) {
+        setState(() {
+          _termsLoaded = false;
+          _termsError =
+              'Could not load the current rental agreement. Please retry.';
+        });
+      }
+    }
   }
 
   Future<void> _loadPaymentInstructions() async {
+    final version = ++_paymentLoadVersion;
     try {
       final result = await _api.paymentInstructions();
-      if (mounted) setState(() => _paymentInstructions = result);
+      if (mounted && version == _paymentLoadVersion) {
+        setState(() {
+          _paymentInstructions = result;
+          if (!_cashAllowed && _paymentMethod == 'CASH') {
+            _paymentMethod = 'QR';
+            _acceptedRentalTerms = false;
+          } else if (!_qrAvailable && _cashAllowed) {
+            _paymentMethod = 'CASH';
+          }
+        });
+      }
     } catch (_) {
-      if (mounted) setState(() => _paymentInstructions = const {});
+      if (mounted && version == _paymentLoadVersion) {
+        setState(() => _paymentInstructions = null);
+      }
     }
   }
 
@@ -192,28 +259,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       final file = await ImagePicker()
           .pickImage(source: source, maxWidth: 1800, imageQuality: 75);
       if (file == null) return;
-      final bytes = await file.readAsBytes();
-      if (bytes.length > 350000) {
-        throw const MobileApiException(
-            'Choose a smaller screenshot. The limit is 350 KB.');
-      }
-      final isPng = bytes.length >= 8 &&
-          bytes[0] == 137 &&
-          bytes[1] == 80 &&
-          bytes[2] == 78 &&
-          bytes[3] == 71;
-      final isJpeg = bytes.length >= 3 &&
-          bytes[0] == 255 &&
-          bytes[1] == 216 &&
-          bytes[2] == 255;
-      if (!isPng && !isJpeg) {
-        throw const MobileApiException(
-            'Choose a PNG or JPEG payment screenshot.');
-      }
+      final imageDataUrl = await paymentProofDataUrl(await file.readAsBytes());
       if (mounted) {
         setState(() {
-          _paymentProofImage =
-              'data:image/${isPng ? 'png' : 'jpeg'};base64,${base64Encode(bytes)}';
+          _paymentProofImage = imageDataUrl;
           _paymentProofName = file.name;
         });
       }
@@ -256,6 +305,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   void dispose() {
+    _settingsEvents?.cancel();
+    _business.removeListener(_businessUpdated);
+    _business.dispose();
     _quoteVersion++;
     _customResortController.dispose();
     _phoneController.dispose();
@@ -311,8 +363,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                     _selectedResort == 'Other / Custom Resort'
                         ? _customResortController.text.trim()
                         : _selectedResort),
-                RentalValueRow('Payment',
-                    _paymentMethod == 'QR' ? 'InstaPay / GCash' : 'Cash at handoff'),
+                RentalValueRow(
+                    'Payment',
+                    _paymentMethod == 'QR'
+                        ? 'InstaPay / GCash'
+                        : 'Cash at handoff'),
                 const SizedBox(height: 12),
                 if (_dynamicRentalTermsText != null &&
                     _dynamicRentalTermsText!.isNotEmpty)
@@ -361,7 +416,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           content: Text('Review and accept the rental terms first.')));
       return;
     }
-    if (_quote == null || !_form.currentState!.validate()) return;
+    if (_quote == null ||
+        !_form.currentState!.validate() ||
+        !_paymentAvailable ||
+        !_handoffAllowed ||
+        !_termsLoaded) {
+      return;
+    }
     FocusScope.of(context).unfocus();
     setState(() => _isSubmitting = true);
     try {
@@ -447,7 +508,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           summaryValue: _quoteLoading ? 'Updating…' : rentalMoney(_total),
           label: 'Send rental request',
           busy: _isSubmitting,
-          onPressed: !_quoteLoading && _quote != null && _acceptedRentalTerms
+          onPressed: !_quoteLoading &&
+                  _quote != null &&
+                  _acceptedRentalTerms &&
+                  _paymentAvailable &&
+                  _handoffAllowed &&
+                  _termsLoaded
               ? _submitRentalRequest
               : null,
         ),
@@ -462,489 +528,517 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RentalSection(
-                          child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        LiveAnnouncementBanner(settings: _business.values),
+                        if (_termsError.isNotEmpty)
+                          TextButton(
+                              onPressed: _loadTerms, child: Text(_termsError)),
+                        if (_business.loaded && !_business.openNow)
+                          RentalNotice(
+                              message:
+                                  'Shop is currently closed. Staff handoff resumes at ${_business.values['opens_at']}. Schedule a start within operating hours.'),
+                        if (_business.loaded &&
+                            !_handoffAllowed &&
+                            _scheduledStartAt != null)
+                          const RentalNotice(
+                              message:
+                                  'Choose a scheduled start within store operating hours.'),
+                        if (_business.error.isNotEmpty)
+                          RentalNotice(message: _business.error),
+                        RentalSection(
+                            child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: SizedBox(
+                                      height: 72,
+                                      width: 72,
+                                      child: widget.item.buildImage(
+                                          fit: BoxFit.cover,
+                                          height: 72,
+                                          width: 72))),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                  child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                    Text(widget.item.name,
+                                        style: const TextStyle(
+                                            fontSize: 20,
+                                            fontWeight: FontWeight.w800)),
+                                    const SizedBox(height: 4),
+                                    Text(widget.item.category,
+                                        style: TextStyle(
+                                            color: scheme.onSurfaceVariant,
+                                            fontSize: 13)),
+                                    const SizedBox(height: 6),
+                                    Text(widget.item.rateText,
+                                        style: TextStyle(
+                                            color: scheme.primary,
+                                            fontWeight: FontWeight.w600)),
+                                  ])),
+                            ])),
+                        RentalSection(
+                          title: 'Rental details',
+                          icon: Icons.edit_calendar_outlined,
+                          child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                            ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: SizedBox(
-                                    height: 72,
-                                    width: 72,
-                                    child: widget.item.buildImage(
-                                        fit: BoxFit.cover,
-                                        height: 72,
-                                        width: 72))),
-                            const SizedBox(width: 14),
-                            Expanded(
-                                child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                  Text(widget.item.name,
-                                      style: const TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w800)),
-                                  const SizedBox(height: 4),
-                                  Text(widget.item.category,
-                                      style: TextStyle(
-                                          color: scheme.onSurfaceVariant,
-                                          fontSize: 13)),
-                                  const SizedBox(height: 6),
-                                  Text(widget.item.rateText,
-                                      style: TextStyle(
-                                          color: scheme.primary,
-                                          fontWeight: FontWeight.w600)),
-                                ])),
-                          ])),
-                      RentalSection(
-                        title: 'Rental details',
-                        icon: Icons.edit_calendar_outlined,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('How long?',
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 8),
-                              ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: const Icon(Icons.event_outlined),
-                                  title: Text(_scheduledStartAt == null
-                                      ? 'Rent now'
-                                      : DateFormat('MMM d, yyyy · h:mm a')
-                                          .format(_scheduledStartAt!
-                                              .toUtc()
-                                              .add(const Duration(hours: 8)))),
-                                  subtitle: const Text(
-                                      'Delivery within Lakewood Subdivision only'),
-                                  trailing: _scheduledStartAt == null
-                                      ? null
-                                      : IconButton(
-                                          icon: const Icon(Icons.close),
-                                          onPressed: () {
-                                            setState(() {
-                                              _scheduledStartAt = null;
-                                              _requestKey = MobileApiService
-                                                  .operationKey();
-                                              _acceptedRentalTerms = false;
-                                            });
-                                            _loadQuote();
-                                          }),
-                                  onTap: () async {
-                                    final day = await showDatePicker(
-                                        context: context,
-                                        initialDate: DateTime.now()
-                                            .toUtc()
-                                            .add(const Duration(hours: 8)),
-                                        firstDate: DateTime.now()
-                                            .toUtc()
-                                            .add(const Duration(hours: 8)),
-                                        lastDate: DateTime.now()
-                                            .toUtc()
-                                            .add(const Duration(hours: 8))
-                                            .add(const Duration(days: 180)));
-                                    if (day == null || !context.mounted) return;
-                                    final time = await showTimePicker(
-                                        context: context,
-                                        initialTime: TimeOfDay.fromDateTime(
-                                            DateTime.now()
+                                Text('How long?',
+                                    style: TextStyle(
+                                        color: scheme.onSurfaceVariant,
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 8),
+                                ListTile(
+                                    contentPadding: EdgeInsets.zero,
+                                    leading: const Icon(Icons.event_outlined),
+                                    title: Text(_scheduledStartAt == null
+                                        ? 'Rent now'
+                                        : DateFormat('MMM d, yyyy · h:mm a')
+                                            .format(_scheduledStartAt!
                                                 .toUtc()
-                                                .add(const Duration(hours: 8))
-                                                .add(const Duration(
-                                                    minutes: 15))));
-                                    if (time == null || !context.mounted) {
-                                      return;
-                                    }
-                                    setState(() {
-                                      _scheduledStartAt = DateTime.parse(
-                                          '${DateFormat('yyyy-MM-dd').format(day)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+08:00');
-                                      _requestKey =
-                                          MobileApiService.operationKey();
-                                      _acceptedRentalTerms = false;
-                                    });
-                                    _loadQuote();
-                                  }),
-                              Wrap(spacing: 8, runSpacing: 8, children: [
-                                for (final minutes in _durationChoices)
-                                  ChoiceChip(
-                                      label: Text(_durationLabel(minutes)),
-                                      selected:
-                                          minutes == _selectedDurationMinutes,
-                                      onSelected: _isSubmitting
-                                          ? null
-                                          : (_) {
+                                                .add(
+                                                    const Duration(hours: 8)))),
+                                    subtitle: const Text(
+                                        'Delivery within Lakewood Subdivision only'),
+                                    trailing: _scheduledStartAt == null
+                                        ? null
+                                        : IconButton(
+                                            icon: const Icon(Icons.close),
+                                            onPressed: () {
                                               setState(() {
-                                                _selectedDurationMinutes =
-                                                    minutes;
+                                                _scheduledStartAt = null;
                                                 _requestKey = MobileApiService
                                                     .operationKey();
+                                                _acceptedRentalTerms = false;
                                               });
                                               _loadQuote();
                                             }),
-                              ]),
-                              const SizedBox(height: 14),
-                              Text('Which resort are you staying at?',
-                                  style: TextStyle(
-                                      color: scheme.onSurfaceVariant,
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 8),
-                              DropdownButtonFormField<String>(
-                                initialValue: _selectedResort.isEmpty
-                                    ? null
-                                    : _selectedResort,
-                                isExpanded: true,
-                                decoration: const InputDecoration(
-                                    labelText: 'Select a resort'),
-                                items: privateResorts
-                                    .map((place) => DropdownMenuItem(
-                                        value: place,
-                                        child: Text(place,
-                                            overflow: TextOverflow.ellipsis)))
-                                    .toList(),
-                                validator: (place) => place == null ||
-                                        place.isEmpty
-                                    ? 'Select the resort where you are staying.'
-                                    : null,
-                                onChanged: _isSubmitting
-                                    ? null
-                                    : (place) {
-                                        if (place != null) {
-                                          setState(() {
-                                            _selectedResort = place;
-                                            _acceptedRentalTerms = false;
-                                          });
-                                        }
-                                      },
-                              ),
-                              if (_selectedResort.isNotEmpty) ...[
-                                const SizedBox(height: 8),
-                                RentalNotice(
-                                  icon: Icons.delivery_dining_outlined,
-                                  title:
-                                      _selectedResort == 'Other / Custom Resort'
-                                          ? 'Delivery to your resort'
-                                          : 'Delivery to $_selectedResort',
-                                  message:
-                                      'Have your rental QR code ready so staff can confirm the handoff.',
-                                ),
-                                if (_selectedResort ==
-                                    'Other / Custom Resort') ...[
-                                  const SizedBox(height: 10),
-                                  TextFormField(
-                                    controller: _customResortController,
-                                    enabled: !_isSubmitting,
-                                    maxLength: 120,
-                                    textInputAction: TextInputAction.next,
-                                    decoration: const InputDecoration(
-                                        labelText: 'Resort name',
-                                        hintText: 'Enter a resort'),
-                                    onChanged: (_) => setState(
-                                        () => _acceptedRentalTerms = false),
-                                    validator: (value) => _selectedResort !=
-                                            'Other / Custom Resort'
-                                        ? null
-                                        : value == null || value.trim().isEmpty
-                                            ? 'Enter the resort name.'
-                                            : null,
-                                  ),
-                                ],
-                              ],
-                            ]),
-                      ),
-                      RentalSection(
-                        title: 'Delivery contact',
-                        icon: Icons.phone_android_outlined,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Staff will call or text this number upon arrival at your resort.',
-                              style: TextStyle(
-                                color: scheme.onSurfaceVariant,
-                                fontSize: 13,
-                                height: 1.4,
-                              ),
-                            ),
-                            const SizedBox(height: 12),
-                            TextFormField(
-                              controller: _phoneController,
-                              enabled: !_isSubmitting,
-                              keyboardType: TextInputType.phone,
-                              textInputAction: TextInputAction.next,
-                              inputFormatters: [
-                                FilteringTextInputFormatter.allow(
-                                  RegExp(r'[+0-9() .-]'),
-                                ),
-                                LengthLimitingTextInputFormatter(20),
-                              ],
-                              decoration: const InputDecoration(
-                                labelText: 'Contact phone number *',
-                                hintText: '0912 345 6789',
-                                prefixIcon: Icon(Icons.phone_outlined),
-                              ),
-                              validator: (value) {
-                                final phone = (value ?? '').trim();
-                                if (phone.isEmpty) {
-                                  return 'Enter a contact number for delivery.';
-                                }
-                                final clean = phone.replaceAll(
-                                    RegExp(r'[\s().-]'), '');
-                                if (!RegExp(r'^(?:\+?63|0)?9\d{9}$')
-                                    .hasMatch(clean)) {
-                                  return 'Enter a valid Philippine number (e.g. 0912 345 6789).';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      RentalSection(
-                        title: 'Price summary',
-                        icon: Icons.receipt_long_outlined,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (_quoteLoading) ...[
-                                const LinearProgressIndicator(),
-                                const SizedBox(height: 12),
-                                const Text('Updating price…'),
-                              ] else if (_quoteError.isNotEmpty)
-                                RentalNotice(
-                                  isError: true,
-                                  title: 'Price unavailable',
-                                  message: _quoteError,
-                                  action: TextButton.icon(
-                                      onPressed: _loadQuote,
-                                      icon: const Icon(Icons.refresh),
-                                      label: const Text('Retry price')),
-                                )
-                              else ...[
-                                RentalValueRow(
-                                    'Rental fee', rentalMoney(_baseFee)),
-                                const SizedBox(height: 8),
-                                Text(
-                                    'Billed for $_packageLength${_billedMinutes > _selectedDurationMinutes ? ' (minimum package)' : ''}.',
-                                    style: TextStyle(
-                                        fontSize: 13,
-                                        color: scheme.onSurfaceVariant,
-                                        height: 1.4)),
-                              ],
-                            ]),
-                      ),
-                      RentalSection(
-                        title: 'Payment',
-                        icon: Icons.payments_outlined,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            SegmentedButton<String>(
-                              segments: [
-                                const ButtonSegment<String>(
-                                    value: 'CASH',
-                                    icon: Icon(Icons.payments_outlined),
-                                    label: Text('Cash')),
-                                if (_paymentInstructions?[
-                                            'instapay_qr_data_url']
-                                        is String ||
-                                    _paymentInstructions?['gcash_qr_data_url']
-                                        is String)
-                                  const ButtonSegment<String>(
-                                      value: 'QR',
-                                      icon: Icon(Icons.qr_code_2_rounded),
-                                      label: Text('InstaPay / GCash')),
-                              ],
-                              selected: {_paymentMethod},
-                              showSelectedIcon: false,
-                              onSelectionChanged: _isSubmitting
-                                  ? null
-                                  : (values) {
-                                      final value = values.first;
+                                    onTap: () async {
+                                      final day = await showDatePicker(
+                                          context: context,
+                                          initialDate: ServerClock.instance.now
+                                              .toUtc()
+                                              .add(const Duration(hours: 8)),
+                                          firstDate: ServerClock.instance.now
+                                              .toUtc()
+                                              .add(const Duration(hours: 8)),
+                                          lastDate: ServerClock.instance.now
+                                              .toUtc()
+                                              .add(const Duration(hours: 8))
+                                              .add(const Duration(days: 180)));
+                                      if (day == null || !context.mounted) {
+                                        return;
+                                      }
+                                      final time = await showTimePicker(
+                                          context: context,
+                                          initialTime: TimeOfDay.fromDateTime(
+                                              ServerClock.instance.now
+                                                  .toUtc()
+                                                  .add(const Duration(hours: 8))
+                                                  .add(const Duration(
+                                                      minutes: 15))));
+                                      if (time == null || !context.mounted) {
+                                        return;
+                                      }
                                       setState(() {
-                                        _paymentMethod = value;
-                                        _paymentConfirmed = false;
-                                        _paymentProofImage = null;
-                                        _paymentProofName = null;
+                                        _scheduledStartAt = DateTime.parse(
+                                            '${DateFormat('yyyy-MM-dd').format(day)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+08:00');
+                                        _requestKey =
+                                            MobileApiService.operationKey();
                                         _acceptedRentalTerms = false;
                                       });
-                                    },
-                            ),
-                            if (_paymentInstructions != null &&
-                                _paymentInstructions?['instapay_qr_data_url']
-                                    is! String &&
-                                _paymentInstructions?['gcash_qr_data_url']
-                                    is! String)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 10),
-                                child: Text(
-                                    'Online QR payment is not set up yet. Choose cash for now.',
+                                      _loadQuote();
+                                    }),
+                                Wrap(spacing: 8, runSpacing: 8, children: [
+                                  for (final minutes in _durationChoices)
+                                    ChoiceChip(
+                                        label: Text(_durationLabel(minutes)),
+                                        selected:
+                                            minutes == _selectedDurationMinutes,
+                                        onSelected: _isSubmitting
+                                            ? null
+                                            : (_) {
+                                                setState(() {
+                                                  _selectedDurationMinutes =
+                                                      minutes;
+                                                  _requestKey = MobileApiService
+                                                      .operationKey();
+                                                });
+                                                _loadQuote();
+                                              }),
+                                ]),
+                                const SizedBox(height: 14),
+                                Text('Which resort are you staying at?',
                                     style: TextStyle(
                                         color: scheme.onSurfaceVariant,
-                                        fontSize: 12)),
-                              ),
-                          ],
-                        ),
-                      ),
-                      if (_paymentMethod == 'QR') ...[
-                        RentalSection(
-                            title: 'Pay via InstaPay / GCash',
-                            icon: Icons.qr_code_2,
-                            subtitle:
-                                'Scan to transfer, then upload your receipt.',
-                            child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.stretch,
-                                children: [
-                                  if ((_paymentInstructions?[
-                                                  'instapay_qr_data_url']
-                                              as String?)
-                                          ?.startsWith('data:image/') ==
-                                      true ||
-                                      (_paymentInstructions?[
-                                                  'gcash_qr_data_url']
-                                              as String?)
-                                          ?.startsWith('data:image/') ==
-                                      true)
-                                    Center(
-                                        child: Container(
-                                            constraints: const BoxConstraints(
-                                                maxWidth: 240),
-                                            padding: const EdgeInsets.all(12),
-                                            decoration: BoxDecoration(
-                                                color: Colors.white,
-                                                borderRadius:
-                                                    BorderRadius.circular(12)),
-                                            child: Image.memory(base64Decode(
-                                                ((_paymentInstructions![
-                                                                'instapay_qr_data_url'] ??
-                                                            _paymentInstructions![
-                                                                'gcash_qr_data_url'])
-                                                        as String)
-                                                    .split(',')
-                                                    .last)))),
-                                  if ((_paymentInstructions?['account_name'] ??
-                                          '')
-                                      .toString()
-                                      .isNotEmpty)
-                                    Text(
-                                        'Account name: ${_paymentInstructions!['account_name']}'),
-                                  if ((_paymentInstructions?[
-                                              'account_number'] ??
-                                          '')
-                                      .toString()
-                                      .isNotEmpty)
-                                    Text(
-                                        'Account number: ${_paymentInstructions!['account_number']}'),
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600)),
+                                const SizedBox(height: 8),
+                                DropdownButtonFormField<String>(
+                                  initialValue: _selectedResort.isEmpty
+                                      ? null
+                                      : _selectedResort,
+                                  isExpanded: true,
+                                  decoration: const InputDecoration(
+                                      labelText: 'Select a resort'),
+                                  items: privateResorts
+                                      .map((place) => DropdownMenuItem(
+                                          value: place,
+                                          child: Text(place,
+                                              overflow: TextOverflow.ellipsis)))
+                                      .toList(),
+                                  validator: (place) => place == null ||
+                                          place.isEmpty
+                                      ? 'Select the resort where you are staying.'
+                                      : null,
+                                  onChanged: _isSubmitting
+                                      ? null
+                                      : (place) {
+                                          if (place != null) {
+                                            setState(() {
+                                              _selectedResort = place;
+                                              _acceptedRentalTerms = false;
+                                            });
+                                          }
+                                        },
+                                ),
+                                if (_selectedResort.isNotEmpty) ...[
                                   const SizedBox(height: 8),
-                                  RentalValueRow('Exact transfer total',
-                                      rentalMoney(_total),
-                                      emphasis: true),
-                                  if ((_paymentInstructions?['instructions'] ??
-                                          '')
-                                      .toString()
-                                      .isNotEmpty)
-                                    Text((_paymentInstructions!['instructions'])
-                                        .toString()),
-                                  const SizedBox(height: 10),
-                                  TextField(
-                                      controller: _paymentReferenceController,
+                                  RentalNotice(
+                                    icon: Icons.delivery_dining_outlined,
+                                    title: _selectedResort ==
+                                            'Other / Custom Resort'
+                                        ? 'Delivery to your resort'
+                                        : 'Delivery to $_selectedResort',
+                                    message:
+                                        'Have your rental QR code ready so staff can confirm the handoff.',
+                                  ),
+                                  if (_selectedResort ==
+                                      'Other / Custom Resort') ...[
+                                    const SizedBox(height: 10),
+                                    TextFormField(
+                                      controller: _customResortController,
                                       enabled: !_isSubmitting,
-                                      maxLength: 100,
+                                      maxLength: 120,
+                                      textInputAction: TextInputAction.next,
                                       decoration: const InputDecoration(
-                                          labelText:
-                                              'Transfer reference (optional)')),
-                                  OutlinedButton.icon(
-                                      onPressed: _isSubmitting
+                                          labelText: 'Resort name',
+                                          hintText: 'Enter a resort'),
+                                      onChanged: (_) => setState(
+                                          () => _acceptedRentalTerms = false),
+                                      validator: (value) => _selectedResort !=
+                                              'Other / Custom Resort'
                                           ? null
-                                          : _choosePaymentProof,
-                                      icon: const Icon(Icons.upload_file),
-                                      label: Text(_paymentProofName == null
-                                          ? 'Upload payment receipt'
-                                          : 'Change payment receipt')),
-                                  if (_paymentProofImage != null) ...[
-                                    const SizedBox(height: 8),
-                                    Center(
-                                        child: Image.memory(
-                                            base64Decode(_paymentProofImage!
-                                                .split(',')
-                                                .last),
-                                            height: 170,
-                                            fit: BoxFit.contain)),
-                                    Text('Selected: $_paymentProofName',
-                                        textAlign: TextAlign.center),
+                                          : value == null ||
+                                                  value.trim().isEmpty
+                                              ? 'Enter the resort name.'
+                                              : null,
+                                    ),
                                   ],
-                                  CheckboxListTile(
-                                      contentPadding: EdgeInsets.zero,
-                                      dense: true,
-                                      value: _paymentConfirmed,
-                                      onChanged: _isSubmitting
-                                          ? null
-                                          : (value) => setState(() =>
-                                              _paymentConfirmed =
-                                                  value ?? false),
-                                      title: const Text(
-                                          'I completed this InstaPay / GCash transfer')),
-                                ])),
-                      ],
-                      RentalSection(
-                        title: 'Rental agreement',
-                        icon: Icons.fact_check_outlined,
-                        subtitle: 'Review before sending your request.',
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            RentalValueRow(
-                                'Estimated return', _estimatedDueText),
-                            RentalValueRow('Late rate', _lateRateText),
-                            const SizedBox(height: 8),
-                            CheckboxListTile(
-                              key: const ValueKey('rental-terms-acceptance'),
-                              contentPadding: EdgeInsets.zero,
-                              controlAffinity: ListTileControlAffinity.leading,
-                              titleAlignment: ListTileTitleAlignment.top,
-                              value: _acceptedRentalTerms,
-                              onChanged: _isSubmitting ||
-                                      _quoteLoading ||
-                                      _quote == null
-                                  ? null
-                                  : (value) => setState(() =>
-                                      _acceptedRentalTerms = value ?? false),
-                              title: const Text('I agree to the rental terms',
-                                  style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600)),
-                              subtitle: const Text(
-                                  'Read the terms for this request.',
-                                  style: TextStyle(fontSize: 12, height: 1.4)),
-                            ),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: TextButton.icon(
-                                onPressed: _isSubmitting ||
+                                ],
+                              ]),
+                        ),
+                        RentalSection(
+                          title: 'Delivery contact',
+                          icon: Icons.phone_android_outlined,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Staff will call or text this number upon arrival at your resort.',
+                                style: TextStyle(
+                                  color: scheme.onSurfaceVariant,
+                                  fontSize: 13,
+                                  height: 1.4,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              TextFormField(
+                                controller: _phoneController,
+                                enabled: !_isSubmitting,
+                                keyboardType: TextInputType.phone,
+                                textInputAction: TextInputAction.next,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.allow(
+                                    RegExp(r'[+0-9() .-]'),
+                                  ),
+                                  LengthLimitingTextInputFormatter(20),
+                                ],
+                                decoration: const InputDecoration(
+                                  labelText: 'Contact phone number *',
+                                  hintText: '0912 345 6789',
+                                  prefixIcon: Icon(Icons.phone_outlined),
+                                ),
+                                validator: (value) {
+                                  final phone = (value ?? '').trim();
+                                  if (phone.isEmpty) {
+                                    return 'Enter a contact number for delivery.';
+                                  }
+                                  final clean =
+                                      phone.replaceAll(RegExp(r'[\s().-]'), '');
+                                  if (!RegExp(r'^(?:\+?63|0)?9\d{9}$')
+                                      .hasMatch(clean)) {
+                                    return 'Enter a valid Philippine number (e.g. 0912 345 6789).';
+                                  }
+                                  return null;
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        RentalSection(
+                          title: 'Price summary',
+                          icon: Icons.receipt_long_outlined,
+                          child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                if (_quoteLoading) ...[
+                                  const LinearProgressIndicator(),
+                                  const SizedBox(height: 12),
+                                  const Text('Updating price…'),
+                                ] else if (_quoteError.isNotEmpty)
+                                  RentalNotice(
+                                    isError: true,
+                                    title: 'Price unavailable',
+                                    message: _quoteError,
+                                    action: TextButton.icon(
+                                        onPressed: _loadQuote,
+                                        icon: const Icon(Icons.refresh),
+                                        label: const Text('Retry price')),
+                                  )
+                                else ...[
+                                  RentalValueRow(
+                                      'Rental fee', rentalMoney(_baseFee)),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                      'Billed for $_packageLength${_billedMinutes > _selectedDurationMinutes ? ' (minimum package)' : ''}.',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: scheme.onSurfaceVariant,
+                                          height: 1.4)),
+                                ],
+                              ]),
+                        ),
+                        RentalSection(
+                          title: 'Payment',
+                          icon: Icons.payments_outlined,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (_paymentInstructions != null)
+                                SegmentedButton<String>(
+                                  expandedInsets: EdgeInsets.zero,
+                                  segments: [
+                                    if (_cashAllowed)
+                                      const ButtonSegment<String>(
+                                          value: 'CASH',
+                                          icon: Icon(Icons.payments_outlined),
+                                          label: Text('Cash')),
+                                    ButtonSegment<String>(
+                                        value: 'QR',
+                                        enabled: _qrAvailable,
+                                        icon: Icon(Icons.qr_code_2_rounded),
+                                        label: Text('InstaPay / GCash')),
+                                  ],
+                                  selected: {_paymentMethod},
+                                  showSelectedIcon: false,
+                                  onSelectionChanged: _isSubmitting
+                                      ? null
+                                      : (values) {
+                                          final value = values.first;
+                                          if (value == 'QR' && !_qrAvailable) {
+                                            return;
+                                          }
+                                          setState(() {
+                                            _paymentMethod = value;
+                                            _paymentConfirmed = false;
+                                            _paymentProofImage = null;
+                                            _paymentProofName = null;
+                                            _acceptedRentalTerms = false;
+                                          });
+                                        },
+                                ),
+                              if (_paymentInstructions == null)
+                                TextButton(
+                                    onPressed: _loadPaymentInstructions,
+                                    child: const Text(
+                                        'Retry loading payment options')),
+                              if (_paymentInstructions != null &&
+                                  _paymentInstructions?['instapay_qr_data_url']
+                                      is! String &&
+                                  _paymentInstructions?['gcash_qr_data_url']
+                                      is! String)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 10),
+                                  child: Text(
+                                      _cashAllowed
+                                          ? 'Online QR payment is not set up yet. Choose cash for now.'
+                                          : 'Electronic checkout is temporarily disabled. Please contact counter staff.',
+                                      style: TextStyle(
+                                          color: scheme.onSurfaceVariant,
+                                          fontSize: 12)),
+                                ),
+                            ],
+                          ),
+                        ),
+                        if (_paymentMethod == 'QR') ...[
+                          RentalSection(
+                              title: 'Pay via InstaPay / GCash',
+                              icon: Icons.qr_code_2,
+                              subtitle:
+                                  'Scan to transfer, then upload your receipt.',
+                              child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.stretch,
+                                  children: [
+                                    if ((_paymentInstructions?['instapay_qr_data_url']
+                                                    as String?)
+                                                ?.startsWith('data:image/') ==
+                                            true ||
+                                        (_paymentInstructions?['gcash_qr_data_url']
+                                                    as String?)
+                                                ?.startsWith('data:image/') ==
+                                            true)
+                                      Center(
+                                          child: Container(
+                                              constraints: const BoxConstraints(
+                                                  maxWidth: 240),
+                                              padding: const EdgeInsets.all(12),
+                                              decoration: BoxDecoration(
+                                                  color: Colors.white,
+                                                  borderRadius:
+                                                      BorderRadius.circular(
+                                                          12)),
+                                              child: Image.memory(
+                                                  base64Decode(((_paymentInstructions!['instapay_qr_data_url'] ?? _paymentInstructions!['gcash_qr_data_url']) as String).split(',').last)))),
+                                    if ((_paymentInstructions?[
+                                                'account_name'] ??
+                                            '')
+                                        .toString()
+                                        .isNotEmpty)
+                                      Text(
+                                          'Account name: ${_paymentInstructions!['account_name']}'),
+                                    if ((_paymentInstructions?[
+                                                'account_number'] ??
+                                            '')
+                                        .toString()
+                                        .isNotEmpty)
+                                      Text(
+                                          'Account number: ${_paymentInstructions!['account_number']}'),
+                                    const SizedBox(height: 8),
+                                    RentalValueRow('Exact transfer total',
+                                        rentalMoney(_total),
+                                        emphasis: true),
+                                    if ((_paymentInstructions?[
+                                                'instructions'] ??
+                                            '')
+                                        .toString()
+                                        .isNotEmpty)
+                                      Text((_paymentInstructions![
+                                              'instructions'])
+                                          .toString()),
+                                    const SizedBox(height: 10),
+                                    TextField(
+                                        controller: _paymentReferenceController,
+                                        enabled: !_isSubmitting,
+                                        maxLength: 100,
+                                        decoration: const InputDecoration(
+                                            labelText:
+                                                'Transfer reference (optional)')),
+                                    OutlinedButton.icon(
+                                        onPressed: _isSubmitting
+                                            ? null
+                                            : _choosePaymentProof,
+                                        icon: const Icon(Icons.upload_file),
+                                        label: Text(_paymentProofName == null
+                                            ? 'Upload payment receipt'
+                                            : 'Change payment receipt')),
+                                    if (_paymentProofImage != null) ...[
+                                      const SizedBox(height: 8),
+                                      Center(
+                                          child: Image.memory(
+                                              base64Decode(_paymentProofImage!
+                                                  .split(',')
+                                                  .last),
+                                              height: 170,
+                                              fit: BoxFit.contain)),
+                                      Text('Selected: $_paymentProofName',
+                                          textAlign: TextAlign.center),
+                                    ],
+                                    CheckboxListTile(
+                                        contentPadding: EdgeInsets.zero,
+                                        dense: true,
+                                        value: _paymentConfirmed,
+                                        onChanged: _isSubmitting
+                                            ? null
+                                            : (value) => setState(() =>
+                                                _paymentConfirmed =
+                                                    value ?? false),
+                                        title: const Text(
+                                            'I completed this InstaPay / GCash transfer')),
+                                  ])),
+                        ],
+                        RentalSection(
+                          title: 'Rental agreement',
+                          icon: Icons.fact_check_outlined,
+                          subtitle: 'Review before sending your request.',
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              RentalValueRow(
+                                  'Estimated return', _estimatedDueText),
+                              RentalValueRow('Late rate', _lateRateText),
+                              const SizedBox(height: 8),
+                              CheckboxListTile(
+                                key: const ValueKey('rental-terms-acceptance'),
+                                contentPadding: EdgeInsets.zero,
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                titleAlignment: ListTileTitleAlignment.top,
+                                value: _acceptedRentalTerms,
+                                onChanged: _isSubmitting ||
                                         _quoteLoading ||
                                         _quote == null
                                     ? null
-                                    : _showRentalTerms,
-                                icon: const Icon(Icons.description_outlined),
-                                label: const Text('Read rental terms'),
+                                    : (value) => setState(() =>
+                                        _acceptedRentalTerms = value ?? false),
+                                title: const Text('I agree to the rental terms',
+                                    style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600)),
+                                subtitle: const Text(
+                                    'Read the terms for this request.',
+                                    style:
+                                        TextStyle(fontSize: 12, height: 1.4)),
                               ),
-                            ),
-                          ],
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: TextButton.icon(
+                                  onPressed: _isSubmitting ||
+                                          _quoteLoading ||
+                                          _quote == null
+                                      ? null
+                                      : _showRentalTerms,
+                                  icon: const Icon(Icons.description_outlined),
+                                  label: const Text('Read rental terms'),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                    ]),
-                  ),
+                        const SizedBox(height: 16),
+                      ]),
                 ),
               ),
             ),
           ),
         ),
+      ),
     );
   }
 }

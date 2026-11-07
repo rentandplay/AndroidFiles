@@ -1,3 +1,4 @@
+import '../../services/server_clock.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -288,7 +289,7 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
         _rental.latestReturnRequestStatus.toUpperCase() == 'REJECTED';
     final overdue = _rental.isActive &&
         _rental.dueDate.millisecondsSinceEpoch > 0 &&
-        DateTime.now().isAfter(_rental.dueDate);
+        ServerClock.instance.now.isAfter(_rental.dueDate);
     return Scaffold(
         appBar: GlassAppBar(titleText: 'Return status', actions: [
           IconButton(

@@ -12,6 +12,7 @@ import 'package:intl/intl.dart';
 import '../../services/mobile_api_service.dart';
 import '../../services/release_verification.dart';
 import '../../widgets/rental_ui.dart';
+import '../../widgets/customer_trust_card.dart';
 import '../shared/qr_capture_screen.dart';
 
 Map<String, dynamic> _map(dynamic value) =>
@@ -294,7 +295,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                       context: context,
                                       barrierDismissible: false,
                                       builder: (_) =>
-                                          RentalReceiptDialog(rental: row)),
+                                          RentalReceiptDialog(rental: row, receiptSettings: _map(widget.workspace['settings']))),
                                   icon: const Icon(Icons.receipt_long),
                                   label: const Text('Bluetooth / PDF receipt')),
                           ],
@@ -876,6 +877,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   bool _paymentProofLoading = false;
   bool _manual = false,
       _customerVerified = false,
+      _physicalIdVerified = false,
       _paymentVerified = false,
       _accessories = false,
       _receipt = false,
@@ -1102,6 +1104,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               child: Column(children: [
                 _check('The receiver matches the rental customer.',
                     _customerVerified, (value) => _customerVerified = value),
+                _check('Physical ID inspected and matches customer', _physicalIdVerified, (value) => _physicalIdVerified = value),
                 if (_walkIn)
                   _check(
                       'Customer agreed to the duration, total, late fees, and physical return inspection.',
@@ -1412,6 +1415,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
           payload.addAll({
             ..._verification.releaseCodes,
             'customerVerified': _customerVerified,
+            'physicalIdVerified': _physicalIdVerified,
             'paymentVerified': _paymentVerified,
             'customerTermsAcknowledged': _customerTermsAcknowledged,
             'inspection': _inspectionPayload(),
@@ -1762,6 +1766,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                             Text(recordReference(_row)),
                             const SizedBox(height: 12)
                           ],
+                          if (_row['customer_id'] != null && _action == 'release')
+                            CustomerTrustCard(customerId: _row['customer_id'].toString(), api: _api),
                           if (_action == 'booking') ...[
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1877,6 +1883,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                         setState(() => _customerId = value);
                                         _scheduleAutoQuote();
                                       }),
+                            if (_customerId != null) CustomerTrustCard(customerId: _customerId!, api: _api),
                             OutlinedButton.icon(
                                 onPressed: _busy || _previewing
                                     ? null

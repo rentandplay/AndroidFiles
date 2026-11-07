@@ -16,6 +16,7 @@
         "flutter",
         "google_sign_in",
         "http",
+        "image",
         "image_picker",
         "intl",
         "mobile_scanner",
@@ -155,6 +156,13 @@
         "image_picker_macos",
         "image_picker_platform_interface",
         "image_picker_windows"
+      ]
+    },
+    {
+      "name": "image",
+      "version": "4.10.1",
+      "dependencies": [
+        "archive"
       ]
     },
     {
@@ -412,13 +420,6 @@
       "dependencies": [
         "flutter",
         "pdf"
-      ]
-    },
-    {
-      "name": "image",
-      "version": "4.10.1",
-      "dependencies": [
-        "archive"
       ]
     },
     {

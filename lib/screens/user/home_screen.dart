@@ -3,6 +3,8 @@ import '../../widgets/premium_animations.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
+import '../../widgets/live_business_settings.dart';
+import '../../services/server_clock.dart';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -140,7 +142,7 @@ class HomeScreenState extends State<HomeScreen> {
   bool _hasExpiredHold(RentalModel rental) =>
       rental.canCancel &&
       rental.holdExpiresAt != null &&
-      DateTime.now().isAfter(rental.holdExpiresAt!);
+      ServerClock.instance.now.isAfter(rental.holdExpiresAt!);
 
   String _date(DateTime value) =>
       DateFormat('MMM d, h:mm a').format(value.toLocal());
@@ -228,6 +230,7 @@ class HomeScreenState extends State<HomeScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              LiveBusinessSettings(api: _api, builder: (context, settings) => LiveAnnouncementBanner(settings: settings.values)),
                               Text(
                                 user?.displayName?.trim().isNotEmpty == true
                                     ? 'Welcome back, ${user!.displayName!.trim().split(' ').first}'
@@ -666,7 +669,7 @@ class HomeScreenState extends State<HomeScreen> {
       return 'Return time not recorded';
     }
 
-    final remaining = rental.dueDate.difference(DateTime.now());
+    final remaining = rental.dueDate.difference(ServerClock.instance.now);
     if (remaining.isNegative) {
       return 'Overdue by ${_durationLabel(remaining)}';
     }
@@ -711,11 +714,11 @@ class HomeScreenState extends State<HomeScreen> {
     final dueDateIsSet = rental.dueDate.millisecondsSinceEpoch > 0;
     final overdue = rental.isActive &&
         dueDateIsSet &&
-        DateTime.now().isAfter(rental.dueDate);
+        ServerClock.instance.now.isAfter(rental.dueDate);
     final dueSoon = rental.isActive &&
         dueDateIsSet &&
         !overdue &&
-        rental.dueDate.difference(DateTime.now()) <= const Duration(hours: 24);
+        rental.dueDate.difference(ServerClock.instance.now) <= const Duration(hours: 24);
     final detailColor = overdue
         ? Theme.of(context).colorScheme.error
         : dueSoon
@@ -976,9 +979,9 @@ class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
   @override
   void initState() {
     super.initState();
-    _now = DateTime.now();
+    _now = ServerClock.instance.now;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() => _now = DateTime.now());
+      if (mounted) setState(() => _now = ServerClock.instance.now);
     });
   }
 

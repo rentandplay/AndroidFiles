@@ -1,143 +1,161 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/mobile_api_service.dart';
 
 const String rentalTermsVersion = '2026-10-13-v1';
 
-class TermsDialog extends StatelessWidget {
-  final VoidCallback? onAccept;
-  final VoidCallback? onDecline;
+class TermsDialog extends StatefulWidget {
+  const TermsDialog(
+      {super.key,
+      this.onAccept,
+      this.onDecline,
+      this.onVersion,
+      this.termsText,
+      this.readOnly = false,
+      this.api});
+  final VoidCallback? onAccept, onDecline;
+  final ValueChanged<String>? onVersion;
   final String? termsText;
   final bool readOnly;
+  final MobileApiService? api;
+  static Future<bool?> show(BuildContext context,
+          {VoidCallback? onAccept,
+          VoidCallback? onDecline,
+          ValueChanged<String>? onVersion,
+          String? termsText,
+          bool readOnly = false,
+          MobileApiService? api}) =>
+      showDialog<bool>(
+          context: context,
+          barrierDismissible: readOnly,
+          builder: (_) => TermsDialog(
+              onAccept: onAccept,
+              onDecline: onDecline,
+              onVersion: onVersion,
+              termsText: termsText,
+              readOnly: readOnly,
+              api: api));
+  @override
+  State<TermsDialog> createState() => _TermsDialogState();
+}
 
-  const TermsDialog({
-    super.key,
-    this.onAccept,
-    this.onDecline,
-    this.termsText,
-    this.readOnly = false,
-  });
+class _TermsDialogState extends State<TermsDialog> {
+  static const sections = {
+    'terms_and_conditions': 'Terms & Conditions',
+    'rental_terms': 'Rental Agreement',
+    'privacy_policy': 'Privacy Policy (DPA 2012)',
+    'refund_policy': 'Cancellation & Refund Policy',
+  };
+  Map<String, dynamic> _terms = {};
+  String _section = 'terms_and_conditions', _error = '';
+  bool _loading = true;
+  int _version = 0;
+  StreamSubscription<Map<String, dynamic>>? _events;
+  MobileApiService get _api => widget.api ?? MobileApiService.instance;
+  @override
+  void initState() {
+    super.initState();
+    _load();
+    _events = _api.watchRentalEvents().listen((event) {
+      if (event['event'] == 'settings.changed') _load();
+    });
+  }
 
-  static Future<bool?> show(
-    BuildContext context, {
-    VoidCallback? onAccept,
-    VoidCallback? onDecline,
-    String? termsText,
-    bool readOnly = false,
-  }) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: readOnly,
-      builder: (context) => TermsDialog(
-        onAccept: onAccept,
-        onDecline: onDecline,
-        termsText: termsText,
-        readOnly: readOnly,
-      ),
-    );
+  Future<void> _load() async {
+    final version = ++_version;
+    setState(() {
+      _loading = true;
+      _error = '';
+    });
+    try {
+      final terms = await _api.terms();
+      if (!mounted || version != _version) return;
+      setState(() {
+        _terms = terms;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted && version == _version) {
+        setState(() {
+          _loading = false;
+          _error = 'Could not load current store policies. Please retry.';
+        });
+      }
+    }
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Row(
-        children: [
-          Icon(Icons.gavel_rounded, color: Theme.of(context).primaryColor),
-          const SizedBox(width: 8),
-          const Text('Terms & Conditions'),
-        ],
-      ),
-      content: SizedBox(
-        width: double.maxFinite,
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (termsText != null && termsText!.trim().isNotEmpty) ...[
-                Text(
-                  termsText!.trim(),
-                  style: const TextStyle(fontSize: 12, height: 1.45, color: Colors.black87),
-                ),
-              ] else ...[
-                const Text(
-                  'Please read these rental terms before creating your Rent & Play account.',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                ),
-              const SizedBox(height: 12),
-              _buildSectionTitle('1. Account details'),
-              _buildSectionText(
-                'Provide accurate name and contact details, and keep your password and verification codes private. Use your account for your own rental requests.',
-              ),
-              const SizedBox(height: 10),
-              _buildSectionTitle('2. Rental requests and charges'),
-              _buildSectionText(
-                'A rental request is not confirmed until its status is approved in the app. Before submitting, review the item, rental duration, due time, rental fee, and any deposit or payment instructions shown at checkout. Late fees use the rates shown in the app.',
-              ),
-              const SizedBox(height: 10),
-              _buildSectionTitle('3. ID and handoff'),
-              _buildSectionText(
-                'Show the required physical Government or Student ID to the admin during handoff. The rental timer starts when the admin verifies and releases the equipment. Check the item and included accessories with the admin.',
-              ),
-              const SizedBox(height: 10),
-              _buildSectionTitle('4. Return, inspection, and extra charges'),
-              _buildSectionText(
-                'Return the same equipment and all included accessories by the due time. A return request alone does not stop the timer; it stops when the admin records physical receipt. The admin inspects the returned item. Late returns, damage, loss, or missing accessories may result in additional charges, which should be recorded with an inspection reason.',
-              ),
-              const SizedBox(height: 10),
-              _buildSectionTitle('5. Personal information'),
-              _buildSectionText(
-                'Your name, email, phone number, and ID verification details are used to manage your account, verify rental handoffs, and communicate about rentals and returns. Please provide only accurate information needed for these purposes.',
-              ),
-            ],
-          ],
-          ),
-        ),
-      ),
-      actions: readOnly
-          ? [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
-              ),
-            ]
-          : [
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(false);
-                  if (onDecline != null) onDecline!();
-                },
-                child: const Text('Decline', style: TextStyle(color: Colors.grey)),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Theme.of(context).primaryColor,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                onPressed: () {
-                  onAccept?.call();
-                  Navigator.of(context).pop(true);
-                },
-                child: const Text('Accept & Agree'),
-              ),
-            ],
-    );
+  void dispose() {
+    _events?.cancel();
+    super.dispose();
   }
 
-  Widget _buildSectionTitle(String title) {
-    return Text(
-      title,
-      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.blueAccent),
-    );
-  }
-
-  Widget _buildSectionText(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(top: 2.0),
-      child: Text(
-        text,
-        style: const TextStyle(fontSize: 12, height: 1.4, color: Colors.black87),
-      ),
-    );
-  }
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: const Text('Store policies'),
+        content: SizedBox(
+            width: 480,
+            height: 400,
+            child: Column(children: [
+              DropdownButtonFormField<String>(
+                  initialValue: _section,
+                  isExpanded: true,
+                  items: sections.entries
+                      .map((section) => DropdownMenuItem(
+                          value: section.key, child: Text(section.value)))
+                      .toList(),
+                  onChanged: (section) {
+                    if (section != null) setState(() => _section = section);
+                  }),
+              const SizedBox(height: 16),
+              Expanded(
+                  child: _loading
+                      ? const Center(child: CircularProgressIndicator())
+                      : _error.isNotEmpty
+                          ? Column(children: [
+                              Text(_error),
+                              TextButton(
+                                  onPressed: _load, child: const Text('Retry'))
+                            ])
+                          : SingleChildScrollView(
+                              child: SelectableText(
+                                  (_terms[_section] ??
+                                          'This policy is not available. Please contact counter staff.')
+                                      .toString(),
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
+                                      ?.copyWith(height: 1.5)))),
+            ])),
+        actions: widget.readOnly
+            ? [
+                TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'))
+              ]
+            : [
+                TextButton(
+                    onPressed: () {
+                      Navigator.pop(context, false);
+                      widget.onDecline?.call();
+                    },
+                    child: const Text('Decline')),
+                FilledButton(
+                    onPressed: _loading ||
+                            _error.isNotEmpty ||
+                            (_terms['terms_and_conditions'] ?? '')
+                                .toString()
+                                .trim()
+                                .isEmpty
+                        ? null
+                        : () {
+                            widget.onVersion?.call(
+                                (_terms['terms_version'] ?? rentalTermsVersion)
+                                    .toString());
+                            widget.onAccept?.call();
+                            Navigator.pop(context, true);
+                          },
+                    child: const Text('Accept & Agree')),
+              ],
+      );
 }

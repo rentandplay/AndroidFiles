@@ -66,6 +66,10 @@ class UiApi extends MobileApiService {
 
   @override
   Future<Map<String, dynamic>> paymentInstructions() async => {};
+  @override
+  Future<Map<String, dynamic>> businessSettings() async => {'settings': {'opens_at': '00:00', 'closes_at': '00:00', 'timezone': 'Asia/Manila'}};
+  @override
+  Future<Map<String, dynamic>> terms() async => {'rental_terms': 'Current rental agreement', 'rental_terms_version': 'test-current'};
 
   @override
   Future<Map<String, dynamic>> rentalRecord(String id) async {
@@ -272,7 +276,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(tester.widget<FilledButton>(button).onPressed, isNotNull);
     await save(tester, capture, 'android-checkout');
-    await tester.scrollUntilVisible(find.text('Price summary'), 180);
+    await tester.scrollUntilVisible(find.text('Price summary'), 180, scrollable: find.byType(Scrollable).first);
     expect(find.textContaining('minimum package'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());

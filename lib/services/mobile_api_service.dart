@@ -1,4 +1,5 @@
 import '../utils/record_codes.dart';
+import 'server_clock.dart';
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
@@ -222,6 +223,9 @@ class MobileApiService {
   Future<Map<String, dynamic>> paymentInstructions() async =>
       _request('/mobile/payment-instructions');
 
+  Future<Map<String, dynamic>> businessSettings() =>
+      _request('/mobile/settings', authenticated: false);
+
   Future<Map<String, dynamic>> terms() async =>
       _request('/mobile/terms', authenticated: false);
 
@@ -349,6 +353,8 @@ class MobileApiService {
           statusCode: 503);
     }
 
+    final serverTime = DateTime.tryParse(response.headers['x-server-time'] ?? '');
+    if (serverTime != null) ServerClock.instance.synchronize(serverTime);
     dynamic decoded;
     try {
       decoded = response.body.isEmpty
@@ -661,6 +667,8 @@ class MobileApiService {
               try {
                 final decoded = jsonDecode(dataLines.join('\n'));
                 if (decoded is Map) {
+                  final serverTime = DateTime.tryParse((decoded['serverTime'] ?? '').toString());
+                  if (serverTime != null) ServerClock.instance.synchronize(serverTime);
                   yield {
                     'event': eventName,
                     ...Map<String, dynamic>.from(decoded),

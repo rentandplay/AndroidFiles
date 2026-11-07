@@ -9,7 +9,8 @@ import '../../services/thermal_receipt.dart';
 import '../../utils/record_codes.dart';
 
 class RentalReceiptDialog extends StatefulWidget {
-  const RentalReceiptDialog({super.key, required this.rental});
+  const RentalReceiptDialog({super.key, required this.rental, this.receiptSettings});
+  final Map<String, dynamic>? receiptSettings;
   final Map<String, dynamic> rental;
   @override
   State<RentalReceiptDialog> createState() => _RentalReceiptDialogState();
@@ -33,7 +34,7 @@ class _RentalReceiptDialogState extends State<RentalReceiptDialog> {
   void initState() {
     super.initState();
     try {
-      _lines = thermalReceiptLines(widget.rental);
+      _lines = thermalReceiptLines(widget.rental, receiptSettings: widget.receiptSettings);
     } catch (error) {
       _lines = [];
       _message = '$error';

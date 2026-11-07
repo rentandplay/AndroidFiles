@@ -55,6 +55,7 @@ class RentAndPlayApp extends StatelessWidget {
           return MaterialApp(
             navigatorKey: rentalNavigatorKey,
             scaffoldMessengerKey: rentalMessengerKey,
+            navigatorObservers: [rentalRouteObserver],
             builder: (_, child) => RentalNotificationHost(child: child!),
             title: 'Rent & Play',
             debugShowCheckedModeBanner: false,

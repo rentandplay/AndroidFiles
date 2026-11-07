@@ -1,3 +1,5 @@
+import '../../widgets/live_business_settings.dart';
+import '../../services/business_settings.dart';
 import '../../widgets/liquid_glass.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -38,12 +40,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final _businessNameController = TextEditingController(text: 'Rent & Play');
-  final _locationController = TextEditingController(text: 'Los Baños, Laguna');
-  final _currencyController = TextEditingController(text: 'PHP');
-  final _timezoneController = TextEditingController(text: 'Asia/Manila');
-  final _gracePeriodController = TextEditingController(text: '0');
-
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
 
@@ -87,11 +83,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   void dispose() {
-    _businessNameController.dispose();
-    _locationController.dispose();
-    _currencyController.dispose();
-    _timezoneController.dispose();
-    _gracePeriodController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
     super.dispose();
@@ -381,122 +372,130 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: FutureBuilder<UserModel?>(
           future: _profileFuture,
           builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.person_outline_rounded,
-                        size: 32, color: textSecondary),
-                    const SizedBox(height: 12),
-                    Text('Could not load your profile.',
-                        style: TextStyle(color: textPrimary),
-                        textAlign: TextAlign.center),
-                    const SizedBox(height: 12),
-                    FilledButton.tonalIcon(
-                      onPressed: () =>
-                          setState(() => _profileFuture = _loadUserData()),
-                      icon: const Icon(Icons.refresh_rounded),
-                      label: const Text('Try again'),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          }
-
-          final userModel = snapshot.data;
-          final role = userModel?.role.toUpperCase() ?? 'CUSTOMER';
-          final isAdmin = userModel?.isStaff ?? false;
-          final isOwner = role == 'OWNER';
-          final tabs = _settingsTabs(isAdmin);
-          final selectedTab = tabs.any((tab) => tab['name'] == _selectedTab)
-              ? _selectedTab
-              : (isAdmin ? 'Business' : 'My profile');
-
-          return SingleChildScrollView(
-            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-            padding: EdgeInsets.fromLTRB(16, topPadding + 12, 16, isAdmin ? 16 : 100),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (isAdmin) ...[
-                  // 1. Sub-Navigation Tabs (Admin only)
-                  _buildSubNavTabs(
-                    isAdmin,
-                    selectedTab,
-                    isDark,
-                    cardBg,
-                    cardBorder,
-                    textPrimary,
-                    textSecondary,
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.person_outline_rounded,
+                          size: 32, color: textSecondary),
+                      const SizedBox(height: 12),
+                      Text('Could not load your profile.',
+                          style: TextStyle(color: textPrimary),
+                          textAlign: TextAlign.center),
+                      const SizedBox(height: 12),
+                      FilledButton.tonalIcon(
+                        onPressed: () =>
+                            setState(() => _profileFuture = _loadUserData()),
+                        icon: const Icon(Icons.refresh_rounded),
+                        label: const Text('Try again'),
+                      ),
+                    ],
                   ),
+                ),
+              );
+            }
 
-                  if (widget.onOpenEquipment != null) ...[
-                    const SizedBox(height: 16),
-                    _buildEquipmentMenu(
+            final userModel = snapshot.data;
+            final role = userModel?.role.toUpperCase() ?? 'CUSTOMER';
+            final isAdmin = userModel?.isStaff ?? false;
+            final isOwner = role == 'OWNER';
+            final tabs = _settingsTabs(isAdmin);
+            final selectedTab = tabs.any((tab) => tab['name'] == _selectedTab)
+                ? _selectedTab
+                : (isAdmin ? 'Business' : 'My profile');
+
+            return SingleChildScrollView(
+              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+              padding: EdgeInsets.fromLTRB(
+                  16, topPadding + 12, 16, isAdmin ? 16 : 100),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (isAdmin) ...[
+                    // 1. Sub-Navigation Tabs (Admin only)
+                    _buildSubNavTabs(
+                      isAdmin,
+                      selectedTab,
+                      isDark,
                       cardBg,
                       cardBorder,
                       textPrimary,
                       textSecondary,
                     ),
-                  ],
 
-                  const SizedBox(height: 14),
-
-                  // 2. Tab Content View
-                  if (selectedTab == 'Business')
-                    _buildBusinessTabCard(isDark, cardBg, cardBorder,
-                        textPrimary, textSecondary, inputFill,
-                        canEdit: isOwner)
-                  else if (selectedTab == 'Appearance')
-                    _buildAppearanceTabCard(themeProvider, isDark, cardBg,
-                        cardBorder, textPrimary, textSecondary)
-                  else if (selectedTab == 'Users' ||
-                      selectedTab == 'Account & security')
-                    _buildUsersAccountTabCard(userModel, user, role, isDark,
-                        cardBg, cardBorder, textPrimary, textSecondary,
-                        inputFill)
-                  else if (selectedTab == 'Preferences')
-                    _buildPreferencesTabCard(
-                        isDark, cardBg, cardBorder, textPrimary, textSecondary)
-                  else
-                    _buildUsersAccountTabCard(
-                        userModel,
-                        user,
-                        role,
-                        isDark,
+                    if (widget.onOpenEquipment != null) ...[
+                      const SizedBox(height: 16),
+                      _buildEquipmentMenu(
                         cardBg,
                         cardBorder,
                         textPrimary,
                         textSecondary,
-                        inputFill),
-                ] else if (user == null) ...[
-                  _buildGuestProfileCard(
-                      cardBg, cardBorder, textPrimary, textSecondary),
-                ] else ...[
-                  _buildCustomerProfileCard(
-                    userModel,
-                    user,
-                    isDark,
-                    cardBg,
-                    cardBorder,
-                    textPrimary,
-                    textSecondary,
-                    authService,
-                  ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 14),
+
+                    // 2. Tab Content View
+                    if (selectedTab == 'Business')
+                      _buildBusinessTabCard(isDark, cardBg, cardBorder,
+                          textPrimary, textSecondary, inputFill,
+                          canEdit: isOwner)
+                    else if (selectedTab == 'Appearance')
+                      _buildAppearanceTabCard(themeProvider, isDark, cardBg,
+                          cardBorder, textPrimary, textSecondary)
+                    else if (selectedTab == 'Users' ||
+                        selectedTab == 'Account & security')
+                      _buildUsersAccountTabCard(
+                          userModel,
+                          user,
+                          role,
+                          isDark,
+                          cardBg,
+                          cardBorder,
+                          textPrimary,
+                          textSecondary,
+                          inputFill)
+                    else if (selectedTab == 'Preferences')
+                      _buildPreferencesTabCard(isDark, cardBg, cardBorder,
+                          textPrimary, textSecondary)
+                    else
+                      _buildUsersAccountTabCard(
+                          userModel,
+                          user,
+                          role,
+                          isDark,
+                          cardBg,
+                          cardBorder,
+                          textPrimary,
+                          textSecondary,
+                          inputFill),
+                  ] else if (user == null) ...[
+                    _buildGuestProfileCard(
+                        cardBg, cardBorder, textPrimary, textSecondary),
+                  ] else ...[
+                    _buildCustomerProfileCard(
+                      userModel,
+                      user,
+                      isDark,
+                      cardBg,
+                      cardBorder,
+                      textPrimary,
+                      textSecondary,
+                      authService,
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          );
-        },
+              ),
+            );
+          },
+        ),
       ),
-    ),
     );
   }
 
@@ -617,268 +616,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildBusinessTabCard(bool isDark, Color cardBg, Color cardBorder,
       Color textPrimary, Color textSecondary, Color inputFill,
       {required bool canEdit}) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20.0),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: cardBorder),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'BUSINESS PROFILE',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Color(0xFFF57C00),
-              letterSpacing: 1.0,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Your rental workspace',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: textPrimary,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            canEdit
-                ? 'Business details are shared with everyone in this workspace.'
-                : 'Only the super admin owner can change shared business settings.',
-            style: TextStyle(fontSize: 12, color: textSecondary),
-          ),
-          const SizedBox(height: 20),
-
-          // Business Name & Location
-          Row(
+    return LiveBusinessSettings(builder: (context, settings) {
+      if (!settings.loaded) {
+        return Text(
+            settings.error.isEmpty ? 'Loading store details…' : settings.error);
+      }
+      final values = settings.values;
+      return GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Business name',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: textPrimary)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _businessNameController,
-                      enabled: canEdit,
-                      style: TextStyle(fontSize: 13, color: textPrimary),
-                      decoration: InputDecoration(
-                        fillColor: inputFill,
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFFF57C00))),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Location',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: textPrimary)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _locationController,
-                      enabled: canEdit,
-                      style: TextStyle(fontSize: 13, color: textPrimary),
-                      decoration: InputDecoration(
-                        fillColor: inputFill,
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFFF57C00))),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Text('System overview',
+                  style: Theme.of(context).textTheme.titleLarge),
+              const SizedBox(height: 16),
+              Text('Business: ${values['business_name']}'),
+              Text('Location: ${values['location']}'),
+              Text(
+                  'Late grace period: ${values['default_late_grace_hours']} hours'),
+              Text(
+                  'Operating hours: ${formatBusinessTime(values['opens_at'])} - ${formatBusinessTime(values['closes_at'])}'),
+              const SizedBox(height: 16),
+              const Text(
+                  'To update business details, rates, or printer layouts, use the Web Dashboard.'),
+              if (settings.error.isNotEmpty) Text(settings.error),
             ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // Currency & Timezone
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Currency',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: textPrimary)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _currencyController,
-                      readOnly: true,
-                      style: TextStyle(fontSize: 13, color: textPrimary),
-                      decoration: InputDecoration(
-                        fillColor: inputFill,
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFFF57C00))),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text('Reports display Philippine pesos (PHP)',
-                        style: TextStyle(fontSize: 9, color: textSecondary)),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Timezone',
-                        style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            color: textPrimary)),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _timezoneController,
-                      readOnly: true,
-                      style: TextStyle(fontSize: 13, color: textPrimary),
-                      decoration: InputDecoration(
-                        fillColor: inputFill,
-                        filled: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide: BorderSide(color: cardBorder)),
-                        focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(8),
-                            borderSide:
-                                const BorderSide(color: Color(0xFFF57C00))),
-                      ),
-                    ),
-                    const SizedBox(height: 2),
-                    Text('Reports use Philippine time (Asia/Manila)',
-                        style: TextStyle(fontSize: 9, color: textSecondary)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // Grace period
-          Text('Default late grace period (hours)',
-              style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.bold,
-                  color: textPrimary)),
-          const SizedBox(height: 6),
-          TextField(
-            controller: _gracePeriodController,
-            enabled: canEdit,
-            keyboardType: TextInputType.number,
-            style: TextStyle(fontSize: 13, color: textPrimary),
-            decoration: InputDecoration(
-              fillColor: inputFill,
-              filled: true,
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: BorderSide(color: cardBorder)),
-              focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Color(0xFFF57C00))),
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text('Administrative default for overdue calculations',
-              style: TextStyle(fontSize: 10, color: textSecondary)),
-
-          const SizedBox(height: 20),
-
-          // Notice
-          if (canEdit)
-            const Text('Changes apply after you select Save business settings.',
-                style: TextStyle(fontSize: 11, color: Color(0xFFF57C00))),
-
-          if (canEdit) const SizedBox(height: 16),
-
-          if (canEdit)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                  ),
-                  onPressed: () {},
-                  child: Text('Discard changes',
-                      style: TextStyle(fontSize: 12, color: textSecondary)),
-                ),
-                const SizedBox(width: 10),
-                ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFF57C00),
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8)),
-                    elevation: 0,
-                  ),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                          content:
-                              Text('Business settings saved successfully!')),
-                    );
-                  },
-                  child: const Text('Save business settings',
-                      style:
-                          TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
+          ));
+    });
   }
 
   // --- APPEARANCE TAB CARD ---
@@ -1102,10 +866,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               minimumSize: const Size.fromHeight(48),
               padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
               side: BorderSide(
-                color: Theme.of(context)
-                    .colorScheme
-                    .error
-                    .withValues(alpha: .35),
+                color:
+                    Theme.of(context).colorScheme.error.withValues(alpha: .35),
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),

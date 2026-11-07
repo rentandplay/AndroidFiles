@@ -7,6 +7,8 @@ import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
 import '../shared/terms_dialog.dart';
+import '../../services/mobile_api_service.dart';
+import '../../widgets/live_business_settings.dart';
 import '../user/customer_home_screen.dart';
 
 class IdVerificationScreen extends StatefulWidget {
@@ -24,6 +26,7 @@ class IdVerificationScreen extends StatefulWidget {
 class _IdVerificationScreenState extends State<IdVerificationScreen> {
   final _formKey = GlobalKey<FormState>();
   final _phoneController = TextEditingController();
+  String _termsVersion = rentalTermsVersion;
   bool _acceptedTerms = false;
   bool _isSubmitting = false;
 
@@ -66,6 +69,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
   void _showTermsDialog() {
     TermsDialog.show(
       context,
+      onVersion: (version) => _termsVersion = version,
       onAccept: () {
         setState(() {
           _acceptedTerms = true;
@@ -111,7 +115,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
       // Staff verify the actual physical ID at handoff.
       await authService.acknowledgeIdRequirement(user.uid);
       await authService.updateTermsAcceptance(user.uid, true,
-          termsVersion: rentalTermsVersion);
+          termsVersion: _termsVersion);
 
       if (!mounted) return;
 
@@ -263,9 +267,20 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                   icon: Icons.badge_outlined,
                   title: 'Physical Valid ID Required',
                   message:
-                      'Show one physical Government or Student ID to the operator when the item is handed over at your selected location.',
+                      'Show one of the accepted physical IDs listed below at handoff. Staff will verify it before releasing the equipment.',
                 ),
 
+                LiveBusinessSettings(builder: (context, settings) => FutureBuilder<Map<String, dynamic>>(
+                  key: ValueKey(settings.values.toString()),
+                  future: MobileApiService.instance.terms(),
+                  builder: (context, snapshot) => ExpansionTile(
+                    leading: const Icon(Icons.badge_outlined),
+                    title: const Text('Accepted identification'),
+                    children: [Padding(padding: const EdgeInsets.all(16), child: Text(
+                      (snapshot.data?['accepted_id_types'] ?? (snapshot.hasError ? 'Could not load accepted IDs. Please contact counter staff.' : 'Loading accepted IDs…')).toString(),
+                    ))],
+                  ),
+                )),
                 const SizedBox(height: 20),
 
                 // Terms & Conditions Card

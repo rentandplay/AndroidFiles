@@ -1,3 +1,4 @@
+import '../../services/server_clock.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -50,6 +51,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
   String _connectionError = '';
   Map<String, dynamic> _dashboard = {};
   Map<String, dynamic> _workspace = {};
+  Map<String, dynamic> _today = {};
+  String _todayError = '';
   int _selectedIndex = 0;
   String? _requestedScanKind;
   int _scanRequestId = 0;
@@ -153,10 +156,18 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
       });
     }
     try {
-      final workspace = await _api.loadWorkspace(forceRefresh: forceRefresh);
+      final workspaceFuture = _api.loadWorkspace(forceRefresh: forceRefresh);
+      final day = ServerClock.instance.now.toUtc().add(const Duration(hours: 8)).toIso8601String().substring(0, 10);
+      Map<String, dynamic> today = {};
+      var todayError = '';
+      final financeFuture = _api.getMap('/finance/summary?from=$day&to=$day&counter=true', forceRefresh: forceRefresh).then((value) { today = value; }).catchError((Object _) { todayError = 'Today’s collection totals could not be refreshed.'; });
+      final workspace = await workspaceFuture;
+      await financeFuture;
       if (!mounted) return;
       setState(() {
         _workspace = workspace;
+        _today = today;
+        _todayError = todayError;
         _dashboard = _api.dashboardFromWorkspace(workspace);
         _loading = false;
         _connectionError = '';
@@ -503,6 +514,21 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen>
         physics: const AlwaysScrollableScrollPhysics(),
         padding: EdgeInsets.zero,
         children: [
+          Padding(padding: const EdgeInsets.all(16), child: GlassCard(
+            padding: const EdgeInsets.all(16),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('Today at a glance', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: 8),
+              if (_todayError.isNotEmpty) Text(_todayError) else Wrap(spacing: 16, runSpacing: 8, children: [
+                Text('On field: ${_map(_today['counter'])['active_units'] ?? '—'}'),
+                Text('Due today: ${_map(_today['counter'])['due_today'] ?? '—'}'),
+                Text('Overdue: ${_map(_today['counter'])['overdue'] ?? '—'}'),
+                Text('Cash: ₱${_map(_today['totals'])['cash_collections'] ?? '—'}'),
+                Text('QR: ₱${_map(_today['totals'])['qr_collections'] ?? '—'}'),
+                Text('ESP32: ${_map(_today['counter'])['station_status'] ?? 'STANDBY'}'),
+              ]),
+            ]),
+          )),
           // 1. Signature Midnight Navy Hero Header with Brand DNA
           ClipPath(
             clipper: const BrowseHeroBottomWaveClipper(),

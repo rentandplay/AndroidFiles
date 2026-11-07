@@ -1,3 +1,4 @@
+import '../services/server_clock.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/rental_model.dart';
@@ -28,17 +29,19 @@ class RentalDualTracker extends StatefulWidget {
     super.key,
     required this.rental,
     required this.step,
+    this.initiallyExpanded = false,
   });
 
   final RentalModel rental;
   final int step;
+  final bool initiallyExpanded;
 
   @override
   State<RentalDualTracker> createState() => _RentalDualTrackerState();
 }
 
 class _RentalDualTrackerState extends State<RentalDualTracker> {
-  bool _expanded = false;
+  late bool _expanded = widget.initiallyExpanded;
 
   String _formatTime(DateTime? date) {
     if (date == null || date.millisecondsSinceEpoch == 0) return '—';
@@ -49,7 +52,7 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
   String _formatDate(DateTime? date) {
     if (date == null || date.millisecondsSinceEpoch == 0) return '';
     final local = date.toUtc().add(const Duration(hours: 8));
-    final now = DateTime.now().toUtc().add(const Duration(hours: 8));
+    final now = ServerClock.instance.now.toUtc().add(const Duration(hours: 8));
     if (local.year == now.year &&
         local.month == now.month &&
         local.day == now.day) {
@@ -100,7 +103,7 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
         title: 'Return Request Sent',
         description:
             'Return request received. Hand the equipment to staff to stop rental timer.',
-        timestamp: DateTime.now(),
+        timestamp: ServerClock.instance.now,
         isActive: isTop,
         icon: Icons.assignment_return_outlined,
       ));

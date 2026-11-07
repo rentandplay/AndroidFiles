@@ -8,6 +8,7 @@ import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
 import 'alerts_screen.dart';
 import 'notification_booking_screen.dart';
+import '../../widgets/notification_widgets.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, this.initialId});
@@ -18,6 +19,18 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   bool _openedInitial = false, _marking = false;
+
+  @override
+  void initState() {
+    super.initState();
+    RentalNotificationSuppression.isNotificationsScreenActive = true;
+  }
+
+  @override
+  void dispose() {
+    RentalNotificationSuppression.isNotificationsScreenActive = false;
+    super.dispose();
+  }
   Future<void> _open(
       RentalNotification row, RentalNotificationService service) async {
     try {

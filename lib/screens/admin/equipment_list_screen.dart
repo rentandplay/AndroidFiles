@@ -267,7 +267,7 @@ class _EquipmentDetailsSheet extends StatefulWidget {
 
 class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
   late Future<Map<String, dynamic>> _detail;
-  bool _loadingQr = false;
+  bool _loadingQr = false, _mutating = false;
   String _qrError = '';
 
   @override
@@ -282,6 +282,33 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
         ? Future.value({'item': widget.item})
         : widget.api.getMap('/inventory/${Uri.encodeComponent(id)}',
             forceRefresh: true);
+  }
+
+  Future<void> _quickAction(Map<String, dynamic> item, {int? quantity, String? action}) async {
+    if (_mutating) return;
+    if (action == 'RETIRE') {
+      final confirmed = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
+        title: const Text('Archive this unit?'), content: const Text('The unit will leave the active catalog. Its rental history is retained.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Archive'))],
+      ));
+      if (confirmed != true || !mounted) return;
+    }
+    setState(() => _mutating = true);
+    try {
+      final id = Uri.encodeComponent(item['id'].toString());
+      await widget.api.post('/inventory/$id/${quantity != null ? 'quantity' : 'actions'}', body: {
+        if (quantity != null) 'quantity': quantity,
+        if (action != null) 'action': action,
+        'version': item['updated_at'],
+        if (quantity != null) 'stockVersion': item['stock_version'],
+        if (action != null) 'reason': action == 'MAINTENANCE' ? 'Counter inspection defect' : 'Counter stock archive',
+      });
+      if (!mounted) return;
+      setState(() { _detail = _loadDetails(); });
+      await widget.onMaintenanceChanged();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$error')));
+    } finally { if (mounted) setState(() => _mutating = false); }
   }
 
   Future<void> _maintenance({String? ticketId}) async {
@@ -557,6 +584,17 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
                         style: TextStyle(color: theme.colorScheme.error)),
                   ],
                   const SizedBox(height: 18),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    IconButton(tooltip: 'Decrease stock', onPressed: _mutating || (item['total_quantity'] as num? ?? 1) <= 1 ? null : () => _quickAction(item, quantity: (item['total_quantity'] as num? ?? 1).toInt() - 1), icon: const Icon(Icons.remove_circle_outline)),
+                    Text('Stock: ${item['total_quantity'] ?? 1}'),
+                    IconButton(tooltip: 'Increase stock', onPressed: _mutating ? null : () => _quickAction(item, quantity: (item['total_quantity'] as num? ?? 1).toInt() + 1), icon: const Icon(Icons.add_circle_outline)),
+                    if (status.toUpperCase() == 'AVAILABLE')
+                      OutlinedButton.icon(onPressed: _mutating ? null : () => _quickAction(item, action: 'MAINTENANCE'), icon: const Icon(Icons.build_outlined), label: const Text('Mark maintenance')),
+                    if (item['is_active'] == false && status.toUpperCase() != 'RETIRED')
+                      OutlinedButton(onPressed: _mutating ? null : () => _quickAction(item, action: 'RESTORE'), child: const Text('Restore archived unit')),
+                    if (item['is_active'] != false)
+                      TextButton(onPressed: _mutating ? null : () => _quickAction(item, action: 'RETIRE'), child: const Text('Archive unit')),
+                  ]),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton.icon(

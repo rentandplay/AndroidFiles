@@ -70,6 +70,7 @@ class RentalNotificationService extends ChangeNotifier {
       _disposed = false,
       _active = true,
       _refreshAgain = false;
+  bool _pushPreference = true;
   bool phoneAlertsEnabled = false, enablingPhoneAlerts = false;
   String error = '', phoneAlertError = '', audience = 'CUSTOMER';
   StreamSubscription<Map<String, dynamic>>? _rentalEvents;
@@ -115,7 +116,13 @@ class RentalNotificationService extends ChangeNotifier {
       _startRentalEvents(version);
       await refresh();
       if (_disposed || version != _generation) return;
-      await _setupPush();
+      try {
+        final profile = await _api.profile();
+        final prefs = (profile['user'] as Map?)?['notification_preferences'] as Map?;
+        if (_disposed || version != _generation) return;
+        _pushPreference = prefs?['push_enabled'] != false;
+      } catch (_) { return; }
+      if (_pushPreference) await _setupPush();
     });
   }
 
@@ -269,18 +276,30 @@ class RentalNotificationService extends ChangeNotifier {
   }
 
   Future<bool> _register(String? token) async {
-    if (token == null || _uid == null) return false;
+    if (token == null || _uid == null || !_pushPreference) return false;
     final version = _generation;
     return NotificationDevices.serial(() async {
-      if (_disposed || version != _generation) return false;
+      if (_disposed || version != _generation || !_pushPreference) return false;
       await _api.registerNotificationDevice(token);
       NotificationDevices.token = token;
       return !_disposed && version == _generation;
     });
   }
 
+  Future<void> setPushPreference(bool enabled) async {
+    _pushPreference = enabled;
+    if (!enabled) {
+      phoneAlertsEnabled = false;
+      await NotificationDevices.unregister(_api);
+      _notify();
+    } else {
+      await _setupPush();
+      await enablePhoneAlerts();
+    }
+  }
+
   Future<void> enablePhoneAlerts() async {
-    if (!phoneAlertsSupported || _uid == null || enablingPhoneAlerts) return;
+    if (!phoneAlertsSupported || _uid == null || enablingPhoneAlerts || !_pushPreference) return;
     final version = _generation;
     enablingPhoneAlerts = true;
     phoneAlertError = '';

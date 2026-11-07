@@ -9,6 +9,8 @@ import '../../widgets/rental_ui.dart';
 import '../admin/rental_admin_view.dart';
 import '../shared/transaction_ticket_dialog.dart';
 import '../user/return_equipment_screen.dart';
+import '../../widgets/rental_dual_tracker.dart';
+import '../../widgets/notification_widgets.dart';
 
 class NotificationBookingScreen extends StatefulWidget {
   const NotificationBookingScreen(
@@ -34,7 +36,17 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
   @override
   void initState() {
     super.initState();
+    RentalNotificationSuppression.activeRentalId =
+        widget.notification.rentalId.isNotEmpty
+            ? widget.notification.rentalId
+            : widget.notification.rentalCode;
     _load();
+  }
+
+  @override
+  void dispose() {
+    RentalNotificationSuppression.activeRentalId = null;
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -83,6 +95,15 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
 
   String _money(dynamic value) =>
       value is num ? '₱${value.toStringAsFixed(2)}' : 'Not recorded';
+  int _progressStep(RentalModel rental) {
+    if (rental.isAwaitingInspection) return 3;
+    if (rental.isActive || rental.hasPendingReturnRequest) return 2;
+    if (rental.isPendingVerification) {
+      return rental.normalizedStatus.contains('RETURN') ? 3 : 1;
+    }
+    if (rental.isAwaitingPickup) return 1;
+    return 0;
+  }
   String _date(dynamic value) {
     final parsed = DateTime.tryParse(value?.toString() ?? '');
     return parsed == null
@@ -133,6 +154,18 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                           Align(
                               alignment: Alignment.centerLeft,
                               child: RentalStatusBadge(status: status)),
+                          if (!_admin) ...[
+                            const SizedBox(height: 14),
+                            RentalDualTracker(
+                                rental: RentalModel.fromMap(row),
+                                step: _progressStep(RentalModel.fromMap(row)),
+                                initiallyExpanded: true),
+                            if (RentalModel.fromMap(row).isAwaitingPickup) ...[
+                              const SizedBox(height: 6),
+                              EmbeddedRentalHandoffQr(
+                                  rental: RentalModel.fromMap(row), api: _api),
+                            ],
+                          ],
                           const SizedBox(height: 16),
                           if (_admin)
                             RentalValueRow('Customer',

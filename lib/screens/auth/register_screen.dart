@@ -355,6 +355,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     await TermsDialog.show(
       context,
       termsText: _dynamicTermsText,
+      onVersion: (version) => _currentTermsVersion = version,
       onAccept: () {
         if (mounted) setState(() => _acceptedTerms = true);
       },

@@ -57,6 +57,10 @@ class _FlowApi extends MobileApiService {
   @override
   Future<Map<String, dynamic>> paymentInstructions() async => {};
   @override
+  Future<Map<String, dynamic>> businessSettings() async => {'settings': {'opens_at': '00:00', 'closes_at': '00:00', 'timezone': 'Asia/Manila'}};
+  @override
+  Future<Map<String, dynamic>> terms() async => {'rental_terms': 'Current rental agreement', 'rental_terms_version': 'test-current'};
+  @override
   Stream<Map<String, dynamic>> watchRentalEvents() => const Stream.empty();
   @override
   Future<List<RentalModel>> listRentals() async => [RentalModel.fromMap(row)];
@@ -146,6 +150,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Delivery to ASRI Hotspring Resort'), findsOneWidget);
     expect(find.text('Pick up at Rent & Play'), findsNothing);
+    await tester.enterText(find.byType(TextFormField), '09123456789');
     final agreement = find.byKey(const ValueKey('rental-terms-acceptance'));
     await tester.ensureVisible(agreement);
     await tester.tap(agreement);
@@ -155,7 +160,7 @@ void main() {
     expect(api.calls, hasLength(1));
     expect(api.calls.single['itemId'], 'unit');
     expect(api.calls.single['acceptedRentalTerms'], true);
-    expect(api.calls.single['rentalTermsVersion'], mobileRentalTermsVersion);
+    expect(api.calls.single['rentalTermsVersion'], 'test-current');
     expect(api.calls.single['paymentMethod'], 'CASH');
     expect(api.calls.single['deliveryLocation'], 'ASRI Hotspring Resort');
     expect(api.calls.single['requestKey'], matches(RegExp(r'^[a-f0-9]{32}$')));

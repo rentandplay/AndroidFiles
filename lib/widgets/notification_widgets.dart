@@ -7,6 +7,36 @@ import '../screens/alerts/notifications_screen.dart';
 
 final rentalNavigatorKey = GlobalKey<NavigatorState>();
 final rentalMessengerKey = GlobalKey<ScaffoldMessengerState>();
+final RouteObserver<ModalRoute<void>> rentalRouteObserver =
+    RouteObserver<ModalRoute<void>>();
+
+/// Suppresses floating in-app notification toasts when the user is already on a
+/// screen where the update is already visible or being reviewed.
+class RentalNotificationSuppression {
+  static bool isRentalScreenActive = false;
+  static bool isNotificationsScreenActive = false;
+  static String? activeRentalId;
+
+  static bool shouldSuppress(RentalNotification notification) {
+    // If user is currently looking at their notifications list
+    if (isNotificationsScreenActive) return true;
+
+    // If user is currently viewing this exact rental's booking details
+    if (activeRentalId != null &&
+        (activeRentalId == notification.rentalId ||
+            activeRentalId == notification.rentalCode)) {
+      return true;
+    }
+
+    // If user is actively on the Active Rentals screen, their live activity
+    // stepper and rental cards already update in real time.
+    if (isRentalScreenActive) {
+      return true;
+    }
+
+    return false;
+  }
+}
 
 class RentalNotificationBell extends StatelessWidget {
   const RentalNotificationBell({super.key, this.color});
@@ -52,6 +82,7 @@ class _RentalNotificationHostState extends State<RentalNotificationHost>
     _opens?.cancel();
     _service = service;
     _arrivals = service.arrivals.listen((row) {
+      if (RentalNotificationSuppression.shouldSuppress(row)) return;
       final messenger = rentalMessengerKey.currentState;
       if (messenger == null) return;
       messenger
@@ -69,8 +100,10 @@ class _RentalNotificationHostState extends State<RentalNotificationHost>
                   overflow: TextOverflow.ellipsis),
             ),
           ]),
-          duration: const Duration(seconds: 4),
+          duration: const Duration(milliseconds: 2400),
           behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12)),
           dismissDirection: DismissDirection.horizontal,
           action: SnackBarAction(label: 'View', onPressed: () => _open(row.id)),
         ));

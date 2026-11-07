@@ -23,6 +23,8 @@ class RentalModel {
   final DateTime? returnedDate;
   final double rateFee;
   final double latePenalty;
+  final double overtimeRate;
+  final int overtimeUnitMinutes;
   final String paymentMethod; // "QR", "Cash"
   final bool paymentConfirmedByAdmin;
   final String
@@ -143,6 +145,8 @@ class RentalModel {
     this.returnedDate,
     required this.rateFee,
     this.latePenalty = 0.0,
+    this.overtimeRate = 0,
+    this.overtimeUnitMinutes = 60,
     required this.paymentMethod,
     this.paymentConfirmedByAdmin = false,
     required this.status,
@@ -182,6 +186,7 @@ class RentalModel {
           returnedDate != null ? Timestamp.fromDate(returnedDate!) : null,
       'rateFee': rateFee,
       'latePenalty': latePenalty,
+      'fee_breakdown': {'overtime_rate': overtimeRate, 'overtime_unit_minutes': overtimeUnitMinutes},
       'paymentMethod': paymentMethod,
       'paymentConfirmedByAdmin': paymentConfirmedByAdmin,
       'status': status,
@@ -262,6 +267,8 @@ class RentalModel {
       latePenalty: amount(map['late_penalty'] ??
           map['latePenalty'] ??
           (amount(fee['overtime_fee']) + amount(fee['penalty_amount']))),
+      overtimeRate: amount(fee['overtime_rate']),
+      overtimeUnitMinutes: (fee['overtime_unit_minutes'] as num?)?.toInt() ?? 60,
       paymentMethod:
           text(map['payment_method'] ?? map['paymentMethod'], 'Cash'),
       paymentConfirmedByAdmin: map['payment_confirmed_by_admin'] == true ||
@@ -360,6 +367,8 @@ class RentalModel {
       receivedAt: receivedAt,
       balanceDue: balanceDue,
       refundDue: refundDue,
+      overtimeRate: overtimeRate,
+      overtimeUnitMinutes: overtimeUnitMinutes,
       paymentStatus: paymentStatus,
       paymentProofStatus: paymentProofStatus ?? this.paymentProofStatus,
       paymentProofReference:
