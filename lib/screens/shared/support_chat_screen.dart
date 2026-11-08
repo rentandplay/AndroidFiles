@@ -720,6 +720,116 @@ class SupportChatScreen extends StatefulWidget {
   State<SupportChatScreen> createState() => _SupportChatScreenState();
 }
 
+class TypingIndicatorBubble extends StatefulWidget {
+  const TypingIndicatorBubble({
+    super.key,
+    required this.name,
+    required this.isDark,
+  });
+
+  final String name;
+  final bool isDark;
+
+  @override
+  State<TypingIndicatorBubble> createState() => _TypingIndicatorBubbleState();
+}
+
+class _TypingIndicatorBubbleState extends State<TypingIndicatorBubble>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  Widget _buildDot(int index) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final delay = index * 0.2;
+        final value = (_controller.value - delay) % 1.0;
+        final offset = (value < 0.5)
+            ? -5.0 * (1.0 - (value * 2 - 0.5).abs() * 2)
+            : 0.0;
+        return Transform.translate(
+          offset: Offset(0, offset < 0 ? offset : 0),
+          child: Container(
+            width: 6,
+            height: 6,
+            margin: const EdgeInsets.symmetric(horizontal: 2),
+            decoration: BoxDecoration(
+              color: AppTheme.brandOrange.withValues(alpha: 0.9),
+              shape: BoxShape.circle,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: widget.isDark ? const Color(0xFF1E2635) : Colors.white,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
+          ),
+          border: Border.all(
+            color: widget.isDark
+                ? const Color(0xFF2A374A)
+                : const Color(0xFFE2E8F0),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.04),
+              blurRadius: 4,
+              offset: const Offset(0, 1.5),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildDot(0),
+            _buildDot(1),
+            _buildDot(2),
+            const SizedBox(width: 8),
+            Text(
+              '${widget.name} is typing…',
+              style: TextStyle(
+                fontSize: 12,
+                color: widget.isDark
+                    ? const Color(0xFF94A3B8)
+                    : const Color(0xFF64748B),
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _SupportChatScreenState extends State<SupportChatScreen>
     with WidgetsBindingObserver {
   MobileApiService get api => widget.api ?? MobileApiService.instance;
@@ -732,6 +842,8 @@ class _SupportChatScreenState extends State<SupportChatScreen>
   String error = '';
   int last = 0, readThrough = 0;
   String? older;
+  Map<String, dynamic>? typing;
+  DateTime? lastTypingPing;
   bool busy = false, sending = false, loadingOlder = false, foreground = true;
 
   @override
@@ -745,6 +857,18 @@ class _SupportChatScreenState extends State<SupportChatScreen>
       draftTimer = Timer(const Duration(milliseconds: 300), () {
         draftStore.save(input.text, pending).catchError((_) {});
       });
+      if (input.text.trim().isNotEmpty) {
+        final now = DateTime.now();
+        if (lastTypingPing == null ||
+            now.difference(lastTypingPing!).inMilliseconds > 2500) {
+          lastTypingPing = now;
+          api.adminRequest(
+            '/chat/threads/${widget.threadId}/typing',
+            method: 'POST',
+            body: {'typing': true},
+          ).catchError((_) => <String, dynamic>{});
+        }
+      }
     });
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -814,6 +938,7 @@ class _SupportChatScreenState extends State<SupportChatScreen>
           scroll.position.maxScrollExtent - scroll.offset < 100;
       setState(() {
         thread = Map<String, dynamic>.from(result['thread'] as Map);
+        typing = result['typing'] as Map<String, dynamic>?;
         if (last == 0) older = result['next_cursor'] as String?;
         if (rows.isNotEmpty) last = rows.last['seq'] as int;
         merge(rows);
@@ -874,6 +999,11 @@ class _SupportChatScreenState extends State<SupportChatScreen>
         input.clear();
         draftStore.clear().catchError((_) {});
       });
+      api.adminRequest(
+        '/chat/threads/${widget.threadId}/typing',
+        method: 'POST',
+        body: {'typing': false},
+      ).catchError((_) => <String, dynamic>{});
       sync();
     } catch (problem) {
       if (mounted) {
@@ -1078,6 +1208,12 @@ class _SupportChatScreenState extends State<SupportChatScreen>
 
                             for (final row in messages)
                               _buildMessageBubble(row, isDark),
+                            if (typing != null && typing!['is_typing'] == true)
+                              TypingIndicatorBubble(
+                                name: typing!['name'] as String? ??
+                                    (widget.staff ? 'Customer' : 'Staff'),
+                                isDark: isDark,
+                              ),
                           ],
                         ),
                 ),
@@ -1141,15 +1277,62 @@ class _SupportChatScreenState extends State<SupportChatScreen>
               own ? CrossAxisAlignment.end : CrossAxisAlignment.start,
           children: [
             if (!own) ...[
-              Text(
-                row['sender_name'] as String? ?? 'Support',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 11,
-                  color: AppTheme.brandOrange,
-                ),
-              ),
-              const SizedBox(height: 3),
+              Builder(builder: (context) {
+                final isSenderStaff = row['sender_role'] == 'STAFF';
+                String displayName = row['sender_name'] as String? ??
+                    (isSenderStaff ? 'Support' : 'Customer');
+                if (isSenderStaff && !widget.staff) {
+                  final clean = displayName
+                      .replaceAll('(Staff)', '')
+                      .replaceAll('(you)', '')
+                      .trim();
+                  final first = clean.split(RegExp(r'\s+')).first;
+                  displayName = first.isNotEmpty ? first : 'Support';
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        displayName,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: isSenderStaff
+                              ? AppTheme.brandOrange
+                              : (isDark
+                                  ? const Color(0xFF93C5FD)
+                                  : const Color(0xFF2563EB)),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: (isSenderStaff
+                                  ? AppTheme.brandOrange
+                                  : Colors.blue)
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          isSenderStaff ? 'STAFF' : 'CUSTOMER',
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: isSenderStaff
+                                ? AppTheme.brandOrange
+                                : const Color(0xFF2563EB),
+                            letterSpacing: 0.4,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }),
             ],
             SelectableText(
               row['text'] as String? ?? '',
@@ -1194,16 +1377,28 @@ class _SupportChatScreenState extends State<SupportChatScreen>
     );
   }
 
+  Widget _buildQuickReplyChip(String label, String text, bool isDark) {
+    return ActionChip(
+      label: Text(label, style: const TextStyle(fontSize: 11)),
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      visualDensity: VisualDensity.compact,
+      backgroundColor:
+          isDark ? const Color(0xFF1E2635) : const Color(0xFFF1F5F9),
+      side: BorderSide(
+        color: isDark ? const Color(0xFF2E3D52) : const Color(0xFFE2E8F0),
+      ),
+      onPressed: () {
+        input.text = text;
+        input.selection =
+            TextSelection.fromPosition(TextPosition(offset: text.length));
+      },
+    );
+  }
+
   Widget _buildComposer(bool resolved, bool isDark, Color textPrimary) {
     final disabled = restoring || (widget.staff && resolved);
 
     return Container(
-      padding: EdgeInsets.fromLTRB(
-        12,
-        8,
-        12,
-        MediaQuery.paddingOf(context).bottom + 8,
-      ),
       decoration: BoxDecoration(
         color: isDark ? const Color(0xFF141B26) : Colors.white,
         border: Border(
@@ -1212,7 +1407,45 @@ class _SupportChatScreenState extends State<SupportChatScreen>
           ),
         ),
       ),
-      child: Row(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (widget.staff && !disabled)
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Row(
+                children: [
+                  _buildQuickReplyChip(
+                      '🪪 Accepted IDs',
+                      'Tumatanggap po kami ng National ID, Driver\'s License, Passport, UMID, Postal ID, o Valid School ID with enrollment proof.',
+                      isDark),
+                  const SizedBox(width: 6),
+                  _buildQuickReplyChip(
+                      '📋 Requirements',
+                      'Kailangan lamang po ng 1 Valid ID (Government o School ID), pirma sa agreement, at active contact info.',
+                      isDark),
+                  const SizedBox(width: 6),
+                  _buildQuickReplyChip(
+                      '⏰ Store Hours',
+                      'Bukas po kami araw-araw mula 8:00 AM hanggang 8:00 PM para sa pickup/return.',
+                      isDark),
+                  const SizedBox(width: 6),
+                  _buildQuickReplyChip(
+                      '📍 Pickup & Return',
+                      'Maaari ninyong i-pickup at i-return ang unit sa aming rental shop desk habang operating hours.',
+                      isDark),
+                ],
+              ),
+            ),
+          Padding(
+            padding: EdgeInsets.fromLTRB(
+              12,
+              widget.staff && !disabled ? 4 : 8,
+              12,
+              MediaQuery.paddingOf(context).bottom + 8,
+            ),
+            child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
@@ -1279,6 +1512,9 @@ class _SupportChatScreenState extends State<SupportChatScreen>
           ),
         ],
       ),
-    );
-  }
+    ),
+  ],
+),
+);
+}
 }

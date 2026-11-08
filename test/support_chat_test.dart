@@ -24,7 +24,7 @@ class ChatApi extends Fake implements MobileApiService {
       {String method = 'GET',
       Map<String, dynamic>? body,
       bool forceRefresh = false}) async {
-    if (path.endsWith('/read')) return {'thread': thread};
+    if (path.endsWith('/read') || path.endsWith('/typing')) return {'thread': thread, 'ok': true};
     if (method == 'POST') {
       requests.add(Map.from(body!));
       if (failOnce) {
