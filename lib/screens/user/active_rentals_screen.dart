@@ -13,6 +13,7 @@ import '../../models/item_model.dart';
 import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
+import '../../services/rental_offline_cache.dart';
 import '../shared/rental_extension_dialog.dart';
 import '../../widgets/rental_ui.dart';
 import '../../widgets/mobile_controls.dart';
@@ -41,6 +42,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   bool _appResumed = true;
   bool _isRouteOnTop = true;
   String? _eventUid;
+  DateTime? _cachedSavedAt;
   String _error = '';
   String _rentalFilter = 'All';
   String _rentalQuery = '';
@@ -82,6 +84,11 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     }
     final uid = context.read<AuthService>().currentUser?.uid;
     if (_eventUid != uid) {
+      if (_eventUid != null) {
+        _rentals = null;
+        _cachedSavedAt = null;
+        _error = '';
+      }
       _eventUid = uid;
       _syncRentalEvents();
       if (uid != null) _refreshRentals();
@@ -154,19 +161,36 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
       return;
     }
     _refreshing = true;
+    final uid = _eventUid;
     try {
       final next = await _api.listRentals();
-      if (mounted) {
+      unawaited(RentalOfflineCache.saveRentals(uid, next));
+      if (mounted && _eventUid == uid) {
         final previouslyReviewing = (_rentals ?? const <RentalModel>[]).where((row) => row.paymentProofStatus == 'PENDING_REVIEW').map((row) => row.rentalId).toSet();
         if (next.any((row) => previouslyReviewing.contains(row.rentalId) && (row.isAwaitingPickup || row.paymentProofStatus == 'VERIFIED'))) HapticFeedback.selectionClick();
         setState(() {
           _rentals = next;
+          _cachedSavedAt = null;
           _error = '';
         });
         _syncRentalClock();
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (_rentals == null && uid != null) {
+        final cached = await RentalOfflineCache.loadRentals(uid);
+        if (cached != null && mounted && _eventUid == uid) {
+          setState(() {
+            _rentals = cached.rentals;
+            _cachedSavedAt = cached.savedAt;
+            _error = '$error';
+          });
+          _syncRentalClock();
+        } else if (mounted) {
+          setState(() => _error = '$error');
+        }
+      } else if (mounted) {
+        setState(() => _error = '$error');
+      }
     } finally {
       _refreshing = false;
       if (_refreshAgain &&
@@ -411,13 +435,20 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                       children: [
                         if (_error.isNotEmpty) ...[
                           RentalNotice(
-                              isError: true,
+                              isError: _cachedSavedAt == null,
+                              icon: _cachedSavedAt != null
+                                  ? Icons.wifi_off_rounded
+                                  : Icons.info_outline,
                               title: _rentals == null
                                   ? 'Could not load rentals'
-                                  : 'Could not refresh rentals',
+                                  : _cachedSavedAt != null
+                                      ? 'Offline mode · Saved rentals'
+                                      : 'Could not refresh rentals',
                               message: _rentals == null
                                   ? _error
-                                  : 'Showing your last loaded records. Pull down to retry.',
+                                  : _cachedSavedAt != null
+                                      ? 'Showing your saved rental details from ${DateFormat('MMM d · h:mm a').format(_cachedSavedAt!)}. Pull down to reconnect.'
+                                      : 'Showing your last loaded records. Pull down to retry.',
                               action: TextButton(
                                   onPressed: _refreshRentals,
                                   child: const Text('Try again'))),

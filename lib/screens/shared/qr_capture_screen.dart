@@ -265,7 +265,10 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                 height: side);
             final widgetSize = Size(size.maxWidth, size.maxHeight);
 
-            return MobileScanner(
+            return Stack(
+              fit: StackFit.expand,
+              children: [
+                MobileScanner(
               controller: _controller,
               scanWindow: window,
               errorBuilder: (context, error, _) => Center(
@@ -401,6 +404,67 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                   }
                 }
               },
+            ),
+                ValueListenableBuilder<MobileScannerState>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) {
+                    if (!value.isRunning ||
+                        value.error != null ||
+                        value.torchState == TorchState.unavailable) {
+                      return const SizedBox.shrink();
+                    }
+                    final torchOn = value.torchState == TorchState.on;
+                    return Positioned(
+                      bottom: 14,
+                      left: 16,
+                      right: 16,
+                      child: Center(
+                        child: Semantics(
+                          toggled: torchOn,
+                          button: true,
+                          child: OutlinedButton.icon(
+                            key: const ValueKey('scanner-torch-pill'),
+                            onPressed: _done ? null : _camera.toggleTorch,
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(160, 42),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 10),
+                              backgroundColor: torchOn
+                                  ? const Color(0xFFF59E0B)
+                                  : Colors.black.withValues(alpha: 0.72),
+                              foregroundColor:
+                                  torchOn ? Colors.black : Colors.white,
+                              side: BorderSide(
+                                color: torchOn
+                                    ? const Color(0xFFFDE68A)
+                                    : Colors.white30,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                            ),
+                            icon: Icon(
+                              torchOn
+                                  ? Icons.flashlight_on_rounded
+                                  : Icons.flashlight_off_rounded,
+                              size: 18,
+                            ),
+                            label: Text(
+                              torchOn
+                                  ? 'Flashlight on · Tap to turn off'
+                                  : 'Low light? Tap for flashlight',
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
             );
           })),
           SafeArea(

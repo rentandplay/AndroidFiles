@@ -3,9 +3,43 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import '../../models/rental_model.dart';
+import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
+import '../../services/rental_offline_cache.dart';
 import '../../widgets/rental_ui.dart';
+
+String _resolveTicketCacheScope(BuildContext context, RentalModel rental) {
+  try {
+    final uid = Provider.of<AuthService>(context, listen: false).currentUser?.uid;
+    if (uid != null && uid.trim().isNotEmpty) return uid.trim();
+  } catch (_) {
+    // AuthService provider may be absent in isolated widget tests.
+  }
+  return rental.customerId.trim();
+}
+
+Future<Map<String, dynamic>> _loadRentalTicketWithOfflineCache({
+  required MobileApiService api,
+  required RentalModel rental,
+  required String scope,
+}) async {
+  try {
+    final live = await api.rentalTicket(rental.rentalId);
+    await RentalOfflineCache.saveTicket(scope, rental.rentalId, live);
+    return live;
+  } catch (_) {
+    final alreadyHandedOff = rental.isActive ||
+        rental.isAwaitingInspection ||
+        rental.hasPendingReturnRequest;
+    if (!alreadyHandedOff) {
+      final cached = await RentalOfflineCache.loadTicket(scope, rental.rentalId);
+      if (cached != null) return cached;
+    }
+    rethrow;
+  }
+}
 
 class TransactionTicketDialog {
   static Future<void> show(BuildContext context, RentalModel rental) =>
@@ -25,15 +59,24 @@ class BookingTicket extends StatefulWidget {
 
 class _BookingTicketState extends State<BookingTicket> {
   late Future<Map<String, dynamic>> _ticket;
+  bool _initialized = false;
+
   @override
-  void initState() {
-    super.initState();
-    _load();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      _load();
+    }
   }
 
   void _load() {
-    _ticket = (widget.api ?? MobileApiService.instance)
-        .rentalTicket(widget.rental.rentalId);
+    final scope = _resolveTicketCacheScope(context, widget.rental);
+    _ticket = _loadRentalTicketWithOfflineCache(
+      api: widget.api ?? MobileApiService.instance,
+      rental: widget.rental,
+      scope: scope,
+    );
   }
 
   void _retry() => setState(_load);
@@ -71,6 +114,7 @@ class _BookingTicketState extends State<BookingTicket> {
                       child: Center(child: CircularProgressIndicator()));
                 }
                 final data = snapshot.data!;
+                final isOfflineCached = data['offline_cached'] == true;
                 final status = data['status']?.toString() ??
                     widget.rental.normalizedStatus;
                 final expiry = DateTime.tryParse(
@@ -83,6 +127,20 @@ class _BookingTicketState extends State<BookingTicket> {
                     data['rental_code']?.toString() ?? widget.rental.rentalCode;
                 return SingleChildScrollView(
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  if (isOfflineCached) ...[
+                    RentalNotice(
+                      icon: Icons.wifi_off_rounded,
+                      title: 'Offline saved QR pass',
+                      message:
+                          'Showing your last saved handoff QR while offline. Staff can still scan this QR or verify your rental code.',
+                      action: TextButton.icon(
+                        onPressed: _retry,
+                        icon: const Icon(Icons.refresh, size: 16),
+                        label: const Text('Try again'),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   Text(widget.rental.itemName,
                       textAlign: TextAlign.center,
                       style: const TextStyle(
@@ -170,11 +228,15 @@ class EmbeddedRentalHandoffQr extends StatefulWidget {
 
 class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
   late Future<Map<String, dynamic>> _ticketFuture;
+  bool _initialized = false;
 
   @override
-  void initState() {
-    super.initState();
-    _load();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_initialized) {
+      _initialized = true;
+      _load();
+    }
   }
 
   @override
@@ -187,8 +249,12 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
   }
 
   void _load() {
-    _ticketFuture = (widget.api ?? MobileApiService.instance)
-        .rentalTicket(widget.rental.rentalId);
+    final scope = _resolveTicketCacheScope(context, widget.rental);
+    _ticketFuture = _loadRentalTicketWithOfflineCache(
+      api: widget.api ?? MobileApiService.instance,
+      rental: widget.rental,
+      scope: scope,
+    );
   }
 
   @override
@@ -245,6 +311,7 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
           );
         }
         final data = snapshot.data!;
+        final isOfflineCached = data['offline_cached'] == true;
         final status =
             data['status']?.toString() ?? widget.rental.normalizedStatus;
         final expiry =
@@ -271,11 +338,17 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(Icons.qr_code_2_rounded,
-                      size: 18, color: scheme.primary),
+                  Icon(
+                      isOfflineCached
+                          ? Icons.wifi_off_rounded
+                          : Icons.qr_code_2_rounded,
+                      size: 18,
+                      color: scheme.primary),
                   const SizedBox(width: 6),
                   Text(
-                    'LIVE HANDOVER QR & PIN',
+                    isOfflineCached
+                        ? 'SAVED OFFLINE HANDOVER QR'
+                        : 'LIVE HANDOVER QR & PIN',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
@@ -354,13 +427,23 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
               ),
               const SizedBox(height: 6),
               Text(
-                widget.rental.isRentAndPlayPickup
-                    ? 'Show this QR or 6-digit PIN at the counter to start your rental timer.'
-                    : 'Show this QR or 6-digit PIN to the delivery rider at ${widget.rental.deliveryLocation}. Timer starts upon scan.',
+                isOfflineCached
+                    ? 'Saved offline copy · Rolling PIN requires signal, but staff can scan this QR or verify your rental code.'
+                    : widget.rental.isRentAndPlayPickup
+                        ? 'Show this QR or 6-digit PIN at the counter to start your rental timer.'
+                        : 'Show this QR or 6-digit PIN to the delivery rider at ${widget.rental.deliveryLocation}. Timer starts upon scan.',
                 textAlign: TextAlign.center,
                 style:
                     TextStyle(fontSize: 11, color: scheme.onSurfaceVariant),
               ),
+              if (isOfflineCached) ...[
+                const SizedBox(height: 6),
+                TextButton.icon(
+                  onPressed: () => setState(_load),
+                  icon: const Icon(Icons.refresh, size: 15),
+                  label: const Text('Retry live'),
+                ),
+              ],
             ],
           ),
         );

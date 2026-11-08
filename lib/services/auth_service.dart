@@ -75,8 +75,16 @@ class AuthService extends ChangeNotifier {
     final address = email.toLowerCase();
     final credential = await _auth.signInWithEmailAndPassword(
         email: address, password: password);
-    final result = await _api.profile(method: 'POST', body: {});
     final user = credential.user ?? currentUser;
+    final name = (user?.displayName ?? '').trim();
+    final photoUrl = (user?.photoURL ?? '').trim();
+    final phone = (user?.phoneNumber ?? '').trim();
+    final profileBody = <String, dynamic>{
+      if (name.isNotEmpty) 'name': name,
+      if (photoUrl.isNotEmpty) 'profileImageUrl': photoUrl,
+      if (phone.isNotEmpty) 'phone': phone,
+    };
+    final result = await _api.profile(method: 'POST', body: profileBody);
     final existingMap = result['user'] is Map
         ? Map<String, dynamic>.from(result['user'] as Map)
         : const <String, dynamic>{};
@@ -140,8 +148,16 @@ class AuthService extends ChangeNotifier {
         await _auth.signInWithProvider(GoogleAuthProvider());
       }
     }
-    var result = await _api.profile(method: 'POST', body: {});
     final user = currentUser;
+    final name = (user?.displayName ?? '').trim();
+    final photoUrl = (user?.photoURL ?? '').trim();
+    final phone = (user?.phoneNumber ?? '').trim();
+    final profileBody = <String, dynamic>{
+      if (name.isNotEmpty) 'name': name,
+      if (photoUrl.isNotEmpty) 'profileImageUrl': photoUrl,
+      if (phone.isNotEmpty) 'phone': phone,
+    };
+    var result = await _api.profile(method: 'POST', body: profileBody);
     final photoUrl = user?.photoURL?.trim() ?? '';
     final existingMap = result['user'] is Map
         ? Map<String, dynamic>.from(result['user'] as Map)

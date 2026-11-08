@@ -6,6 +6,7 @@ import '../shared/rental_extension_dialog.dart';
 import '../shared/rental_receipt_dialog.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
@@ -2333,14 +2334,14 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                         Padding(
                                             padding: const EdgeInsets.symmetric(
                                                 vertical: 12),
-                                            child: Image.memory(
-                                                base64Decode(_text(
-                                                        _paymentProof![
-                                                            'image_data_url'])
-                                                    .split(',')
-                                                    .last),
-                                                fit: BoxFit.contain,
-                                                height: 300)),
+                                            child: PaymentProofPreview(
+                                                imageDataUrl: _text(
+                                                    _paymentProof![
+                                                        'image_data_url']),
+                                                reference: _text(_paymentProof![
+                                                    'reference']),
+                                                expectedTotal: _money(
+                                                    _number(_row['rental_fee'])))),
                                       _check(
                                           'Screenshot shows a successful transfer for the exact rental total',
                                           _paymentVerified,
@@ -2666,6 +2667,181 @@ class _Esp32TerminalHandoffDialogState
           label: Text(_checking ? 'Checking…' : 'Check confirmation'),
         ),
       ],
+    );
+  }
+}
+
+class PaymentProofPreview extends StatelessWidget {
+  const PaymentProofPreview({
+    super.key,
+    required this.imageDataUrl,
+    this.reference = '',
+    this.expectedTotal = '',
+  });
+
+  final String imageDataUrl;
+  final String reference;
+  final String expectedTotal;
+
+  Uint8List? _decodeBytes() {
+    try {
+      final encoded = imageDataUrl.split(',').last.trim();
+      if (encoded.isEmpty) return null;
+      return base64Decode(encoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _openFullScreen(BuildContext context, Uint8List bytes) =>
+      showDialog<void>(
+        context: context,
+        builder: (dialogContext) => Dialog.fullscreen(
+          backgroundColor: Colors.black,
+          child: SafeArea(
+            child: Column(
+              children: [
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Payment receipt preview',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (reference.isNotEmpty ||
+                                expectedTotal.isNotEmpty)
+                              Text(
+                                [
+                                  if (expectedTotal.isNotEmpty)
+                                    'Expected $expectedTotal',
+                                  if (reference.isNotEmpty) 'Ref: $reference',
+                                ].join(' · '),
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Close preview',
+                        onPressed: () => Navigator.pop(dialogContext),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: InteractiveViewer(
+                    key: const ValueKey('payment-proof-interactive-viewer'),
+                    minScale: 1.0,
+                    maxScale: 5.0,
+                    child: Center(
+                      child: Image.memory(
+                        bytes,
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => const Text(
+                          'Receipt image could not be rendered.',
+                          style: TextStyle(color: Colors.white70),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  child: Text(
+                    'Pinch or drag to inspect transfer reference and amount',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = _decodeBytes();
+    final scheme = Theme.of(context).colorScheme;
+    if (bytes == null) {
+      return Text(
+        'Payment screenshot could not be decoded.',
+        style: TextStyle(color: scheme.error),
+      );
+    }
+    return Semantics(
+      button: true,
+      label: 'Inspect payment screenshot full screen',
+      child: Material(
+        color: scheme.surfaceContainerHighest.withValues(alpha: .35),
+        borderRadius: BorderRadius.circular(14),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          key: const ValueKey('payment-proof-preview-tap'),
+          onTap: () => _openFullScreen(context, bytes),
+          child: Stack(
+            alignment: Alignment.bottomRight,
+            children: [
+              SizedBox(
+                width: double.infinity,
+                height: 300,
+                child: Image.memory(
+                  bytes,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => Center(
+                    child: Text(
+                      'Receipt image could not be rendered.',
+                      style: TextStyle(color: scheme.error),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.72),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.zoom_in_rounded,
+                            size: 16, color: Colors.white),
+                        SizedBox(width: 4),
+                        Text(
+                          'Tap to zoom',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

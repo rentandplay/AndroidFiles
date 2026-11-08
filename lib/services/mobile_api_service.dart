@@ -144,6 +144,8 @@ class MobileApiService {
 
       if (kDebugMode) ...[
 
+        'http://192.168.8.102:3000/api',
+
         'http://127.0.0.1:3000/api',
 
         'http://192.168.1.7:3000/api',
@@ -153,6 +155,8 @@ class MobileApiService {
       ],
 
       'https://rent-and-play.onrender.com/api',
+
+      'http://192.168.8.102:3000/api',
 
       'http://127.0.0.1:3000/api',
 

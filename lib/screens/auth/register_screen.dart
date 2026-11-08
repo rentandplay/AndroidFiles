@@ -63,6 +63,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   void initState() {
     super.initState();
     _emailController.addListener(_handleEmailChange);
+    _passwordController.addListener(_handlePasswordChange);
   }
 
   @override
@@ -86,37 +87,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
   }
 
-  String? _validateName(String? value, String label) {
-    final name = (value ?? '').trim();
-    if (name.isEmpty) return 'Please enter your $label.';
-    if (name.length < 2) return '$label must be at least 2 letters.';
-    if (name.length > 60) return '$label must be 60 characters or fewer.';
-    if (!RegExp(r"^[\p{L}\p{M}\s\-']+$", unicode: true).hasMatch(name)) {
-      return 'Use letters, spaces, or hyphens only.';
+  void _handlePasswordChange() {
+    if (_confirmPasswordController.text.isNotEmpty && mounted) {
+      setState(() {});
     }
-    return null;
+  }
+
+  String? _validateName(String? value, String label) {
+    return AccountValidation.name(value, label: label.toLowerCase(), max: 60);
   }
 
   String? _validateEmail(String? value) {
-    final email = (value ?? '').trim().toLowerCase();
-    if (email.isEmpty) return 'Please enter your email address.';
-    if (email.contains(' ')) return 'Email cannot contain spaces.';
-    if (!RegExp(
-      r"^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$",
-    ).hasMatch(email)) {
-      return 'Please enter a valid email address.';
-    }
-    return null;
+    return AccountValidation.email(value);
   }
 
   String? _validatePhone(String? value) {
-    final phone = (value ?? '').trim();
-    if (phone.isEmpty) return 'Please enter your phone number.';
-    final clean = phone.replaceAll(RegExp(r'[\s().-]'), '');
-    if (!RegExp(r'^(?:\+?63|0)?9\d{9}$').hasMatch(clean)) {
-      return 'Enter a valid Philippine number (e.g. 0912 345 6789).';
-    }
-    return null;
+    return AccountValidation.phone(value);
   }
 
   String _normalizedPhone(String value) {
@@ -130,21 +116,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   String? _validatePassword(String? value) {
-    final pass = value ?? '';
-    if (pass.isEmpty) return 'Please enter a password.';
-    if (pass.length < 6) return 'Password must be at least 6 characters.';
-    if (pass.length > 64) return 'Password must be 64 characters or fewer.';
-    return null;
+    return AccountValidation.password(value);
   }
 
   String? _validateConfirmPassword(String? value) {
-    if (value == null || value.isEmpty) {
-      return 'Please confirm your password.';
-    }
-    if (value != _passwordController.text) {
-      return 'Passwords do not match.';
-    }
-    return null;
+    return AccountValidation.passwordMatch(_passwordController.text, value);
   }
 
   String? _validateCode(String? value) {
@@ -175,7 +151,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _sendVerificationCode() async {
-    final emailError = _validateEmail(_currentEmail);
+    final emailError = _validateEmail(_emailController.text);
     if (emailError != null) {
       _showMessage(emailError, isError: true);
       return;
@@ -372,7 +348,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         case 'email-already-in-use':
           return 'This email is already registered. Please log in instead.';
         case 'weak-password':
-          return 'Password must be at least 6 characters.';
+          return AccountValidation.passwordHelp;
         case 'invalid-email':
           return 'Please enter a valid email address.';
         case 'operation-not-allowed':
@@ -788,8 +764,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 TextFormField(
                                   controller: _firstNameController,
                                   enabled: !_isLoading,
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
                                   textCapitalization: TextCapitalization.words,
                                   textInputAction: TextInputAction.next,
+                                  autofillHints: const [
+                                    AutofillHints.givenName
+                                  ],
+                                  inputFormatters: [
+                                    LengthLimitingTextInputFormatter(60),
+                                  ],
                                   cursorColor: _formAccent,
                                   style: const TextStyle(
                                     fontSize: 14,
@@ -807,8 +791,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 TextFormField(
                                   controller: _lastNameController,
                                   enabled: !_isLoading,
+                                  autovalidateMode:
+                                      AutovalidateMode.onUserInteraction,
                                   textCapitalization: TextCapitalization.words,
                                   textInputAction: TextInputAction.next,
+                                  autofillHints: const [
+                                    AutofillHints.familyName
+                                  ],
+                                  inputFormatters: [
+                                    LengthLimitingTextInputFormatter(60),
+                                  ],
                                   cursorColor: _formAccent,
                                   style: const TextStyle(
                                     fontSize: 14,
@@ -834,10 +826,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           TextFormField(
                                             controller: _firstNameController,
                                             enabled: !_isLoading,
+                                            autovalidateMode: AutovalidateMode
+                                                .onUserInteraction,
                                             textCapitalization:
                                                 TextCapitalization.words,
                                             textInputAction:
                                                 TextInputAction.next,
+                                            autofillHints: const [
+                                              AutofillHints.givenName
+                                            ],
+                                            inputFormatters: [
+                                              LengthLimitingTextInputFormatter(
+                                                  60),
+                                            ],
                                             cursorColor: _formAccent,
                                             style: const TextStyle(
                                               fontSize: 14,
@@ -863,10 +864,19 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           TextFormField(
                                             controller: _lastNameController,
                                             enabled: !_isLoading,
+                                            autovalidateMode: AutovalidateMode
+                                                .onUserInteraction,
                                             textCapitalization:
                                                 TextCapitalization.words,
                                             textInputAction:
                                                 TextInputAction.next,
+                                            autofillHints: const [
+                                              AutofillHints.familyName
+                                            ],
+                                            inputFormatters: [
+                                              LengthLimitingTextInputFormatter(
+                                                  60),
+                                            ],
                                             cursorColor: _formAccent,
                                             style: const TextStyle(
                                               fontSize: 14,
@@ -892,8 +902,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               TextFormField(
                                 controller: _emailController,
                                 enabled: !_isLoading,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
                                 keyboardType: TextInputType.emailAddress,
                                 textInputAction: TextInputAction.next,
+                                autofillHints: const [AutofillHints.email],
+                                autocorrect: false,
+                                enableSuggestions: false,
                                 cursorColor: _formAccent,
                                 inputFormatters: [
                                   const LowercaseEmailFormatter(),
@@ -1132,8 +1147,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               TextFormField(
                                 controller: _phoneController,
                                 enabled: !_isLoading,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
                                 keyboardType: TextInputType.phone,
                                 textInputAction: TextInputAction.next,
+                                autofillHints: const [
+                                  AutofillHints.telephoneNumber
+                                ],
                                 cursorColor: _formAccent,
                                 inputFormatters: [
                                   FilteringTextInputFormatter.allow(
@@ -1153,23 +1173,28 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ),
                               const SizedBox(height: 14),
 
-                              // Password Field (Clean & Secured: 6+ characters)
+                              // Password Field
                               _fieldLabel('PASSWORD'),
                               TextFormField(
                                 controller: _passwordController,
                                 enabled: !_isLoading,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
                                 obscureText: _obscurePassword,
                                 textInputAction: TextInputAction.next,
+                                autofillHints: const [
+                                  AutofillHints.newPassword
+                                ],
                                 cursorColor: _formAccent,
                                 inputFormatters: [
-                                  LengthLimitingTextInputFormatter(64),
+                                  LengthLimitingTextInputFormatter(128),
                                 ],
                                 style: const TextStyle(
                                   fontSize: 14,
                                   color: Colors.black87,
                                 ),
                                 decoration: _inputDecoration(
-                                  hintText: 'At least 6 characters',
+                                  hintText: '8+ chars, 1 uppercase & 1 number',
                                   prefixIcon: Icons.lock_outline,
                                   suffixIcon: IconButton(
                                     tooltip: _obscurePassword
@@ -1198,11 +1223,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               TextFormField(
                                 controller: _confirmPasswordController,
                                 enabled: !_isLoading,
+                                autovalidateMode:
+                                    AutovalidateMode.onUserInteraction,
                                 obscureText: _obscureConfirmPassword,
                                 textInputAction: TextInputAction.done,
+                                autofillHints: const [
+                                  AutofillHints.newPassword
+                                ],
                                 cursorColor: _formAccent,
                                 inputFormatters: [
-                                  LengthLimitingTextInputFormatter(64),
+                                  LengthLimitingTextInputFormatter(128),
                                 ],
                                 onFieldSubmitted: (_) =>
                                     FocusScope.of(context).unfocus(),
