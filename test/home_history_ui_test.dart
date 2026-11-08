@@ -20,6 +20,7 @@ import 'package:rent_and_play_app/services/auth_service.dart';
 import 'package:rent_and_play_app/services/mobile_api_service.dart';
 import 'package:rent_and_play_app/theme/app_theme.dart';
 import 'package:rent_and_play_app/widgets/home_discovery.dart';
+import 'package:rent_and_play_app/widgets/home_rental_pager.dart';
 import 'package:rent_and_play_app/widgets/liquid_glass.dart';
 import 'package:rent_and_play_app/widgets/mobile_controls.dart';
 import 'package:rent_and_play_app/screens/user/active_rentals_screen.dart';
@@ -70,17 +71,21 @@ class _HomeApi extends MobileApiService {
 }
 
 RentalModel _rental(String id, String name,
-        {double due = 0, double refund = 0, String status = 'COMPLETED'}) =>
+        {double due = 0,
+        double refund = 0,
+        String status = 'COMPLETED',
+        String? itemId,
+        DateTime? dueAt}) =>
     RentalModel(
       rentalId: id,
       rentalCode: 'R-000$id',
-      itemId: id,
+      itemId: itemId ?? id,
       itemName: name,
       customerId: 'customer',
       customerName: 'Jhon Saberon',
       terminalId: '',
       startDate: DateTime.utc(2026, 10, 10, 15, 3),
-      dueDate: DateTime.utc(2026, 10, 11, 3, 3),
+      dueDate: dueAt ?? DateTime.utc(2026, 10, 11, 3, 3),
       returnedDate: DateTime.utc(2026, 10, 11, 3),
       rateFee: 50,
       paymentMethod: 'CASH',
@@ -93,15 +98,6 @@ RentalModel _rental(String id, String name,
       balanceDue: due,
       refundDue: refund,
     );
-
-const _destinations = [
-  NavigationDestination(icon: Icon(Icons.home_rounded), label: 'Home'),
-  NavigationDestination(icon: Icon(Icons.storefront_outlined), label: 'Browse'),
-  NavigationDestination(
-      icon: Icon(Icons.shopping_bag_outlined), label: 'Rentals'),
-  NavigationDestination(icon: Icon(Icons.history_rounded), label: 'History'),
-  NavigationDestination(icon: Icon(Icons.person_outline), label: 'Profile'),
-];
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -126,7 +122,7 @@ void main() {
     }
   });
 
-  Widget _buildTestDock(BuildContext context, int selectedIndex) {
+  Widget buildTestDock(BuildContext context, int selectedIndex) {
     const tabs = [
       LiquidGlassTab(
         label: 'Home',
@@ -159,11 +155,12 @@ void main() {
       top: false,
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 0, 14, 10),
-        child: LiquidGlassBottomNavBar(
+        child: LiquidGlassScope(
+            child: LiquidGlassBottomNavBar(
           selectedIndex: selectedIndex,
           tabs: tabs,
           onTabSelected: (_) {},
-        ),
+        )),
       ),
     );
   }
@@ -213,7 +210,7 @@ void main() {
           builder: (context, child) => MediaQuery(
             data: MediaQuery.of(context)
                 .copyWith(textScaler: TextScaler.linear(scale)),
-            child: child!,
+            child: LiquidGlassScope(child: child!),
           ),
           home: Consumer<AuthService>(
               builder: (context, service, _) => Scaffold(
@@ -221,7 +218,7 @@ void main() {
                     body: screen,
                     bottomNavigationBar: service.currentUser == null
                         ? null
-                        : _buildTestDock(
+                        : buildTestDock(
                             context,
                             history
                                 ? 3
@@ -335,6 +332,80 @@ void main() {
     await reveal(tester, find.text('How it works'));
     await save(tester, dark, 'home-dark-large-text');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Home keeps every active rental in one vertical swipeable surface',
+      (tester) async {
+    final catalog = ItemModel.getInitialCatalog();
+    final dueAt = DateTime.now().subtract(const Duration(days: 1, hours: 5));
+    final api = _HomeApi()
+      ..rentals = [
+        _rental('1', 'Nintendo Switch',
+            status: 'ACTIVE',
+            dueAt: dueAt,
+            itemId: catalog
+                .firstWhere((item) => item.name == 'Nintendo Switch')
+                .id),
+        _rental('2', 'Deck of Cards',
+            status: 'ACTIVE',
+            dueAt: dueAt,
+            itemId:
+                catalog.firstWhere((item) => item.name == 'Deck of Cards').id),
+        _rental('3', 'Jenga',
+            status: 'ACTIVE',
+            dueAt: dueAt,
+            itemId: catalog.firstWhere((item) => item.name == 'Jenga').id),
+      ];
+    api.items.sort((a, b) => (a['name'] == 'Badminton Set' ? 0 : 1)
+        .compareTo(b['name'] == 'Badminton Set' ? 0 : 1));
+    final screen = HomeScreen(
+        api: api,
+        onBrowse: () {},
+        onViewRentals: () {},
+        onItemSelected: (_) {});
+    final capture = await render(tester, screen);
+    await save(tester, capture, 'home-clear-glass-light-top');
+    final pager = find.byType(HomeRentalPager);
+    await reveal(tester, pager);
+    await Scrollable.ensureVisible(tester.element(pager), alignment: .3);
+    await tester.pumpAndSettle();
+    expect(find.descendant(of: pager, matching: find.text('View all')),
+        findsNothing);
+    expect(find.text('1 / 3'), findsOneWidget);
+    expect(find.text('Swipe to see more'), findsNothing);
+    await save(tester, capture, 'home-clear-glass-light-rentals');
+    final pages = find.byKey(const ValueKey('home-rental-pages'));
+    await tester.drag(pages, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+    await tester.drag(pages, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    expect(find.text('3 / 3'), findsOneWidget);
+    expect(find.text('Jenga').hitTestable(), findsOneWidget);
+    await tester.drag(pages, const Offset(0, 180));
+    await tester.pumpAndSettle();
+    expect(find.text('2 / 3'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    final dark = await render(tester, screen, dark: true);
+    await save(tester, dark, 'home-clear-glass-dark-top');
+    await reveal(tester, pager);
+    await Scrollable.ensureVisible(tester.element(pager), alignment: .25);
+    await tester.pumpAndSettle();
+    await save(tester, dark, 'home-clear-glass-dark-rentals');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+
+    final largeText =
+        await render(tester, screen, dark: true, width: 320, scale: 1.4);
+    await reveal(tester, pager);
+    await Scrollable.ensureVisible(tester.element(pager), alignment: .25);
+    await tester.pumpAndSettle();
+    await save(tester, largeText, 'home-clear-glass-dark-large-text-rentals');
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
   });
 
   testWidgets(

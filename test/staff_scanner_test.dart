@@ -11,6 +11,7 @@ import 'package:mobile_scanner/src/objects/start_options.dart';
 import 'package:rent_and_play_app/screens/shared/qr_capture_screen.dart';
 import 'package:rent_and_play_app/screens/admin/rental_admin_view.dart';
 import 'package:rent_and_play_app/services/mobile_api_service.dart';
+import 'package:rent_and_play_app/models/staff_scan.dart';
 import 'widget_test.dart' show SignedOutAuth;
 
 class CameraPlatform extends MobileScannerPlatform {
@@ -83,6 +84,7 @@ void main() {
     FirebaseAuthPlatform.instance = SignedOutAuth();
   });
   setUp(() {
+    StaffScanSession.lastMode = StaffScanMode.rental;
     original = MobileScannerPlatform.instance;
     camera = CameraPlatform();
     MobileScannerPlatform.instance = camera;
@@ -107,6 +109,27 @@ void main() {
                       onResult?.call(result);
                     },
                     child: const Text('Open scanner'))))));
+    await tester.tap(find.text('Open scanner'));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> openModes(WidgetTester tester,
+      {StaffScanMode? mode, void Function(StaffScanResult?)? onResult}) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpWidget(MaterialApp(
+        home: Builder(
+            builder: (context) => Scaffold(
+                  body: TextButton(
+                      onPressed: () async {
+                        final result = await Navigator.push<StaffScanResult>(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    QrCaptureScreen.staff(initialMode: mode)));
+                        onResult?.call(result);
+                      },
+                      child: const Text('Open scanner')),
+                ))));
     await tester.tap(find.text('Open scanner'));
     await tester.pumpAndSettle();
   }
@@ -156,6 +179,204 @@ void main() {
     await close(tester);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+      'mode switch keeps the same camera and captures the selected lookup kind once',
+      (tester) async {
+    final results = <StaffScanResult?>[];
+    await openModes(tester, onResult: results.add);
+    expect(camera.starts, 1);
+    await tester.tap(find.byKey(const ValueKey('scan-mode-equipment')));
+    await tester.pumpAndSettle();
+    expect(camera.starts, 1);
+    expect(camera.stops, 0);
+    expect(find.text(StaffScanMode.equipment.instruction), findsOneWidget);
+    camera.scan('EQUIP-017');
+    camera.scan('EQUIP-017');
+    await tester.pumpAndSettle();
+    expect(results, hasLength(1));
+    expect(results.single!.mode, StaffScanMode.equipment);
+    expect(results.single!.code, 'EQUIP-017');
+    expect(results.single!.manual, isFalse);
+    expect(StaffScanSession.lastMode, StaffScanMode.equipment);
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'manual entry pauses detection, validates input and returns lookup-only evidence',
+      (tester) async {
+    StaffScanResult? result;
+    await openModes(tester,
+        mode: StaffScanMode.equipment, onResult: (value) => result = value);
+    await tester.tap(find.text('Enter code instead'));
+    await tester.pumpAndSettle();
+    expect(camera.stops, 1);
+    camera.scan('ignored-camera-frame');
+    await tester.pumpAndSettle();
+    expect(find.text('Find equipment'), findsOneWidget);
+    await tester.tap(find.text('Find'));
+    await tester.pumpAndSettle();
+    expect(find.text('Enter the printed code.'), findsOneWidget);
+    await tester.enterText(find.byType(TextFormField), '  EQUIP-017  ');
+    await tester.tap(find.text('Find'));
+    await tester.pumpAndSettle();
+    expect(result!.manual, isTrue);
+    expect(result!.mode, StaffScanMode.equipment);
+    expect(result!.code, 'EQUIP-017');
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'cancelling manual entry resumes the camera only in the foreground',
+      (tester) async {
+    await openModes(tester);
+    await tester.tap(find.text('Enter code instead'));
+    await tester.pumpAndSettle();
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(camera.starts, 1);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pumpAndSettle();
+    expect(camera.starts, 2);
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'guided transaction scanning has no mode switch and still returns a raw code',
+      (tester) async {
+    String? result;
+    StaffScanSession.lastMode = StaffScanMode.equipment;
+    await open(tester, onResult: (value) => result = value);
+    expect(find.byKey(const ValueKey('scan-mode-equipment')), findsNothing);
+    camera.scan('customer-qr');
+    await tester.pumpAndSettle();
+    expect(result, 'customer-qr');
+    expect(StaffScanSession.lastMode, StaffScanMode.equipment);
+    await close(tester);
+  });
+
+  testWidgets('switching from rental to equipment routes by the captured mode',
+      (tester) async {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    final api = ScanApi({
+      'id': 'rental-one',
+      'rental_code': 'R-0042',
+      'item_name': 'Bicycle',
+      'item_code': 'EQUIP-017',
+      'status': 'ACTIVE'
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: RentalAdminView(
+      page: 'Rentals',
+      workspace: const {'transactions': []},
+      onChanged: () async {},
+      initialScanKind: 'BOOKING',
+      api: api,
+    ))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('scan-mode-equipment')));
+    await tester.pumpAndSettle();
+    camera.scan('equipment-exact-qr');
+    await tester.pumpAndSettle();
+    expect(api.calls.single['kind'], 'INVENTORY');
+    final action = tester
+        .widget<RentalAdminActionScreen>(find.byType(RentalAdminActionScreen));
+    expect(action.action, 'receipt');
+    expect(action.scannedCode, 'equipment-exact-qr');
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'a manual scanner lookup opens details without pre-verifying a return',
+      (tester) async {
+    final api = ScanApi({
+      'id': 'rental-one',
+      'rental_code': 'R-0042',
+      'item_name': 'Bicycle',
+      'item_code': 'EQUIP-017',
+      'status': 'ACTIVE'
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: RentalAdminView(
+      page: 'Returns',
+      workspace: const {'transactions': []},
+      onChanged: () async {},
+      initialCapture: const StaffScanResult(
+          code: 'EQUIP-017', mode: StaffScanMode.equipment, manual: true),
+      api: api,
+    ))));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrCaptureScreen), findsNothing);
+    expect(find.byType(RentalAdminActionScreen), findsNothing);
+    expect(api.calls, hasLength(1));
+    expect(api.calls.single['path'], '/rentals/lookup');
+    expect(find.text('Bicycle'), findsOneWidget);
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'a captured QR from the main tab resolves once without opening another camera',
+      (tester) async {
+    final api = ScanApi({
+      'id': 'rental-one',
+      'rental_code': 'R-0042',
+      'item_name': 'Bicycle',
+      'status': 'ACTIVE'
+    });
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: RentalAdminView(
+      page: 'Returns',
+      workspace: const {'transactions': []},
+      onChanged: () async {},
+      initialCapture: const StaffScanResult(
+          code: 'exact-equipment-qr', mode: StaffScanMode.equipment),
+      api: api,
+    ))));
+    await tester.pumpAndSettle();
+    expect(camera.starts, 0);
+    expect(api.calls, hasLength(1));
+    expect(api.calls.single['kind'], 'INVENTORY');
+    expect(
+        tester
+            .widget<RentalAdminActionScreen>(
+                find.byType(RentalAdminActionScreen))
+            .scannedCode,
+        'exact-equipment-qr');
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'staff manual lookup remains available when camera permission is denied',
+      (tester) async {
+    camera.denied = true;
+    StaffScanResult? result;
+    await openModes(tester, onResult: (value) => result = value);
+    expect(find.text('Camera access is needed'), findsOneWidget);
+    await tester.tap(find.text('Enter code instead'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextFormField), 'R-0042');
+    await tester.tap(find.text('Find'));
+    await tester.pumpAndSettle();
+    expect(result!.manual, isTrue);
+    expect(result!.code, 'R-0042');
+    await close(tester);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets(
       'QR codes outside the viewfinder window are ignored until placed inside the window',
       (tester) async {
@@ -167,7 +388,12 @@ void main() {
       barcodes: [
         Barcode(
           rawValue: 'outside-code',
-          corners: [Offset(10, 10), Offset(30, 10), Offset(30, 30), Offset(10, 30)],
+          corners: [
+            Offset(10, 10),
+            Offset(30, 10),
+            Offset(30, 30),
+            Offset(10, 30)
+          ],
         ),
       ],
     ));
@@ -181,7 +407,12 @@ void main() {
       barcodes: [
         Barcode(
           rawValue: 'inside-code',
-          corners: [Offset(230, 310), Offset(250, 310), Offset(250, 330), Offset(230, 330)],
+          corners: [
+            Offset(230, 310),
+            Offset(250, 310),
+            Offset(250, 330),
+            Offset(230, 330)
+          ],
         ),
       ],
     ));

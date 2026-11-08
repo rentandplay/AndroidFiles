@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import '../screens/alerts/notifications_screen.dart';
 import '../services/notification_service.dart';
+import 'liquid_glass_optics.dart';
 
 /// A sleek, circular frosted glass action container for header icons (bell, settings, refresh, back).
 class HeaderActionPod extends StatelessWidget {
@@ -34,16 +35,16 @@ class HeaderActionPod extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryText =
-        iconColor ?? (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
+    final primaryText = iconColor ??
+        (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
     final effectivePodBg = podBg ??
         (isDark
-            ? const Color(0xFF1E293B).withValues(alpha: 0.90)
+            ? const Color(0xFF1E293B).withValues(alpha: 0.60)
             : Colors.white.withValues(alpha: 0.92));
     final effectivePodBorder = podBorder ??
         (isDark
             ? Colors.white.withValues(alpha: 0.18)
-            : const Color(0xFFE6DFD5).withValues(alpha: 0.90));
+            : const Color(0xFFE6DFD5).withValues(alpha: 0.60));
 
     Widget podContent = Container(
       width: size,
@@ -72,6 +73,14 @@ class HeaderActionPod extends StatelessWidget {
             ),
       ),
     );
+
+    if (LiquidGlassScope.of(context)) {
+      podContent = LiquidGlassOptics(
+        borderRadius: size / 2,
+        blurSigma: 2,
+        child: podContent,
+      );
+    }
 
     if (onTap != null) {
       podContent = Material(
@@ -115,10 +124,9 @@ class RentalNotificationBellPod extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryText =
-        iconColor ?? (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
-    final count =
-        context.watch<RentalNotificationService?>()?.unreadCount ?? 0;
+    final primaryText = iconColor ??
+        (isDark ? const Color(0xFFF8FAFC) : const Color(0xFF0F172A));
+    final count = context.watch<RentalNotificationService?>()?.unreadCount ?? 0;
 
     return HeaderActionPod(
       podBg: podBg,
@@ -190,12 +198,12 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       end: Alignment.bottomCenter,
       colors: isDark
           ? [
-              const Color(0xFF151E2E).withValues(alpha: 0.88),
-              const Color(0xFF0F1623).withValues(alpha: 0.80),
+              const Color(0xFF151E2E).withValues(alpha: 0.58),
+              const Color(0xFF0F1623).withValues(alpha: 0.44),
             ]
           : [
-              Colors.white.withValues(alpha: 0.90),
-              const Color(0xFFFAF6F0).withValues(alpha: 0.82),
+              Colors.white.withValues(alpha: 0.60),
+              const Color(0xFFFAF6F0).withValues(alpha: 0.44),
             ],
     );
 
@@ -268,8 +276,8 @@ class GlassAppBar extends StatelessWidget implements PreferredSizeWidget {
       flexibleSpace: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(
-            sigmaX: 20.0,
-            sigmaY: 20.0,
+            sigmaX: 5.0,
+            sigmaY: 5.0,
             tileMode: TileMode.mirror,
           ),
           child: Container(

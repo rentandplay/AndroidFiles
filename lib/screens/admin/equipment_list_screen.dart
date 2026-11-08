@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../widgets/staff_ui.dart';
 
 import '../../services/admin_firestore_service.dart';
 import '../../utils/maintenance_state.dart';
@@ -137,31 +138,26 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
             ),
           ),
           const SizedBox(height: 10),
-          SizedBox(
-            height: 38,
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: categories.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 8),
-              itemBuilder: (context, index) {
-                final value = categories[index];
-                return ChoiceChip(
-                  label: Text(value),
-                  selected: _category == value,
-                  onSelected: (_) => setState(() => _category = value),
-                  selectedColor: const Color(0xFFFFE8D7),
-                  labelStyle: TextStyle(
-                    color: _category == value
-                        ? const Color(0xFFC45E1B)
-                        : theme.colorScheme.onSurfaceVariant,
-                    fontWeight:
-                        _category == value ? FontWeight.w700 : FontWeight.w500,
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              for (final value in categories)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(value),
+                    selected: _category == value,
+                    onSelected: (_) => setState(() => _category = value),
+                    selectedColor: StaffTheme.navy,
+                    labelStyle: TextStyle(
+                        color: _category == value
+                            ? Colors.white
+                            : theme.colorScheme.onSurfaceVariant,
+                        fontWeight: FontWeight.w600),
+                    showCheckmark: false,
                   ),
-                  side: BorderSide.none,
-                  showCheckmark: false,
-                );
-              },
-            ),
+                )
+            ]),
           ),
           const SizedBox(height: 8),
           if (items.isEmpty)
@@ -314,7 +310,7 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
   Future<void> _maintenance({String? ticketId}) async {
     await Navigator.push(
         context,
-        MaterialPageRoute(
+        StaffPageRoute(
             builder: (_) => ticketId == null
                 ? MaintenanceEditScreen(
                     api: widget.api, unitId: widget.item['id']?.toString())
@@ -585,15 +581,46 @@ class _EquipmentDetailsSheetState extends State<_EquipmentDetailsSheet> {
                   ],
                   const SizedBox(height: 18),
                   Wrap(spacing: 8, runSpacing: 8, children: [
-                    IconButton(tooltip: 'Decrease stock', onPressed: _mutating || (item['total_quantity'] as num? ?? 1) <= 1 ? null : () => _quickAction(item, quantity: (item['total_quantity'] as num? ?? 1).toInt() - 1), icon: const Icon(Icons.remove_circle_outline)),
+                    IconButton(
+                        tooltip: 'Decrease stock',
+                        onPressed: _mutating ||
+                                (item['total_quantity'] as num? ?? 1) <= 1
+                            ? null
+                            : () => _quickAction(item,
+                                quantity: (item['total_quantity'] as num? ?? 1)
+                                        .toInt() -
+                                    1),
+                        icon: const Icon(Icons.remove_circle_outline)),
                     Text('Stock: ${item['total_quantity'] ?? 1}'),
-                    IconButton(tooltip: 'Increase stock', onPressed: _mutating ? null : () => _quickAction(item, quantity: (item['total_quantity'] as num? ?? 1).toInt() + 1), icon: const Icon(Icons.add_circle_outline)),
+                    IconButton(
+                        tooltip: 'Increase stock',
+                        onPressed: _mutating
+                            ? null
+                            : () => _quickAction(item,
+                                quantity: (item['total_quantity'] as num? ?? 1)
+                                        .toInt() +
+                                    1),
+                        icon: const Icon(Icons.add_circle_outline)),
                     if (status.toUpperCase() == 'AVAILABLE')
-                      OutlinedButton.icon(onPressed: _mutating ? null : () => _quickAction(item, action: 'MAINTENANCE'), icon: const Icon(Icons.build_outlined), label: const Text('Mark maintenance')),
-                    if (item['is_active'] == false && status.toUpperCase() != 'RETIRED')
-                      OutlinedButton(onPressed: _mutating ? null : () => _quickAction(item, action: 'RESTORE'), child: const Text('Restore archived unit')),
+                      OutlinedButton.icon(
+                          onPressed: _mutating
+                              ? null
+                              : () => _quickAction(item, action: 'MAINTENANCE'),
+                          icon: const Icon(Icons.build_outlined),
+                          label: const Text('Mark maintenance')),
+                    if (item['is_active'] == false &&
+                        status.toUpperCase() != 'RETIRED')
+                      OutlinedButton(
+                          onPressed: _mutating
+                              ? null
+                              : () => _quickAction(item, action: 'RESTORE'),
+                          child: const Text('Restore archived unit')),
                     if (item['is_active'] != false)
-                      TextButton(onPressed: _mutating ? null : () => _quickAction(item, action: 'RETIRE'), child: const Text('Archive unit')),
+                      TextButton(
+                          onPressed: _mutating
+                              ? null
+                              : () => _quickAction(item, action: 'RETIRE'),
+                          child: const Text('Archive unit')),
                   ]),
                   SizedBox(
                     width: double.infinity,

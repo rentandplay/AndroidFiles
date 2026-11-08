@@ -7,13 +7,16 @@ class RentalNotification {
       required this.rentalId,
       required this.rentalCode,
       required this.createdAt,
+      this.threadId = '',
       this.isRead = false});
+  final String threadId;
   final String id, type, title, message, rentalId, rentalCode;
   final DateTime createdAt;
   final bool isRead;
   factory RentalNotification.fromMap(Map<String, dynamic> row) =>
       RentalNotification(
           id: row['id'].toString(),
+          threadId: row['thread_id']?.toString() ?? '',
           type: row['type']?.toString() ?? '',
           title: row['title']?.toString() ?? 'Rental update',
           message: row['message']?.toString() ?? '',
@@ -30,5 +33,6 @@ class RentalNotification {
       rentalId: rentalId,
       rentalCode: rentalCode,
       createdAt: createdAt,
+      threadId: threadId,
       isRead: true);
 }

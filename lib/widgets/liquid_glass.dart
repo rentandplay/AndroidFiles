@@ -1,6 +1,24 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'liquid_glass_optics.dart';
+import 'app_glass_backdrop.dart';
+export 'liquid_glass_optics.dart' show LiquidGlassScope;
+
+LinearGradient _clearGlassFill(bool dark, {double opacity = 1}) =>
+    LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: dark
+          ? [
+              const Color(0xFF23354A).withValues(alpha: .30 * opacity),
+              const Color(0xFF142235).withValues(alpha: .15 * opacity),
+            ]
+          : [
+              Colors.white.withValues(alpha: .34 * opacity),
+              const Color(0xFFFFF9F1).withValues(alpha: .16 * opacity),
+            ],
+    );
 
 /// Frosted & Liquid Glass Surface Container
 /// Engineered to prevent Impeller dark-edge vignette smudges and black-alpha
@@ -20,6 +38,7 @@ class LiquidGlassContainer extends StatelessWidget {
     this.customGradient,
     this.borderGradient,
     this.elevation = 0,
+    this.filterBackdrop = true,
     this.onTap,
   });
 
@@ -34,30 +53,34 @@ class LiquidGlassContainer extends StatelessWidget {
   final Gradient? customGradient;
   final Gradient? borderGradient;
   final double elevation;
+  final bool filterBackdrop;
   final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final clear = LiquidGlassScope.of(context);
 
     // Multi-stop luminous frosted glass fill (never interpolates through black)
     final defaultGradient = customGradient ??
-        LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: const [0.0, 0.55, 1.0],
-          colors: isDark
-              ? [
-                  const Color(0xFF1E293B).withValues(alpha: 0.94),
-                  const Color(0xFF162030).withValues(alpha: 0.90),
-                  const Color(0xFF111927).withValues(alpha: 0.88),
-                ]
-              : [
-                  Colors.white.withValues(alpha: 0.96),
-                  const Color(0xFFFFFCF9).withValues(alpha: 0.92),
-                  const Color(0xFFFBF5EE).withValues(alpha: 0.88),
-                ],
-        );
+        (clear
+            ? _clearGlassFill(isDark)
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.55, 1.0],
+                colors: isDark
+                    ? [
+                        const Color(0xFF1E293B).withValues(alpha: 0.94),
+                        const Color(0xFF162030).withValues(alpha: 0.90),
+                        const Color(0xFF111927).withValues(alpha: 0.88),
+                      ]
+                    : [
+                        Colors.white.withValues(alpha: 0.96),
+                        const Color(0xFFFFFCF9).withValues(alpha: 0.92),
+                        const Color(0xFFFBF5EE).withValues(alpha: 0.88),
+                      ],
+              ));
 
     // Directional specular rim: bright top-left light catch, subtle warm edge
     final defaultBorderGradient = borderGradient ??
@@ -69,12 +92,14 @@ class LiquidGlassContainer extends StatelessWidget {
               ? [
                   Colors.white.withValues(alpha: 0.24),
                   Colors.white.withValues(alpha: 0.09),
-                  (glowColor ?? const Color(0xFFDF762D)).withValues(alpha: 0.22),
+                  (glowColor ?? const Color(0xFFDF762D))
+                      .withValues(alpha: 0.22),
                 ]
               : [
                   Colors.white,
                   const Color(0xFFEAE2D8).withValues(alpha: 0.85),
-                  (glowColor ?? const Color(0xFFDF762D)).withValues(alpha: 0.20),
+                  (glowColor ?? const Color(0xFFDF762D))
+                      .withValues(alpha: 0.20),
                 ],
         );
 
@@ -91,10 +116,14 @@ class LiquidGlassContainer extends StatelessWidget {
       child: child,
     );
 
-    content = ClipRRect(
-      borderRadius: radius,
-      child: content,
-    );
+    content = clear && filterBackdrop
+        ? LiquidGlassOptics(
+            borderRadius: borderRadius,
+            // Share one small blur across the non-overlapping content cards.
+            blurSigma: 3,
+            child: content,
+          )
+        : ClipRRect(borderRadius: radius, child: content);
 
     Widget body = Container(
       margin: margin,
@@ -188,29 +217,7 @@ class LiquidAmbientBackdrop extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          stops: const [0.0, 0.45, 1.0],
-          colors: isDark
-              ? const [
-                  Color(0xFF111927),
-                  Color(0xFF0D131D),
-                  Color(0xFF0A0F18),
-                ]
-              : const [
-                  Color(0xFFFDFBF9),
-                  Color(0xFFF8F4EE),
-                  Color(0xFFF3EDE4),
-                ],
-        ),
-      ),
-      child: child,
-    );
+    return AppGlassBackdrop(child: child);
   }
 }
 
@@ -288,8 +295,7 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
 
     final touchInnerX =
         (details.localPosition.dx - padding).clamp(0.0, innerWidth);
-    final currentPillLeft =
-        widget.selectedIndex.clamp(0, count - 1) * tabWidth;
+    final currentPillLeft = widget.selectedIndex.clamp(0, count - 1) * tabWidth;
 
     if (touchInnerX >= currentPillLeft - 10 &&
         touchInnerX <= currentPillLeft + tabWidth + 10) {
@@ -391,23 +397,41 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final primary = widget.activeColor ?? const Color(0xFFDF762D);
-
+    final clear = LiquidGlassScope.of(context);
+    // A quiet warm material supports the labels; the moving lens carries the
+    // stronger orange. Neither color depends on shader output.
+    const dockInk = Color(0xFF1C130B);
+    final selectedText = clear ? dockInk : Colors.white;
     final inactiveTextColor = widget.unselectedColor ??
-        (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155));
-
-    final glassFill = LinearGradient(
-      begin: Alignment.topCenter,
-      end: Alignment.bottomCenter,
-      colors: isDark
-          ? [
-              const Color(0xFF1B2536).withValues(alpha: 0.88 * widget.opacity),
-              const Color(0xFF111826).withValues(alpha: 0.82 * widget.opacity),
-            ]
-          : [
-              Colors.white.withValues(alpha: 0.90 * widget.opacity),
-              const Color(0xFFFAF5EE).withValues(alpha: 0.84 * widget.opacity),
-            ],
+        (clear
+            ? (isDark ? const Color(0xFFF0F4F8) : const Color(0xFF29323E))
+            : (isDark ? const Color(0xFFCBD5E1) : const Color(0xFF334155)));
+    final dockMaterial = Color.alphaBlend(
+      const Color(0xFFFF962E).withValues(alpha: .035),
+      (isDark ? const Color(0xFF102033) : Colors.white)
+          .withValues(alpha: isDark ? .12 : .10),
     );
+    final dockTint = clear
+        ? dockMaterial.withValues(alpha: dockMaterial.a * widget.opacity)
+        : null;
+    final glassFill = clear
+        ? null
+        : LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: isDark
+                ? [
+                    const Color(0xFF1B2536)
+                        .withValues(alpha: .88 * widget.opacity),
+                    const Color(0xFF111826)
+                        .withValues(alpha: .82 * widget.opacity)
+                  ]
+                : [
+                    Colors.white.withValues(alpha: .90 * widget.opacity),
+                    const Color(0xFFFAF5EE)
+                        .withValues(alpha: .84 * widget.opacity)
+                  ],
+          );
 
     final specularBorder = LinearGradient(
       begin: Alignment.topLeft,
@@ -429,6 +453,56 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
     const double padding = 4.0;
     final innerRadius = BorderRadius.circular(widget.borderRadius - padding);
 
+    final selectionFace = Container(
+      decoration: BoxDecoration(
+        gradient: clear
+            ? LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.white.withValues(alpha: .20),
+                  Colors.white.withValues(alpha: .025),
+                  const Color(0xFFFFAD59).withValues(alpha: .12),
+                ],
+                stops: const [0, .5, 1],
+              )
+            : const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [Color(0xFFFF8838), Color(0xFFDF762D)],
+              ),
+        borderRadius: innerRadius,
+        border: Border.all(
+          color: Colors.white.withValues(alpha: clear ? .65 : .38),
+          width: 1,
+        ),
+        boxShadow: clear
+            ? const []
+            : [
+                BoxShadow(
+                  color: const Color(0xFFDF762D).withValues(alpha: .30),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                  blurStyle: BlurStyle.outer,
+                ),
+              ],
+      ),
+    );
+    Widget buildSelectionLens() => clear
+        ? LiquidGlassOptics(
+            borderRadius: widget.borderRadius - padding,
+            blurSigma: 0,
+            refraction: 6,
+            dispersion: .45,
+            bevelWidth: 7,
+            surfaceTint: const Color(0xFFFF8E20)
+                .withValues(alpha: (isDark ? .86 : .72) * widget.opacity),
+            tintBevelWidth: 3.5,
+            refractive: true,
+            child: selectionFace,
+          )
+        : selectionFace;
+
     final count = widget.tabs.length;
     final activeIndex = _isDragging
         ? (_hoverIndex ?? widget.selectedIndex)
@@ -438,9 +512,7 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
         ? _dragAlignX!
         : (count > 1
             ? -1.0 +
-                (2.0 *
-                    widget.selectedIndex.clamp(0, count - 1) /
-                    (count - 1))
+                (2.0 * widget.selectedIndex.clamp(0, count - 1) / (count - 1))
             : 0.0);
 
     return GestureDetector(
@@ -453,31 +525,37 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
         height: 62,
         decoration: BoxDecoration(
           borderRadius: radius,
-          boxShadow: [
-            BoxShadow(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.42)
-                  : const Color(0xFF0F172A).withValues(alpha: 0.08),
-              blurRadius: 24,
-              offset: const Offset(0, 8),
-              blurStyle: BlurStyle.outer,
-            ),
-            BoxShadow(
-              color: primary.withValues(alpha: isDark ? 0.16 : 0.08),
-              blurRadius: 16,
-              offset: const Offset(0, 4),
-              blurStyle: BlurStyle.outer,
-            ),
-          ],
+          boxShadow: clear
+              ? const []
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(
+                        alpha: clear
+                            ? (isDark ? .12 : .04)
+                            : (isDark ? .42 : .08)),
+                    blurRadius: clear ? 18 : 24,
+                    offset: Offset(0, clear ? 4 : 8),
+                    blurStyle: BlurStyle.outer,
+                  ),
+                  BoxShadow(
+                    color: primary.withValues(
+                        alpha: clear ? .06 : (isDark ? .16 : .08)),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                    blurStyle: BlurStyle.outer,
+                  ),
+                ],
         ),
         child: ClipRRect(
           borderRadius: radius,
-          child: BackdropFilter(
-            filter: ImageFilter.blur(
-              sigmaX: widget.blurSigma,
-              sigmaY: widget.blurSigma,
-              tileMode: TileMode.mirror,
-            ),
+          child: LiquidGlassOptics(
+            borderRadius: widget.borderRadius,
+            blurSigma: clear ? 2 : widget.blurSigma,
+            refraction: 11,
+            dispersion: .65,
+            bevelWidth: 10,
+            surfaceTint: dockTint,
+            refractive: clear,
             child: CustomPaint(
               foregroundPainter: _LiquidGlassBorderPainter(
                 borderRadius: widget.borderRadius,
@@ -516,46 +594,23 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
                       ),
                     ),
 
-                    // Smooth Sliding & Draggable Orange Pill Indicator
+                    // A stronger orange lens distinguishes the selected tab.
                     Positioned.fill(
                       child: Padding(
                         padding: const EdgeInsets.all(padding),
-                        child: AnimatedAlign(
+                        child: TweenAnimationBuilder<double>(
+                          tween: Tween(begin: alignX, end: alignX),
                           duration: _isDragging
                               ? Duration.zero
                               : const Duration(milliseconds: 280),
                           curve: Curves.easeOutCubic,
-                          alignment: Alignment(alignX, 0.0),
-                          child: FractionallySizedBox(
-                            widthFactor: count > 0 ? 1.0 / count : 1.0,
-                            heightFactor: 1.0,
-                            child: RepaintBoundary(
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFFFF8838),
-                                      Color(0xFFDF762D),
-                                    ],
-                                  ),
-                                  borderRadius: innerRadius,
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.38),
-                                    width: 1.0,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(0xFFDF762D).withValues(
-                                        alpha: 0.30,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                      blurStyle: BlurStyle.outer,
-                                    ),
-                                  ],
-                                ),
+                          builder: (context, position, _) => Align(
+                            alignment: Alignment(position, 0.0),
+                            child: FractionallySizedBox(
+                              widthFactor: count > 0 ? 1.0 / count : 1.0,
+                              heightFactor: 1.0,
+                              child: RepaintBoundary(
+                                child: buildSelectionLens(),
                               ),
                             ),
                           ),
@@ -591,7 +646,7 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
                                               : tab.icon,
                                           size: 21,
                                           color: isSelected
-                                              ? Colors.white
+                                              ? selectedText
                                               : inactiveTextColor,
                                         ),
                                         const SizedBox(height: 2),
@@ -600,12 +655,12 @@ class _LiquidGlassBottomNavBarState extends State<LiquidGlassBottomNavBar> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                           style: TextStyle(
-                                            fontSize: 10.5,
+                                            fontSize: 11,
                                             fontWeight: isSelected
                                                 ? FontWeight.w700
                                                 : FontWeight.w600,
                                             color: isSelected
-                                                ? Colors.white
+                                                ? selectedText
                                                 : inactiveTextColor,
                                             letterSpacing: -0.1,
                                           ),
@@ -659,6 +714,21 @@ class GlassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    if (LiquidGlassScope.of(context)) {
+      return LiquidGlassContainer(
+        borderRadius: borderRadius,
+        padding: padding,
+        margin: margin,
+        onTap: onTap,
+        blurSigma: blurSigma,
+        glowColor: glowColor,
+        borderGradient: isSelected
+            ? const LinearGradient(
+                colors: [Color(0xFFFFB47C), Color(0xFFDF762D)])
+            : null,
+        child: child,
+      );
+    }
     final radius = BorderRadius.circular(borderRadius);
 
     final cardFill = LinearGradient(

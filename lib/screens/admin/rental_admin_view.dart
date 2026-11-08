@@ -12,6 +12,8 @@ import 'package:intl/intl.dart';
 import '../../services/mobile_api_service.dart';
 import '../../services/release_verification.dart';
 import '../../widgets/rental_ui.dart';
+import '../../widgets/staff_ui.dart';
+import '../../models/staff_scan.dart';
 import '../../widgets/customer_trust_card.dart';
 import '../shared/qr_capture_screen.dart';
 
@@ -86,7 +88,9 @@ class RentalAdminView extends StatefulWidget {
       required this.page,
       required this.workspace,
       required this.onChanged,
+      this.initialStage = 'All',
       this.initialScanKind,
+      this.initialCapture,
       this.scanRequestId = 0,
       this.api,
       this.now,
@@ -94,7 +98,9 @@ class RentalAdminView extends StatefulWidget {
   final String page;
   final Map<String, dynamic> workspace;
   final Future<void> Function() onChanged;
+  final String initialStage;
   final String? initialScanKind;
+  final StaffScanResult? initialCapture;
   final int scanRequestId;
   final MobileApiService? api;
   final DateTime? now;
@@ -105,12 +111,15 @@ class RentalAdminView extends StatefulWidget {
 
 class _RentalAdminViewState extends State<RentalAdminView> {
   String _query = '', _stage = 'All';
+  final _search = TextEditingController();
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
   Timer? _rentalClock;
+  bool _scannerOpen = false;
 
   @override
   void initState() {
     super.initState();
+    _stage = widget.initialStage;
     _scheduleRequestedScan();
     _syncRentalClock();
   }
@@ -118,6 +127,9 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   @override
   void didUpdateWidget(covariant RentalAdminView oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.initialStage != oldWidget.initialStage) {
+      _stage = widget.initialStage;
+    }
     if (widget.scanRequestId != oldWidget.scanRequestId) {
       _scheduleRequestedScan();
     }
@@ -136,16 +148,18 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   @override
   void dispose() {
     _rentalClock?.cancel();
+    _search.dispose();
     super.dispose();
   }
 
   void _scheduleRequestedScan() {
     final kind = widget.initialScanKind;
-    if (kind == null) return;
+    final capture = widget.initialCapture;
+    if (kind == null && capture == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       widget.onScanConsumed?.call();
-      unawaited(_lookup(kind));
+      unawaited(capture != null ? _resolveCapture(capture) : _lookup(kind!));
     });
   }
 
@@ -159,7 +173,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
     if (['delivery', 'extension-review'].contains(action)) {
       await Navigator.push<bool>(
           context,
-          MaterialPageRoute(
+          StaffPageRoute(
               builder: (_) => RentalExtraScreen(
                   row: row, kind: action, api: _api, scannedCode: code)));
       await widget.onChanged();
@@ -167,7 +181,7 @@ class _RentalAdminViewState extends State<RentalAdminView> {
     }
     await Navigator.push<bool>(
         context,
-        MaterialPageRoute(
+        StaffPageRoute(
             builder: (_) => RentalAdminActionScreen(
                 row: row,
                 action: action,
@@ -178,19 +192,34 @@ class _RentalAdminViewState extends State<RentalAdminView> {
   }
 
   Future<void> _lookup(String kind) async {
-    final code = await Navigator.push<String>(
+    if (_scannerOpen) return;
+    _scannerOpen = true;
+    try {
+      final capture = await Navigator.push<StaffScanResult>(
         context,
-        MaterialPageRoute(
-            builder: (_) => QrCaptureScreen(
-                title: kind == 'BOOKING'
-                    ? 'Scan rental QR'
-                    : 'Scan inventory QR')));
-    if (code == null || !mounted) return;
+        StaffPageRoute(
+            builder: (_) => QrCaptureScreen.staff(
+                initialMode: StaffScanMode.fromKind(kind))),
+      );
+      if (capture == null || !mounted) return;
+      await _resolveCapture(capture);
+    } finally {
+      _scannerOpen = false;
+    }
+  }
+
+  Future<void> _resolveCapture(StaffScanResult capture) async {
+    final code = capture.code;
+    final kind = capture.mode.apiKind;
     try {
       final result = await _api.adminRequest('/rentals/lookup',
           method: 'POST', body: {'kind': kind, 'code': code});
       if (!mounted) return;
       final row = _map(result['rental']);
+      if (capture.manual) {
+        _details(row);
+        return;
+      }
       if (kind == 'INVENTORY') {
         if (row['status'] == 'RETURN_PENDING_INSPECTION') {
           await _action(row, 'complete-return', code: code);
@@ -294,8 +323,10 @@ class _RentalAdminViewState extends State<RentalAdminView> {
                                   onPressed: () => showDialog<void>(
                                       context: context,
                                       barrierDismissible: false,
-                                      builder: (_) =>
-                                          RentalReceiptDialog(rental: row, receiptSettings: _map(widget.workspace['settings']))),
+                                      builder: (_) => RentalReceiptDialog(
+                                          rental: row,
+                                          receiptSettings: _map(
+                                              widget.workspace['settings']))),
                                   icon: const Icon(Icons.receipt_long),
                                   label: const Text('Bluetooth / PDF receipt')),
                           ],
@@ -563,22 +594,22 @@ class _RentalAdminViewState extends State<RentalAdminView> {
         .length;
     final inspectionCount =
         all.where((row) => row['status'] == 'RETURN_PENDING_INSPECTION').length;
-    final filtered = all.where((row) {
+    final visibleStatuses = widget.page == 'Rentals'
+        ? {
+            'PENDING_ADMIN_APPROVAL',
+            'APPROVED',
+            'ACTIVE',
+            'RETURN_PENDING_INSPECTION',
+            'PENDING_VERIFICATION'
+          }
+        : widget.page == 'Returns'
+            ? {'ACTIVE', 'RETURN_PENDING_INSPECTION', 'COMPLETED'}
+            : all.map((row) => row['status']).toSet();
+    final scoped =
+        all.where((row) => visibleStatuses.contains(row['status'])).toList();
+    final filtered = scoped.where((row) {
       final status = row['status'];
-      final relevant = widget.page == 'Rentals'
-          ? [
-              'PENDING_ADMIN_APPROVAL',
-              'APPROVED',
-              'ACTIVE',
-              'RETURN_PENDING_INSPECTION',
-              'PENDING_VERIFICATION'
-            ].contains(status)
-          : widget.page == 'Returns'
-              ? ['ACTIVE', 'RETURN_PENDING_INSPECTION', 'COMPLETED']
-                  .contains(status)
-              : true;
-      return relevant &&
-          _matchesStage(row, now) &&
+      return _matchesStage(row, now) &&
           [
             row['rental_code'],
             row['item_name'],
@@ -596,192 +627,376 @@ class _RentalAdminViewState extends State<RentalAdminView> {
         return (_dueAt(a)?.millisecondsSinceEpoch ?? 0)
             .compareTo(_dueAt(b)?.millisecondsSinceEpoch ?? 0);
       });
-    return RefreshIndicator(
+    final summary = [
+      if (overdueCount > 0) '$overdueCount overdue',
+      if (dueTodayCount > 0) '$dueTodayCount due today',
+      if (returnRequestedCount > 0) '$returnRequestedCount return requested',
+      if (inspectionCount > 0) '$inspectionCount awaiting inspection',
+    ].join(' · ');
+    final stages = <String>{
+      'All',
+      if (widget.page == 'Rentals') ...[
+        'Awaiting review',
+        'Approved · awaiting handoff',
+        'In use'
+      ],
+      'Overdue',
+      'Due today',
+      'Return requested',
+      'Inspection pending',
+      if (widget.page == 'Rentals') 'Handoff awaiting confirmation',
+      if (widget.page == 'Returns') ...['In use', 'Returned'],
+    };
+    return LayoutBuilder(builder: (context, size) {
+      final horizontal = size.maxWidth > 880 ? (size.maxWidth - 840) / 2 : 20.0;
+      return RefreshIndicator(
         onRefresh: widget.onChanged,
-        child: ListView(
-            padding: const EdgeInsets.all(16),
-            physics: const AlwaysScrollableScrollPhysics(),
-            children: [
-              Text(widget.page,
-                  style: Theme.of(context).textTheme.headlineSmall),
-              const SizedBox(height: 8),
-              if (widget.page == 'Rentals')
-                OutlinedButton.icon(
-                    icon: const Icon(Icons.event_note),
-                    label: const Text('Local delivery plan'),
-                    onPressed: () async {
-                      final row = await Navigator.push<Map<String, dynamic>>(
-                          context,
-                          MaterialPageRoute(
-                              builder: (_) =>
-                                  DeliveryCalendarScreen(api: _api)));
-                      if (row != null && mounted) _details(row);
-                    }),
-              const RentalNotice(
-                  message:
-                      '1. Review the request and verify QR payment proof if provided. 2. Scan the assigned unit at the shop. 3. At handoff, scan the customer QR, verify their ID and rental payment, and inspect the unit and accessories. The timer starts only after handoff is confirmed.'),
-              if (widget.page != 'Transaction History' &&
-                  (overdueCount > 0 ||
-                      dueTodayCount > 0 ||
-                      returnRequestedCount > 0 ||
-                      inspectionCount > 0)) ...[
-                const SizedBox(height: 10),
-                RentalNotice(
-                    title: [
-                      if (overdueCount > 0) '$overdueCount overdue',
-                      if (dueTodayCount > 0) '$dueTodayCount due today',
-                      if (returnRequestedCount > 0)
-                        '$returnRequestedCount return requested',
-                      if (inspectionCount > 0)
-                        '$inspectionCount awaiting inspection',
-                    ].join(' · '),
-                    isError: overdueCount > 0,
-                    icon: Icons.schedule_rounded,
-                    message:
-                        'Record physical receipt when the equipment is back. Rental time and late charges, if any, stop at receipt; inspection can be completed afterward.'),
-              ],
-              const SizedBox(height: 12),
-              Wrap(spacing: 8, runSpacing: 8, children: [
-                if (widget.page == 'Rentals')
-                  FilledButton.icon(
-                      onPressed: () => _action({}, 'booking'),
-                      icon: const Icon(Icons.add),
-                      label: const Text('Create walk-in rental')),
-                if (widget.page != 'Transaction History')
-                  OutlinedButton.icon(
-                      onPressed: () => _lookup(
-                          widget.page == 'Returns' ? 'INVENTORY' : 'BOOKING'),
-                      icon: const Icon(Icons.qr_code_scanner),
-                      label: Text(widget.page == 'Returns'
-                          ? 'Scan equipment QR'
-                          : 'Scan rental QR')),
-                OutlinedButton(
-                    onPressed: _manualLookup,
-                    child: const Text('Find by code')),
-              ]),
-              const SizedBox(height: 12),
-              TextField(
-                  onChanged: (value) => setState(() => _query = value),
-                  decoration: const InputDecoration(
-                      labelText: 'Search equipment, customer or rental',
-                      prefixIcon: Icon(Icons.search))),
-              const SizedBox(height: 12),
-              Wrap(spacing: 6, runSpacing: 6, children: [
-                for (final stage in [
-                  'All',
-                  'Due today',
-                  'Overdue',
-                  'Return requested',
-                  ...all
-                      .map((row) => rentalStatusLabel(_text(row['status'])))
-                      .toSet()
-                ])
-                  ChoiceChip(
-                      label: Text(stage),
-                      selected: _stage == stage,
-                      onSelected: (_) => setState(() => _stage = stage)),
-              ]),
-              const SizedBox(height: 16),
-              if (filtered.isEmpty)
-                const RentalEmptyState(
-                    title: 'No matching rentals',
-                    message:
-                        'Try another stage or search by rental, customer or equipment.'),
-              for (final row in filtered)
-                RentalSection(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                      Row(children: [
-                        Expanded(
-                            child: Text(_text(row['item_name']),
-                                style: const TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w700))),
-                        IconButton(
-                            tooltip: 'View rental details',
-                            onPressed: () => _details(row),
-                            icon: const Icon(Icons.more_horiz)),
-                      ]),
-                      Text(_text(row['customer_name'])),
-                      const SizedBox(height: 6),
-                      Text(
-                          '${recordReference(row)} · ${row['item_code'] ?? ''}',
-                          style: TextStyle(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontSize: 12)),
-                      const SizedBox(height: 12),
-                      Align(
-                          alignment: Alignment.centerLeft,
-                          child:
-                              RentalStatusBadge(status: _text(row['status']))),
-                      const SizedBox(height: 12),
-                      if (row['status'] == 'ACTIVE') ...[
-                        RentalValueRow('Return by', _date(row['due_at'])),
-                        if (_isOverdue(row, now) ||
-                            _isDueToday(row, now) ||
-                            row['latest_return_request_status'] ==
-                                'PENDING_ADMIN_APPROVAL')
-                          RentalNotice(
-                              title: _isOverdue(row, now)
-                                  ? '${row['latest_return_request_status'] == 'PENDING_ADMIN_APPROVAL' ? 'Return requested · overdue by' : 'Overdue by'} ${((now.toUtc().difference(_dueAt(row)!).inMinutes + 59) ~/ 60).clamp(1, 999999)}h'
-                                  : _isDueToday(row, now)
-                                      ? row['latest_return_request_status'] ==
-                                              'PENDING_ADMIN_APPROVAL'
-                                          ? 'Return requested · due today'
-                                          : 'Due today'
-                                      : 'Customer requested a return',
-                              isError: _isOverdue(row, now),
-                              icon: Icons.assignment_return_outlined,
-                              message: row['latest_return_request_status'] ==
-                                      'PENDING_ADMIN_APPROVAL'
-                                  ? 'The rental remains active until you record physical receipt. Late charges, if any, use the receipt time.'
-                                  : 'Follow up on this return. Record physical receipt when the item is back; late charges use that receipt time.')
-                      ],
-                      if (['APPROVED', 'PENDING_ADMIN_APPROVAL']
-                          .contains(row['status']))
-                        RentalValueRow(
-                            'Hold ends', _date(row['hold_expires_at'])),
-                      if (row['status'] == 'RETURN_PENDING_INSPECTION')
-                        RentalValueRow(
-                            'Physically received', _date(row['received_at'])),
-                      if (row['latest_return_request_status'] ==
-                          'PENDING_ADMIN_APPROVAL') ...[
-                        const SizedBox(height: 8),
-                        RentalNotice(
-                            title: 'Customer requested a return',
-                            icon: Icons.assignment_return_outlined,
-                            message: [
-                              'Reported condition: ${_text(_map(row['mobile_return_request'])['reported_condition']).isEmpty ? 'Not recorded' : _text(_map(row['mobile_return_request'])['reported_condition'])}.',
-                              if (_text(_map(
-                                      row['mobile_return_request'])['notes'])
-                                  .isNotEmpty)
-                                _text(_map(
-                                    row['mobile_return_request'])['notes']),
-                            ].join(' ')),
-                      ],
-                      if (row['balance_due'] != null)
-                        RentalValueRow('Balance', _money(row['balance_due'])),
-                      const SizedBox(height: 10),
-                      if (_nextAction(row) != null)
-                        FilledButton(
-                            onPressed: () => _action(row, _nextAction(row)!),
-                            child: Text(_nextLabel(row)))
-                      else
-                        OutlinedButton(
-                            onPressed: () => _details(row),
-                            child: const Text('View details')),
-                      if (row['status'] == 'ACTIVE' &&
-                          row['latest_return_request_status'] ==
-                              'PENDING_ADMIN_APPROVAL')
-                        TextButton(
-                            onPressed: () => _action(row, 'reject-return'),
-                            child: const Text('Reject return request')),
-                    ])),
-            ]));
+        child: ListView.builder(
+          key: PageStorageKey('staff-${widget.page}'),
+          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          padding: EdgeInsets.fromLTRB(horizontal, 16, horizontal, 24),
+          physics: const AlwaysScrollableScrollPhysics(),
+          itemCount: filtered.length + 1 + (filtered.isEmpty ? 1 : 0),
+          itemBuilder: (context, index) {
+            if (index == 0) {
+              return _queueHeader(filtered.length, summary, stages);
+            }
+            if (filtered.isEmpty) {
+              return StaffSurface(
+                  child: Column(children: [
+                const SizedBox(height: 20),
+                Icon(Icons.task_alt_rounded,
+                    size: 40, color: Theme.of(context).colorScheme.primary),
+                const SizedBox(height: 16),
+                Text('No matching rentals',
+                    style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 6),
+                const Text(
+                    'Try another filter or search by customer, rental or equipment.',
+                    textAlign: TextAlign.center),
+                const SizedBox(height: 12),
+                TextButton(
+                    onPressed: () => setState(() {
+                          _stage = 'All';
+                          _query = '';
+                          _search.clear();
+                        }),
+                    child: const Text('Clear filters')),
+              ]));
+            }
+            return Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: _rentalCard(filtered[index - 1], now));
+          },
+        ),
+      );
+    });
   }
+
+  Widget _queueHeader(int count, String summary, Set<String> stages) {
+    final scheme = Theme.of(context).colorScheme;
+    final returns = widget.page == 'Returns';
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(children: [
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(returns ? 'Return queue' : 'Rental queue',
+              style: Theme.of(context).textTheme.titleLarge),
+          const SizedBox(height: 4),
+          Text(
+              returns
+                  ? 'Receive first. Inspect next.'
+                  : 'Review, prepare and hand off.',
+              style: Theme.of(context).textTheme.bodySmall),
+        ])),
+        IconButton(
+            tooltip: 'Workflow guide',
+            onPressed: _workflowHelp,
+            icon: const Icon(Icons.help_outline_rounded, size: 22)),
+      ]),
+      const SizedBox(height: 18),
+      if (widget.page != 'Transaction History')
+        Row(children: [
+          Expanded(
+              child: FilledButton.icon(
+            onPressed: returns
+                ? () => _lookup('INVENTORY')
+                : () => _action({}, 'booking'),
+            icon: Icon(
+                returns ? Icons.qr_code_scanner_rounded : Icons.add_rounded,
+                size: 20),
+            label:
+                Text(returns ? 'Scan equipment QR' : 'Create walk-in rental'),
+          )),
+          const SizedBox(width: 8),
+          if (!returns) ...[
+            IconButton.filledTonal(
+                tooltip: 'Scan rental QR',
+                onPressed: () => _lookup('BOOKING'),
+                icon: const Icon(Icons.qr_code_scanner_rounded, size: 22)),
+            const SizedBox(width: 4),
+          ],
+          PopupMenuButton<String>(
+            tooltip: 'More queue actions',
+            icon: const Icon(Icons.more_horiz_rounded),
+            onSelected: (value) async {
+              if (value == 'code') {
+                await _manualLookup();
+                return;
+              }
+              if (value == 'delivery') {
+                final row = await Navigator.push<Map<String, dynamic>>(
+                    context,
+                    StaffPageRoute(
+                        builder: (_) => DeliveryCalendarScreen(api: _api)));
+                if (row != null && mounted) _details(row);
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'code', child: Text('Find by code')),
+              if (!returns)
+                const PopupMenuItem(
+                    value: 'delivery', child: Text('Local delivery plan')),
+            ],
+          ),
+        ]),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _search,
+        onChanged: (value) => setState(() => _query = value),
+        textInputAction: TextInputAction.search,
+        onTapOutside: (_) => FocusScope.of(context).unfocus(),
+        decoration: InputDecoration(
+          hintText: 'Search customer, rental or equipment',
+          prefixIcon: const Icon(Icons.search_rounded, size: 22),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: 'Clear search',
+                  onPressed: () => setState(() {
+                        _query = '';
+                        _search.clear();
+                      }),
+                  icon: const Icon(Icons.close_rounded)),
+        ),
+      ),
+      const SizedBox(height: 12),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (final stage in stages)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(stage),
+                selected: _stage == stage,
+                showCheckmark: false,
+                labelStyle: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _stage == stage
+                        ? (dark ? scheme.onPrimary : Colors.white)
+                        : scheme.onSurfaceVariant),
+                selectedColor: dark ? scheme.primary : StaffTheme.navy,
+                onSelected: (_) => setState(() => _stage = stage),
+              ),
+            )
+        ]),
+      ),
+      if (summary.isNotEmpty && widget.page != 'Transaction History') ...[
+        const SizedBox(height: 12),
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.schedule_rounded, size: 16, color: scheme.error),
+          const SizedBox(width: 6),
+          Expanded(
+              child: Text(summary,
+                  style: TextStyle(
+                      fontSize: 12,
+                      color: scheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w600))),
+        ]),
+      ],
+      Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: Text(
+              '$count ${count == 1 ? 'rental' : 'rentals'} · ${_stage == 'All' ? 'Priority order' : _stage}',
+              style: Theme.of(context).textTheme.bodySmall)),
+    ]);
+  }
+
+  Widget _rentalCard(Map<String, dynamic> row, DateTime now) {
+    final scheme = Theme.of(context).colorScheme;
+    final overdue = _isOverdue(row, now);
+    final requested =
+        row['latest_return_request_status'] == 'PENDING_ADMIN_APPROVAL';
+    final status = _text(row['status']);
+    final dueLabel = status == 'ACTIVE'
+        ? 'Return by'
+        : status == 'RETURN_PENDING_INSPECTION'
+            ? 'Received at'
+            : 'Hold ends';
+    final dueValue = status == 'ACTIVE'
+        ? row['due_at']
+        : status == 'RETURN_PENDING_INSPECTION'
+            ? row['received_at']
+            : row['hold_expires_at'];
+    return StaffSurface(
+        child:
+            Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(12)),
+            child: Icon(Icons.inventory_2_outlined,
+                size: 21, color: scheme.primary)),
+        const SizedBox(width: 12),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(_text(row['item_name']),
+              style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 3),
+          Text(_text(row['customer_name']),
+              style: TextStyle(fontSize: 13, color: scheme.onSurfaceVariant)),
+        ])),
+        IconButton(
+            tooltip: 'View rental details',
+            onPressed: () => _details(row),
+            icon: const Icon(Icons.more_horiz_rounded, size: 22)),
+      ]),
+      const SizedBox(height: 10),
+      Text(
+          [
+            recordReference(row),
+            if (_text(row['item_code']).isNotEmpty) _text(row['item_code'])
+          ].join('  ·  '),
+          style: Theme.of(context).textTheme.bodySmall),
+      const SizedBox(height: 12),
+      Wrap(spacing: 6, runSpacing: 6, children: [
+        RentalStatusBadge(status: status),
+        if (overdue)
+          _queueBadge(
+              'Overdue by ${((now.toUtc().difference(_dueAt(row)!).inMinutes + 59) ~/ 60).clamp(1, 999999)}h',
+              scheme.error,
+              Icons.schedule_rounded)
+        else if (_isDueToday(row, now))
+          _queueBadge('Due today', scheme.primary, Icons.schedule_rounded),
+        if (requested)
+          _queueBadge('Return requested', scheme.primary,
+              Icons.assignment_return_outlined),
+      ]),
+      const Padding(
+          padding: EdgeInsets.symmetric(vertical: 14),
+          child: Divider(height: 1)),
+      Wrap(spacing: 24, runSpacing: 12, children: [
+        if ([
+          'ACTIVE',
+          'APPROVED',
+          'PENDING_ADMIN_APPROVAL',
+          'RETURN_PENDING_INSPECTION'
+        ].contains(status))
+          _queueFact(dueLabel, _date(dueValue)),
+        if (row['balance_due'] != null)
+          _queueFact('Balance due', _money(row['balance_due'])),
+      ]),
+      if (requested || status == 'RETURN_PENDING_INSPECTION') ...[
+        const SizedBox(height: 10),
+        Text(
+            requested
+                ? 'Timer stops when you receive the equipment.'
+                : 'Timer stopped. Complete the condition check.',
+            style: Theme.of(context).textTheme.bodySmall),
+      ],
+      const SizedBox(height: 16),
+      if (_nextAction(row) != null)
+        FilledButton.tonalIcon(
+          onPressed: () => _action(row, _nextAction(row)!),
+          icon: Icon(
+              status == 'ACTIVE'
+                  ? Icons.assignment_return_outlined
+                  : Icons.arrow_forward_rounded,
+              size: 18),
+          label: Text(_nextLabel(row)),
+        )
+      else
+        OutlinedButton(
+            onPressed: () => _details(row), child: const Text('View details')),
+      if (status == 'ACTIVE' && requested)
+        TextButton(
+            onPressed: () => _action(row, 'reject-return'),
+            child: const Text('Reject return request')),
+    ]));
+  }
+
+  Widget _queueFact(String label, String value) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(label, style: Theme.of(context).textTheme.bodySmall),
+        const SizedBox(height: 3),
+        Text(value,
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+      ]);
+
+  Widget _queueBadge(String label, Color tone, IconData icon) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+        decoration: BoxDecoration(
+            color: tone.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(10)),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 13, color: tone),
+          const SizedBox(width: 4),
+          Flexible(
+              child: Text(label,
+                  style: TextStyle(
+                      fontSize: 12, color: tone, fontWeight: FontWeight.w700)))
+        ]),
+      );
+
+  Future<void> _workflowHelp() => showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (context) => SingleChildScrollView(
+            child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                            widget.page == 'Returns'
+                                ? 'Receive, then inspect'
+                                : 'A smooth handoff',
+                            style: Theme.of(context).textTheme.headlineSmall),
+                        const SizedBox(height: 20),
+                        if (widget.page == 'Returns') ...[
+                          const StaffActionGuide('01', 'Receive equipment',
+                              'Scan the equipment and record physical receipt. This stops rental time and late charges, if any.'),
+                          const StaffActionGuide('02', 'Check condition',
+                              'Inspect the unit and accessories. Record any damage and an explicit penalty, including zero if none.'),
+                          const StaffActionGuide('03', 'Finish the return',
+                              'Make the unit available or send it to maintenance. Payment balances stay separate.'),
+                        ] else ...[
+                          const StaffActionGuide('01', 'Review the request',
+                              'Check booking details and verify QR payment proof when provided.'),
+                          const StaffActionGuide('02', 'Prepare the unit',
+                              'Scan the assigned equipment at the shop.'),
+                          const StaffActionGuide('03', 'Confirm handoff',
+                              'Scan the customer QR. Verify their ID and rental payment, then check condition and accessories. The timer starts only after confirmation.'),
+                        ],
+                        const SizedBox(height: 12),
+                        FilledButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Got it')),
+                      ]),
+                ))),
+      );
 }
 
 class RentalAdminActionScreen extends StatefulWidget {
@@ -840,6 +1055,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
       _preview(silent: true);
     });
   }
+
   void _searchCustomer(String value) {
     setState(() => _customerSearch = value);
     _customerSearchTimer?.cancel();
@@ -938,7 +1154,10 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
             'Staff-assisted walk-in handover. Customer identity checked in person.';
         _transaction.text = _text(_row['rental_code']);
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted && _action == 'release' && _walkIn && _verification.step == 0) {
+          if (mounted &&
+              _action == 'release' &&
+              _walkIn &&
+              _verification.step == 0) {
             _verification.verify();
           }
         });
@@ -993,8 +1212,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   }
 
   Future<void> _scan(TextEditingController target, String title) async {
-    final value = await Navigator.push<String>(context,
-        MaterialPageRoute(builder: (_) => QrCaptureScreen(title: title)));
+    final value = await Navigator.push<String>(
+        context, StaffPageRoute(builder: (_) => QrCaptureScreen(title: title)));
     if (value != null && mounted) {
       target.text = value;
       if (_action == 'release' && !_manual) await _verification.verify();
@@ -1104,7 +1323,10 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
               child: Column(children: [
                 _check('The receiver matches the rental customer.',
                     _customerVerified, (value) => _customerVerified = value),
-                _check('Physical ID inspected and matches customer', _physicalIdVerified, (value) => _physicalIdVerified = value),
+                _check(
+                    'Physical ID inspected and matches customer',
+                    _physicalIdVerified,
+                    (value) => _physicalIdVerified = value),
                 if (_walkIn)
                   _check(
                       'Customer agreed to the duration, total, late fees, and physical return inspection.',
@@ -1489,14 +1711,16 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
         });
         if (_walkIn) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _action == 'release' && _walkIn && _verification.step == 0) {
+            if (mounted &&
+                _action == 'release' &&
+                _walkIn &&
+                _verification.step == 0) {
               _verification.verify();
             }
           });
         }
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content:
-                Text('Equipment verified and ready for shop handover.')));
+            content: Text('Equipment verified and ready for shop handover.')));
       } else if (_action == 'booking' &&
           _fulfillmentMode == 'SHOP_HANDOVER' &&
           _scheduledStartAt == null) {
@@ -1582,10 +1806,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
           'inspection': _inspectionPayload(),
         });
       }
-      final response = await _api.adminRequest(
-          '/rentals/$id/terminal-dispatch',
-          method: 'POST',
-          body: payload);
+      final response = await _api.adminRequest('/rentals/$id/terminal-dispatch',
+          method: 'POST', body: payload);
       if (!mounted) return;
       _changed = true;
       final request = _map(response['request']);
@@ -1747,7 +1969,8 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                           icon: const Icon(Icons.memory, size: 18),
                           style: OutlinedButton.styleFrom(
                               minimumSize: const Size.fromHeight(44)),
-                          label: const Text('Verify Return on ESP32 Terminal'))),
+                          label:
+                              const Text('Verify Return on ESP32 Terminal'))),
               ]),
             ),
             body: SingleChildScrollView(
@@ -1766,8 +1989,11 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                             Text(recordReference(_row)),
                             const SizedBox(height: 12)
                           ],
-                          if (_row['customer_id'] != null && _action == 'release')
-                            CustomerTrustCard(customerId: _row['customer_id'].toString(), api: _api),
+                          if (_row['customer_id'] != null &&
+                              _action == 'release')
+                            CustomerTrustCard(
+                                customerId: _row['customer_id'].toString(),
+                                api: _api),
                           if (_action == 'booking') ...[
                             Row(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1784,10 +2010,12 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                               value: _text(row['id']),
                                               child: Text(
                                                   '${row['name']} · ${row['item_code']}',
-                                                  overflow: TextOverflow.ellipsis))
+                                                  overflow:
+                                                      TextOverflow.ellipsis))
                                       ],
-                                      validator: (value) =>
-                                          value == null ? 'Select equipment' : null,
+                                      validator: (value) => value == null
+                                          ? 'Select equipment'
+                                          : null,
                                       onChanged: _busy || _previewing
                                           ? null
                                           : (value) {
@@ -1813,7 +2041,7 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                             final scanned =
                                                 await Navigator.push<String>(
                                               context,
-                                              MaterialPageRoute(
+                                              StaffPageRoute(
                                                 builder: (_) =>
                                                     const QrCaptureScreen(
                                                         title:
@@ -1883,7 +2111,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                         setState(() => _customerId = value);
                                         _scheduleAutoQuote();
                                       }),
-                            if (_customerId != null) CustomerTrustCard(customerId: _customerId!, api: _api),
+                            if (_customerId != null)
+                              CustomerTrustCard(
+                                  customerId: _customerId!, api: _api),
                             OutlinedButton.icon(
                                 onPressed: _busy || _previewing
                                     ? null
@@ -1985,7 +2215,9 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
                                   ])
                                     ActionChip(
                                       label: Text(label),
-                                      avatar: (int.tryParse(_minutes.text.trim()) == mins)
+                                      avatar: (int.tryParse(
+                                                  _minutes.text.trim()) ==
+                                              mins)
                                           ? const Icon(Icons.check, size: 16)
                                           : null,
                                       onPressed: _busy || _previewing
@@ -2199,7 +2431,6 @@ class _RentalAdminActionScreenState extends State<RentalAdminActionScreen> {
   }
 }
 
-
 class _Esp32TerminalHandoffDialog extends StatefulWidget {
   const _Esp32TerminalHandoffDialog({
     required this.api,
@@ -2396,9 +2627,7 @@ class _Esp32TerminalHandoffDialogState
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    _confirmed
-                        ? 'STATUS: CONFIRMED'
-                        : '[PRESS GPIO35 BUTTON]',
+                    _confirmed ? 'STATUS: CONFIRMED' : '[PRESS GPIO35 BUTTON]',
                     style: const TextStyle(
                       color: Color(0xFFFACC15),
                       fontWeight: FontWeight.bold,

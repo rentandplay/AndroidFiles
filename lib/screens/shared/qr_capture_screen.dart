@@ -2,10 +2,21 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../services/scanner_camera_session.dart';
+import '../../models/staff_scan.dart';
 
 class QrCaptureScreen extends StatefulWidget {
-  const QrCaptureScreen({super.key, required this.title});
+  /// Guided verification returns the scanned String and has no mode switch.
+  const QrCaptureScreen({super.key, required this.title})
+      : switchModes = false,
+        initialMode = null;
+
+  /// General staff scanning returns a StaffScanResult, including its mode.
+  const QrCaptureScreen.staff({super.key, this.initialMode})
+      : title = 'Scan QR',
+        switchModes = true;
   final String title;
+  final bool switchModes;
+  final StaffScanMode? initialMode;
   @override
   State<QrCaptureScreen> createState() => _QrCaptureScreenState();
 }
@@ -16,6 +27,8 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
   late final AnimationController _animationController;
   MobileScannerController get _controller => _camera.controller;
   bool _done = false;
+  bool _manualEntry = false;
+  late StaffScanMode _mode;
 
   bool get _isTestBinding =>
       WidgetsBinding.instance.runtimeType.toString().contains('Test');
@@ -23,6 +36,8 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
   @override
   void initState() {
     super.initState();
+    _mode = widget.initialMode ?? StaffScanSession.lastMode;
+    if (widget.switchModes) StaffScanSession.lastMode = _mode;
     _animationController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
@@ -51,8 +66,8 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    _camera.lifecycle(state);
     if (!_done) {
-      _camera.lifecycle(state);
       if (state == AppLifecycleState.resumed) {
         if (!_isTestBinding && !_animationController.isAnimating) {
           _animationController.repeat(reverse: true);
@@ -61,6 +76,100 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
         _animationController.stop();
       }
     }
+  }
+
+  void _changeMode(StaffScanMode mode) {
+    if (_done || _mode == mode) return;
+    setState(() => _mode = mode);
+    StaffScanSession.lastMode = mode;
+  }
+
+  Future<void> _finish(String value) async {
+    if (_done || !mounted) return;
+    final mode = _mode;
+    setState(() => _done = true);
+    _animationController.stop();
+    await _camera.pause();
+    if (!mounted) return;
+    if (widget.switchModes) {
+      Navigator.pop(context, StaffScanResult(code: value, mode: mode));
+    } else {
+      Navigator.pop(context, value);
+    }
+  }
+
+  Future<void> _enterCode() async {
+    if (_done) return;
+    final mode = _mode;
+    setState(() {
+      _done = true;
+      _manualEntry = true;
+    });
+    _animationController.stop();
+    await _camera.pause();
+    if (!mounted) return;
+    final code = await showDialog<String>(
+        context: context, builder: (_) => _PrintedCodeDialog(mode: mode));
+    if (!mounted) return;
+    if (code != null) {
+      Navigator.pop(
+          context, StaffScanResult(code: code, mode: mode, manual: true));
+      return;
+    }
+    setState(() {
+      _done = false;
+      _manualEntry = false;
+    });
+    if (!_isTestBinding &&
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      _animationController.repeat(reverse: true);
+    }
+    await _camera.resume();
+  }
+
+  Widget _modeControls() {
+    final scheme = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        Row(children: [
+          for (final mode in StaffScanMode.values)
+            Expanded(
+              child: Padding(
+                  padding: EdgeInsets.only(
+                      right: mode == StaffScanMode.rental ? 8 : 0),
+                  child: Semantics(
+                    selected: mode == _mode,
+                    child: OutlinedButton(
+                      key: ValueKey('scan-mode-${mode.name}'),
+                      onPressed: _done ? null : () => _changeMode(mode),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(48, 48),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 12),
+                        backgroundColor:
+                            mode == _mode ? scheme.primary : scheme.surface,
+                        foregroundColor: mode == _mode
+                            ? scheme.onPrimary
+                            : scheme.onSurfaceVariant,
+                        side: BorderSide(
+                            color: mode == _mode
+                                ? scheme.primary
+                                : scheme.outlineVariant),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text(mode.label, textAlign: TextAlign.center),
+                    ),
+                  )),
+            )
+        ]),
+        const SizedBox(height: 10),
+        Text(_mode.instruction,
+            style: TextStyle(
+                fontSize: 13, height: 1.4, color: scheme.onSurfaceVariant)),
+      ]),
+    );
   }
 
   @override
@@ -127,7 +236,8 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                   tooltip: value.torchState == TorchState.on
                       ? 'Turn flash off'
                       : 'Turn flash on',
-                  onPressed: !value.isRunning ||
+                  onPressed: _done ||
+                          !value.isRunning ||
                           value.torchState == TorchState.unavailable
                       ? null
                       : _camera.toggleTorch,
@@ -138,13 +248,15 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
               valueListenable: _controller,
               builder: (context, value, _) => IconButton(
                   tooltip: 'Switch camera',
-                  onPressed:
-                      value.isRunning && (value.availableCameras ?? 2) > 1
-                          ? _camera.switchCamera
-                          : null,
+                  onPressed: !_done &&
+                          value.isRunning &&
+                          (value.availableCameras ?? 2) > 1
+                      ? _camera.switchCamera
+                      : null,
                   icon: const Icon(Icons.cameraswitch_outlined))),
         ]),
         body: Column(children: [
+          if (widget.switchModes) _modeControls(),
           Expanded(child: LayoutBuilder(builder: (context, size) {
             final side = math.min(size.maxWidth * .72, size.maxHeight * .65);
             final window = Rect.fromCenter(
@@ -172,8 +284,12 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                   const SizedBox(height: 8),
                   Text(
                       error.errorCode == MobileScannerErrorCode.permissionDenied
-                          ? 'Allow camera access in your phone settings, or go back and enter the printed code.'
-                          : 'Try the camera again, or go back and use the printed code.',
+                          ? widget.switchModes
+                              ? 'Allow camera access in your phone settings, or tap Enter code instead.'
+                              : 'Allow camera access in your phone settings, or go back and enter the printed code.'
+                          : widget.switchModes
+                              ? 'Try the camera again, or tap Enter code instead.'
+                              : 'Try the camera again, or go back and use the printed code.',
                       textAlign: TextAlign.center),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
@@ -193,7 +309,7 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                         painter: _ScannerOverlayPainter(
                           scanWindow: window,
                           scanProgress: _animationController.value,
-                          isSuccess: _done,
+                          isSuccess: _done && !_manualEntry,
                         ),
                       ),
                     ),
@@ -228,35 +344,42 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              Text(
-                                _done ? 'QR captured' : 'Align QR code inside the frame',
+                              Flexible(
+                                  child: Text(
+                                _manualEntry
+                                    ? 'Entering printed code'
+                                    : _done
+                                        ? 'QR captured'
+                                        : 'Align QR code inside the frame',
+                                textAlign: TextAlign.center,
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 12.5,
                                   fontWeight: FontWeight.w600,
                                 ),
-                              ),
+                              )),
                             ],
                           ),
                         ),
                       ),
                     ),
-                    Positioned(
-                      top: window.bottom + 18,
-                      left: 20,
-                      right: 20,
-                      child: Center(
-                        child: Text(
-                          'Center one QR code inside the frame.\nKeep the camera steady.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.85),
-                            fontSize: 12.5,
-                            height: 1.4,
+                    if (!widget.switchModes)
+                      Positioned(
+                        top: window.bottom + 18,
+                        left: 20,
+                        right: 20,
+                        child: Center(
+                          child: Text(
+                            'Center one QR code inside the frame.\nKeep the camera steady.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 12.5,
+                              height: 1.4,
+                            ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -273,11 +396,7 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                     )) {
                       continue;
                     }
-                    _done = true;
-                    _animationController.stop();
-                    setState(() {});
-                    await _camera.pause();
-                    if (context.mounted) Navigator.pop(context, value);
+                    await _finish(value);
                     break;
                   }
                 }
@@ -291,10 +410,76 @@ class _QrCaptureScreenState extends State<QrCaptureScreen>
                   child: SizedBox(
                       width: double.infinity,
                       child: TextButton.icon(
-                          onPressed: () => Navigator.pop(context),
+                          onPressed: _done
+                              ? null
+                              : widget.switchModes
+                                  ? _enterCode
+                                  : () => Navigator.pop(context),
                           icon: const Icon(Icons.keyboard_outlined),
-                          label: const Text('Go back and enter code'))))),
+                          label: Text(widget.switchModes
+                              ? 'Enter code instead'
+                              : 'Go back and enter code'))))),
         ]),
+      );
+}
+
+class _PrintedCodeDialog extends StatefulWidget {
+  const _PrintedCodeDialog({required this.mode});
+  final StaffScanMode mode;
+  @override
+  State<_PrintedCodeDialog> createState() => _PrintedCodeDialogState();
+}
+
+class _PrintedCodeDialogState extends State<_PrintedCodeDialog> {
+  final _code = TextEditingController();
+  final _form = GlobalKey<FormState>();
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    if (_form.currentState!.validate()) {
+      Navigator.pop(context, _code.text.trim());
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text(widget.mode == StaffScanMode.rental
+            ? 'Find rental'
+            : 'Find equipment'),
+        content: SingleChildScrollView(
+            child: Form(
+                key: _form,
+                child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                          'This finds the record. Handoff and return verification are completed separately.'),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                          controller: _code,
+                          autofocus: true,
+                          textInputAction: TextInputAction.search,
+                          onFieldSubmitted: (_) => _submit(),
+                          maxLength: 256,
+                          validator: (value) => value?.trim().isEmpty != false
+                              ? 'Enter the printed code.'
+                              : null,
+                          decoration: InputDecoration(
+                              labelText: widget.mode == StaffScanMode.rental
+                                  ? 'Rental code'
+                                  : 'Equipment code')),
+                    ]))),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          FilledButton(onPressed: _submit, child: const Text('Find'))
+        ],
       );
 }
 
@@ -311,11 +496,14 @@ class _ScannerOverlayPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final screenPath = Path()..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
-    final rrect = RRect.fromRectAndRadius(scanWindow, const Radius.circular(20));
+    final screenPath = Path()
+      ..addRect(Rect.fromLTWH(0, 0, size.width, size.height));
+    final rrect =
+        RRect.fromRectAndRadius(scanWindow, const Radius.circular(20));
     final windowPath = Path()..addRRect(rrect);
 
-    final maskPath = Path.combine(PathOperation.difference, screenPath, windowPath);
+    final maskPath =
+        Path.combine(PathOperation.difference, screenPath, windowPath);
     final maskPaint = Paint()..color = Colors.black.withValues(alpha: 0.65);
     canvas.drawPath(maskPath, maskPaint);
 
@@ -327,7 +515,8 @@ class _ScannerOverlayPainter extends CustomPainter {
       ..strokeWidth = 1.5;
     canvas.drawRRect(rrect, borderPaint);
 
-    final cornerColor = isSuccess ? Colors.greenAccent : const Color(0xFFFF963E);
+    final cornerColor =
+        isSuccess ? Colors.greenAccent : const Color(0xFFFF963E);
     final cornerPaint = Paint()
       ..color = cornerColor
       ..style = PaintingStyle.stroke
@@ -366,6 +555,7 @@ class _ScannerOverlayPainter extends CustomPainter {
       ..arcToPoint(
         Offset(scanWindow.left + cornerRadius, scanWindow.bottom),
         radius: const Radius.circular(cornerRadius),
+        clockwise: false,
       )
       ..lineTo(scanWindow.left + cornerLength, scanWindow.bottom);
     canvas.drawPath(bl, cornerPaint);
@@ -377,12 +567,14 @@ class _ScannerOverlayPainter extends CustomPainter {
       ..arcToPoint(
         Offset(scanWindow.right, scanWindow.bottom - cornerRadius),
         radius: const Radius.circular(cornerRadius),
+        clockwise: false,
       )
       ..lineTo(scanWindow.right, scanWindow.bottom - cornerLength);
     canvas.drawPath(br, cornerPaint);
 
     if (!isSuccess) {
-      final lineY = scanWindow.top + 14 + (scanWindow.height - 28) * scanProgress;
+      final lineY =
+          scanWindow.top + 14 + (scanWindow.height - 28) * scanProgress;
       final lineRect = Rect.fromLTWH(
         scanWindow.left + 12,
         lineY - 1.5,
@@ -401,7 +593,8 @@ class _ScannerOverlayPainter extends CustomPainter {
           stops: [0.0, 0.25, 0.5, 0.75, 1.0],
         ).createShader(lineRect);
       canvas.drawRRect(
-          RRect.fromRectAndRadius(lineRect, const Radius.circular(2)), linePaint);
+          RRect.fromRectAndRadius(lineRect, const Radius.circular(2)),
+          linePaint);
 
       final glowPaint = Paint()
         ..shader = RadialGradient(

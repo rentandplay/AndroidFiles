@@ -1,3 +1,4 @@
+import '../shared/support_chat_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -31,6 +32,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     RentalNotificationSuppression.isNotificationsScreenActive = false;
     super.dispose();
   }
+
   Future<void> _open(
       RentalNotification row, RentalNotificationService service) async {
     try {
@@ -45,10 +47,16 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     await Navigator.push(
         context,
         MaterialPageRoute(
-            builder: (_) => NotificationBookingScreen(
-                notification: row,
-                audience: service.audience,
-                api: service.api)));
+            builder: (_) =>
+                row.type == 'CHAT_MESSAGE' && row.threadId.isNotEmpty
+                    ? SupportChatScreen(
+                        threadId: row.threadId,
+                        staff: service.audience == 'STAFF',
+                        api: service.api)
+                    : NotificationBookingScreen(
+                        notification: row,
+                        audience: service.audience,
+                        api: service.api)));
     if (mounted) await service.refresh();
   }
 
@@ -146,7 +154,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   onPressed: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                          builder: (_) => const AlertsScreen())),
+                                          builder: (_) =>
+                                              const AlertsScreen())),
                                   icon: const Icon(Icons.timer_outlined),
                                   label: const Text('View rental timers')),
                             if (service.error.isNotEmpty) ...[

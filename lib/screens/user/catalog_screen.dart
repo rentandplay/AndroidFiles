@@ -1,3 +1,5 @@
+import '../../widgets/app_glass_backdrop.dart';
+import '../../widgets/customer_home_backdrop.dart';
 import '../../widgets/brand_hero_header.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/premium_animations.dart';
@@ -227,8 +229,10 @@ class CatalogScreenState extends State<CatalogScreen> {
         statusBarColor: Colors.transparent,
       ),
       child: Scaffold(
-        backgroundColor: isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
-        body: RefreshIndicator(
+        backgroundColor:
+            isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
+        body: AppGlassBackdrop(
+            child: RefreshIndicator(
           edgeOffset: MediaQuery.of(context).padding.top + 50,
           onRefresh: _loadCatalog,
           child: CustomScrollView(
@@ -239,7 +243,7 @@ class CatalogScreenState extends State<CatalogScreen> {
               SliverToBoxAdapter(
                 child: ClipPath(
                   clipper: const BrowseHeroBottomWaveClipper(),
-                  child: NavyOrangeHeroBackground(
+                  child: CustomerHomeHeroBackground(
                     child: SafeArea(
                       bottom: false,
                       child: Column(
@@ -256,7 +260,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                                   HeroLoginButton(
                                     onPressed: () => Navigator.push(
                                       context,
-                                      MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                      MaterialPageRoute(
+                                          builder: (_) => const LoginScreen()),
                                     ),
                                   )
                                 else
@@ -271,23 +276,30 @@ class CatalogScreenState extends State<CatalogScreen> {
                                       if (isAdmin) ...[
                                         const SizedBox(width: 6),
                                         HeaderActionPod(
-                                          podBg: Colors.white.withValues(alpha: 0.16),
-                                          podBorder: Colors.white.withValues(alpha: 0.25),
+                                          podBg: Colors.white
+                                              .withValues(alpha: 0.16),
+                                          podBorder: Colors.white
+                                              .withValues(alpha: 0.25),
                                           iconColor: Colors.white,
                                           child: PopupMenuButton<String>(
                                             padding: EdgeInsets.zero,
-                                            icon: const Icon(Icons.more_vert, size: 20),
+                                            icon: const Icon(Icons.more_vert,
+                                                size: 20),
                                             tooltip: 'More Options',
                                             onSelected: (value) async {
                                               if (value == 'admin') {
-                                                final navigator = Navigator.of(context);
+                                                final navigator =
+                                                    Navigator.of(context);
                                                 navigator.push(
                                                   MaterialPageRoute(
-                                                    builder: (_) => AdminDashboardScreen(
+                                                    builder: (_) =>
+                                                        AdminDashboardScreen(
                                                       onSignedOut: () {
-                                                        navigator.pushAndRemoveUntil(
+                                                        navigator
+                                                            .pushAndRemoveUntil(
                                                           MaterialPageRoute(
-                                                            builder: (_) => const LoginScreen(),
+                                                            builder: (_) =>
+                                                                const LoginScreen(),
                                                           ),
                                                           (route) => false,
                                                         );
@@ -296,11 +308,17 @@ class CatalogScreenState extends State<CatalogScreen> {
                                                   ),
                                                 );
                                               } else if (value == 'logout') {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text('Logged out successfully.')),
+                                                ScaffoldMessenger.of(context)
+                                                    .showSnackBar(
+                                                  const SnackBar(
+                                                      content: Text(
+                                                          'Logged out successfully.')),
                                                 );
                                                 await authService.logout();
-                                                if (mounted) setState(() => _currentUserModel = null);
+                                                if (mounted) {
+                                                  setState(() =>
+                                                      _currentUserModel = null);
+                                                }
                                               }
                                             },
                                             itemBuilder: (context) => [
@@ -308,8 +326,12 @@ class CatalogScreenState extends State<CatalogScreen> {
                                                 value: 'admin',
                                                 child: Row(
                                                   children: [
-                                                    Icon(Icons.admin_panel_settings_outlined,
-                                                        size: 20, color: Color(0xFFF57C00)),
+                                                    Icon(
+                                                        Icons
+                                                            .admin_panel_settings_outlined,
+                                                        size: 20,
+                                                        color:
+                                                            Color(0xFFF57C00)),
                                                     SizedBox(width: 10),
                                                     Text('Staff Dashboard'),
                                                   ],
@@ -320,12 +342,16 @@ class CatalogScreenState extends State<CatalogScreen> {
                                                 value: 'logout',
                                                 child: Row(
                                                   children: [
-                                                    Icon(Icons.logout, size: 20, color: Colors.red),
+                                                    Icon(Icons.logout,
+                                                        size: 20,
+                                                        color: Colors.red),
                                                     SizedBox(width: 10),
                                                     Text('Logout',
                                                         style: TextStyle(
                                                             color: Colors.red,
-                                                            fontWeight: FontWeight.bold)),
+                                                            fontWeight:
+                                                                FontWeight
+                                                                    .bold)),
                                                   ],
                                                 ),
                                               ),
@@ -342,10 +368,16 @@ class CatalogScreenState extends State<CatalogScreen> {
                           // Search bar + separate filter/tune button matching reference
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: BrowseHeroSearchBar(
-                              controller: _searchController,
-                              onChanged: (value) => setState(() => _searchQuery = value),
-                              trailing: Material(
+                            child: Row(children: [
+                              Expanded(
+                                  child: MobileSearchField(
+                                controller: _searchController,
+                                onChanged: (value) =>
+                                    setState(() => _searchQuery = value),
+                                hintText: 'Search equipment',
+                              )),
+                              const SizedBox(width: 10),
+                              Material(
                                 color: Colors.transparent,
                                 child: Container(
                                   width: 48,
@@ -355,7 +387,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                                     borderRadius: BorderRadius.circular(20),
                                     boxShadow: [
                                       BoxShadow(
-                                        color: Colors.black.withValues(alpha: 0.16),
+                                        color: Colors.black
+                                            .withValues(alpha: 0.16),
                                         blurRadius: 10,
                                         offset: const Offset(0, 3),
                                       ),
@@ -363,9 +396,12 @@ class CatalogScreenState extends State<CatalogScreen> {
                                   ),
                                   child: PopupMenuButton<String>(
                                     tooltip: 'Sort equipment',
-                                    icon: const Icon(Icons.tune_rounded, size: 22, color: Color(0xFF0F172A)),
-                                    initialValue: _availableFirst ? 'available' : 'name',
-                                    onSelected: (value) => setState(() => _availableFirst = value == 'available'),
+                                    icon: const Icon(Icons.tune_rounded,
+                                        size: 22, color: Color(0xFF0F172A)),
+                                    initialValue:
+                                        _availableFirst ? 'available' : 'name',
+                                    onSelected: (value) => setState(() =>
+                                        _availableFirst = value == 'available'),
                                     itemBuilder: (_) => [
                                       CheckedPopupMenuItem(
                                         value: 'available',
@@ -381,7 +417,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                                   ),
                                 ),
                               ),
-                            ),
+                            ]),
                           ),
                           const SizedBox(height: 12),
                           // Horizontal Category Chips row spanning full screen width
@@ -397,7 +433,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                                     child: BrowseCategoryChip(
                                       label: category,
                                       isSelected: selectedCategory == category,
-                                      onSelected: () => setState(() => selectedCategory = category),
+                                      onSelected: () => setState(
+                                          () => selectedCategory = category),
                                     ),
                                   ),
                                 const SizedBox(width: 8),
@@ -453,9 +490,10 @@ class CatalogScreenState extends State<CatalogScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
                         child: Text(
-                          '${filteredItems.length} items',
+                          '${filteredItems.length} ${filteredItems.length == 1 ? 'item' : 'items'}',
                           style: TextStyle(
-                            color: isDark ? Colors.white : const Color(0xFF0F172A),
+                            color:
+                                isDark ? Colors.white : const Color(0xFF0F172A),
                             fontSize: 14,
                             fontWeight: FontWeight.w800,
                             letterSpacing: -0.2,
@@ -561,7 +599,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                 ),
             ],
           ),
-        ),
+        )),
       ),
     );
   }
@@ -573,8 +611,7 @@ class CatalogScreenState extends State<CatalogScreen> {
     final scheme = Theme.of(context).colorScheme;
     final statusKey = item.status.toUpperCase();
     final statusColor = switch (statusKey) {
-      'AVAILABLE' =>
-        isDark ? const Color(0xFF89D5B8) : const Color(0xFF216F56),
+      'AVAILABLE' => isDark ? const Color(0xFF89D5B8) : const Color(0xFF216F56),
       'RENTED' || 'RESERVED_PENDING' => mobileAccentText(context),
       _ => scheme.onSurfaceVariant,
     };
@@ -605,14 +642,19 @@ class CatalogScreenState extends State<CatalogScreen> {
                       center: Alignment.center,
                       radius: 0.85,
                       colors: [
-                        (isDark ? const Color(0xFF233248) : const Color(0xFFF6EFE6))
+                        (isDark
+                                ? const Color(0xFF233248)
+                                : const Color(0xFFF6EFE6))
                             .withValues(alpha: isDark ? 0.55 : 0.70),
-                        (isDark ? const Color(0xFF151F2E) : const Color(0xFFFCF9F5))
+                        (isDark
+                                ? const Color(0xFF151F2E)
+                                : const Color(0xFFFCF9F5))
                             .withValues(alpha: 0.25),
                       ],
                     ),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   child: Center(
                     child: AnimatedScale(
                       scale: isHovered ? 1.06 : 1.0,
@@ -620,7 +662,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                       curve: Curves.easeOutCubic,
                       child: Hero(
                         tag: 'item-image-${item.id}',
-                        child: item.buildImage(fit: BoxFit.contain, height: 100),
+                        child:
+                            item.buildImage(fit: BoxFit.contain, height: 100),
                       ),
                     ),
                   ),
@@ -695,8 +738,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                                           : Colors.white)
                                       .withValues(alpha: .96),
                                   border: Border.all(
-                                      color:
-                                          statusColor.withValues(alpha: .38),
+                                      color: statusColor.withValues(alpha: .38),
                                       width: 1.0),
                                   borderRadius: BorderRadius.circular(10),
                                   boxShadow: [
@@ -720,8 +762,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                                         boxShadow: statusKey == 'AVAILABLE'
                                             ? [
                                                 BoxShadow(
-                                                  color: statusColor
-                                                      .withValues(alpha: 0.55),
+                                                  color: statusColor.withValues(
+                                                      alpha: 0.55),
                                                   blurRadius: 5,
                                                 ),
                                               ]
@@ -810,12 +852,14 @@ class CatalogScreenState extends State<CatalogScreen> {
                                   : const Color(0xFFFFF4EB)),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                            color: const Color(0xFFDF762D).withValues(alpha: isHovered ? 0.80 : 0.35),
+                            color: const Color(0xFFDF762D)
+                                .withValues(alpha: isHovered ? 0.80 : 0.35),
                             width: 1.1,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFFDF762D).withValues(alpha: isHovered ? 0.28 : 0.10),
+                              color: const Color(0xFFDF762D)
+                                  .withValues(alpha: isHovered ? 0.28 : 0.10),
                               blurRadius: isHovered ? 8 : 4,
                               offset: const Offset(0, 2),
                             ),
@@ -832,7 +876,9 @@ class CatalogScreenState extends State<CatalogScreen> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w700,
-                                  color: isHovered ? Colors.white : const Color(0xFFDF762D),
+                                  color: isHovered
+                                      ? Colors.white
+                                      : const Color(0xFFDF762D),
                                 ),
                               ),
                             ),
@@ -843,7 +889,9 @@ class CatalogScreenState extends State<CatalogScreen> {
                               child: Icon(
                                 Icons.arrow_forward_rounded,
                                 size: 16,
-                                color: isHovered ? Colors.white : const Color(0xFFDF762D),
+                                color: isHovered
+                                    ? Colors.white
+                                    : const Color(0xFFDF762D),
                               ),
                             ),
                           ]),

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import '../../widgets/staff_ui.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:intl/intl.dart';
 import '../../services/admin_api_service.dart';
@@ -181,7 +182,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
 
   Future<void> _report() async {
     final saved = await Navigator.push<bool>(context,
-        MaterialPageRoute(builder: (_) => MaintenanceEditScreen(api: _api)));
+        StaffPageRoute(builder: (_) => MaintenanceEditScreen(api: _api)));
     if (saved == true) await _changed();
   }
 
@@ -278,7 +279,7 @@ class _MaintenanceScreenState extends State<MaintenanceScreen> {
                         trailing: const Icon(Icons.chevron_right),
                         onTap: () => Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            StaffPageRoute(
                                 builder: (_) => MaintenanceTicketScreen(
                                     id: _text(ticket['id']),
                                     api: _api,
@@ -319,7 +320,7 @@ class _MaintenanceTicketScreenState extends State<MaintenanceTicketScreen> {
   Future<void> _edit(Map<String, dynamic> ticket, String action) async {
     final saved = await Navigator.push<bool>(
         context,
-        MaterialPageRoute(
+        StaffPageRoute(
             builder: (_) => MaintenanceEditScreen(
                 api: _api, ticket: ticket, action: action)));
     if (!mounted) return;

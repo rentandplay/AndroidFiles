@@ -1,3 +1,4 @@
+import 'liquid_glass.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -43,7 +44,9 @@ class _HoverLiftCardState extends State<HoverLiftCard> {
             : 1.0;
 
     return MouseRegion(
-      cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : SystemMouseCursors.basic,
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
@@ -73,14 +76,17 @@ class _HoverLiftCardState extends State<HoverLiftCard> {
           curve: Curves.easeOutCubic,
           margin: widget.margin,
           transform: Matrix4.translationValues(0.0, translateY, 0.0)
-            ..scale(scale, scale, 1.0),
+            ..scaleByDouble(scale, scale, 1.0, 1.0),
           transformAlignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF131D2D) : Colors.white,
+            color: LiquidGlassScope.of(context)
+                ? Colors.transparent
+                : (isDark ? const Color(0xFF131D2D) : Colors.white),
             borderRadius: widget.borderRadius,
             border: Border.all(
               color: _isHovered
-                  ? const Color(0xFFDF762D).withValues(alpha: isDark ? 0.60 : 0.45)
+                  ? const Color(0xFFDF762D)
+                      .withValues(alpha: isDark ? 0.60 : 0.45)
                   : (isDark
                       ? Colors.white.withValues(alpha: 0.10)
                       : const Color(0xFFE2E8F0)),
@@ -89,7 +95,8 @@ class _HoverLiftCardState extends State<HoverLiftCard> {
             boxShadow: [
               BoxShadow(
                 color: _isHovered
-                    ? const Color(0xFFDF762D).withValues(alpha: isDark ? 0.28 : 0.16)
+                    ? const Color(0xFFDF762D)
+                        .withValues(alpha: isDark ? 0.28 : 0.16)
                     : (isDark
                         ? Colors.black.withValues(alpha: 0.25)
                         : const Color(0xFF0F172A).withValues(alpha: 0.06)),
@@ -103,7 +110,12 @@ class _HoverLiftCardState extends State<HoverLiftCard> {
             borderRadius: widget.borderRadius,
             child: Padding(
               padding: widget.padding,
-              child: widget.builder(context, _isHovered),
+              child: LiquidGlassScope.of(context)
+                  ? LiquidGlassContainer(
+                      filterBackdrop: false,
+                      borderRadius: widget.borderRadius.topLeft.x,
+                      child: widget.builder(context, _isHovered))
+                  : widget.builder(context, _isHovered),
             ),
           ),
         ),
@@ -264,7 +276,8 @@ class _StaggeredSlideFadeState extends State<StaggeredSlideFade>
       ),
     );
 
-    final totalDelay = widget.delay + Duration(milliseconds: (widget.index * 35).clamp(0, 350));
+    final totalDelay = widget.delay +
+        Duration(milliseconds: (widget.index * 35).clamp(0, 350));
     Future.delayed(totalDelay, () {
       if (mounted) {
         _controller.forward();
@@ -343,7 +356,8 @@ class _PulsingGlowBadgeState extends State<PulsingGlowBadge>
         decoration: BoxDecoration(
           boxShadow: [
             BoxShadow(
-              color: widget.glowColor.withValues(alpha: _glowAnimation.value * 0.35),
+              color: widget.glowColor
+                  .withValues(alpha: _glowAnimation.value * 0.35),
               blurRadius: 10 + (_glowAnimation.value * 6),
               spreadRadius: 1,
             ),
