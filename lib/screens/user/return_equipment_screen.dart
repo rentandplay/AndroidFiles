@@ -72,77 +72,80 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
                       ScrollViewKeyboardDismissBehavior.onDrag,
                   padding: const EdgeInsets.all(16),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      RentalSection(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        RentalSection(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                              Text(widget.rental.itemName,
+                                  style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 6),
+                              Text(widget.rental.displayReference),
+                              const Divider(height: 24),
+                              RentalValueRow(
+                                  'Return by',
+                                  widget.rental.dueDate.millisecondsSinceEpoch >
+                                          0
+                                      ? DateFormat('MMM d · h:mm a').format(
+                                          widget.rental.dueDate.toLocal())
+                                      : 'Not recorded'),
+                            ])),
+                        RentalSection(
+                          title: 'How is the equipment?',
+                          icon: Icons.fact_check_outlined,
                           child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                            Text(widget.rental.itemName,
-                                style: const TextStyle(
-                                    fontSize: 22, fontWeight: FontWeight.w800)),
-                            const SizedBox(height: 6),
-                            Text(widget.rental.displayReference),
-                            const Divider(height: 24),
-                            RentalValueRow(
-                                'Return by',
-                                widget.rental.dueDate.millisecondsSinceEpoch > 0
-                                    ? DateFormat('MMM d · h:mm a')
-                                        .format(widget.rental.dueDate.toLocal())
-                                    : 'Not recorded'),
-                          ])),
-                      RentalSection(
-                        title: 'How is the equipment?',
-                        icon: Icons.fact_check_outlined,
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Wrap(spacing: 8, runSpacing: 8, children: [
-                                for (final option in {
-                                  'GOOD': 'Good',
-                                  'NEEDS_INSPECTION': 'Needs checking',
-                                  'DAMAGED': 'Damaged'
-                                }.entries)
-                                  ChoiceChip(
-                                      label: Text(option.value),
-                                      selected:
-                                          _selectedCondition == option.key,
-                                      onSelected: _busy
-                                          ? null
-                                          : (_) => setState(() =>
-                                              _selectedCondition = option.key)),
+                                Wrap(spacing: 8, runSpacing: 8, children: [
+                                  for (final option in {
+                                    'GOOD': 'Good',
+                                    'NEEDS_INSPECTION': 'Needs checking',
+                                    'DAMAGED': 'Damaged'
+                                  }.entries)
+                                    ChoiceChip(
+                                        label: Text(option.value),
+                                        selected:
+                                            _selectedCondition == option.key,
+                                        onSelected: _busy
+                                            ? null
+                                            : (_) => setState(() =>
+                                                _selectedCondition =
+                                                    option.key)),
+                                ]),
+                                const SizedBox(height: 18),
+                                TextField(
+                                    controller: _notes,
+                                    enabled: !_busy,
+                                    maxLines: 3,
+                                    maxLength: 2000,
+                                    decoration: const InputDecoration(
+                                        labelText: 'Condition notes (optional)',
+                                        hintText:
+                                            'Tell us about scratches, damage or missing parts.')),
                               ]),
-                              const SizedBox(height: 18),
-                              TextField(
-                                  controller: _notes,
-                                  enabled: !_busy,
-                                  maxLines: 3,
-                                  maxLength: 2000,
-                                  decoration: const InputDecoration(
-                                      labelText: 'Condition notes (optional)',
-                                      hintText:
-                                          'Tell us about scratches, damage or missing parts.')),
-                            ]),
-                      ),
-                      const RentalNotice(
-                          title: 'Return steps',
-                          icon: Icons.assignment_return_outlined,
-                          message:
-                              'Send this request, then hand the item to the admin. Rental time stops at receipt while they inspect it.'),
-                      if (_error.isNotEmpty) ...[
+                        ),
+                        const RentalNotice(
+                            title: 'Return steps',
+                            icon: Icons.assignment_return_outlined,
+                            message:
+                                'Send this request, then hand the item to the admin. Rental time stops at receipt while they inspect it.'),
+                        if (_error.isNotEmpty) ...[
+                          const SizedBox(height: 16),
+                          RentalNotice(
+                              isError: true,
+                              title: 'Could not send return request',
+                              message: _error),
+                        ],
                         const SizedBox(height: 16),
-                        RentalNotice(
-                            isError: true,
-                            title: 'Could not send return request',
-                            message: _error),
-                      ],
-                      const SizedBox(height: 16),
-                    ]),
-                  ),
+                      ]),
                 ),
               ),
             ),
           ),
+        ),
       );
 }
 
@@ -290,81 +293,85 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
     final overdue = _rental.isActive &&
         _rental.dueDate.millisecondsSinceEpoch > 0 &&
         ServerClock.instance.now.isAfter(_rental.dueDate);
-    return Scaffold(
-        appBar: GlassAppBar(titleText: 'Return status', actions: [
-          IconButton(
-              tooltip: 'Refresh return status',
-              onPressed: _refresh,
-              icon: const Icon(Icons.refresh))
-        ]),
-        bottomNavigationBar: rejected && _rental.isActive
-            ? SafeArea(
-                minimum: const EdgeInsets.all(16),
-                child: FilledButton.icon(
-                    onPressed: _requestAgain,
-                    icon: const Icon(Icons.assignment_return_outlined),
-                    label: const Text('Send a new return request')))
-            : null,
-        body: LiquidAmbientBackdrop(
-          child: RefreshIndicator(
-              onRefresh: _refresh,
-              child: ListView(
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    RentalSection(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                          Text(_rental.itemName,
-                              style: const TextStyle(
-                                  fontSize: 22, fontWeight: FontWeight.w800)),
-                          const SizedBox(height: 4),
-                          Text(_rental.displayReference),
-                          const SizedBox(height: 16),
-                          RentalStatusBadge(
-                              status: _rental.hasPendingReturnRequest
-                                  ? 'RETURN_REQUESTED'
-                                  : _rental.normalizedStatus),
-                          const SizedBox(height: 20),
-                          _ReturnProgressTracker(step: _step()),
-                          const SizedBox(height: 18),
-                          RentalNotice(
-                              title: _title(),
-                              message: _message(),
-                              icon: Icons.assignment_return_outlined,
-                              isError: overdue || rejected),
-                          if (overdue) ...[
-                            const SizedBox(height: 12),
-                            RentalNotice(
-                                title: 'Overdue',
-                                isError: true,
-                                message:
-                                    'The rental clock is still running until the admin records physical receipt.'),
-                          ],
-                          if (_error.isNotEmpty) ...[
-                            const SizedBox(height: 12),
-                            RentalNotice(
-                                title: 'Could not refresh status',
-                                isError: true,
-                                message:
-                                    '$_error. Showing the last loaded status.'),
-                          ],
-                          const SizedBox(height: 12),
-                          RentalValueRow(
-                              'Return by',
-                              _rental.dueDate.millisecondsSinceEpoch > 0
-                                  ? _date(_rental.dueDate)
-                                  : 'Not recorded'),
-                          if (_rental.receivedAt != null)
-                            RentalValueRow(
-                                'Received by admin', _date(_rental.receivedAt)),
-                          if (_rental.balanceDue > 0)
-                            RentalValueRow(
-                                'Balance due', rentalMoney(_rental.balanceDue)),
-                        ])),
-                  ])),
-        ));
+    return LiquidGlassScope(
+        child: Scaffold(
+            appBar: GlassAppBar(titleText: 'Return status', actions: [
+              IconButton(
+                  tooltip: 'Refresh return status',
+                  onPressed: _refresh,
+                  icon: const Icon(Icons.refresh))
+            ]),
+            bottomNavigationBar: rejected && _rental.isActive
+                ? SafeArea(
+                    minimum: const EdgeInsets.all(16),
+                    child: FilledButton.icon(
+                        onPressed: _requestAgain,
+                        icon: const Icon(Icons.assignment_return_outlined),
+                        label: const Text('Send a new return request')))
+                : null,
+            backgroundColor: Colors.transparent,
+            body: LiquidAmbientBackdrop(
+              child: RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        RentalSection(
+                            child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                              Text(_rental.itemName,
+                                  style: const TextStyle(
+                                      fontSize: 25,
+                                      letterSpacing: -.6,
+                                      fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 4),
+                              Text(_rental.displayReference),
+                              const SizedBox(height: 16),
+                              RentalStatusBadge(
+                                  status: _rental.hasPendingReturnRequest
+                                      ? 'RETURN_REQUESTED'
+                                      : _rental.normalizedStatus),
+                              const SizedBox(height: 20),
+                              _ReturnProgressTracker(step: _step()),
+                              const SizedBox(height: 18),
+                              RentalNotice(
+                                  title: _title(),
+                                  message: _message(),
+                                  icon: Icons.assignment_return_outlined,
+                                  isError: rejected),
+                              if (overdue) ...[
+                                const SizedBox(height: 12),
+                                RentalNotice(
+                                    title: 'Overdue',
+                                    isError: true,
+                                    message:
+                                        'The rental clock is still running until the admin records physical receipt.'),
+                              ],
+                              if (_error.isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                RentalNotice(
+                                    title: 'Showing your last saved status',
+                                    isError: true,
+                                    message:
+                                        'Check your internet connection, then tap refresh to try again.'),
+                              ],
+                              const SizedBox(height: 12),
+                              RentalValueRow(
+                                  'Return by',
+                                  _rental.dueDate.millisecondsSinceEpoch > 0
+                                      ? _date(_rental.dueDate)
+                                      : 'Not recorded'),
+                              if (_rental.receivedAt != null)
+                                RentalValueRow('Received by admin',
+                                    _date(_rental.receivedAt)),
+                              if (_rental.balanceDue > 0)
+                                RentalValueRow('Balance due',
+                                    rentalMoney(_rental.balanceDue)),
+                            ])),
+                      ])),
+            )));
   }
 }
 
