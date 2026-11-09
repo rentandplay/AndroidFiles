@@ -331,7 +331,24 @@ class RentalActionBar extends StatelessWidget {
                                             ),
                                           ],
                                   ),
-                                  child: Center(
+                                  child: FilledButton(
+                                    onPressed: busy ? null : onPressed,
+                                    style: FilledButton.styleFrom(
+                                      minimumSize: const Size.fromHeight(50),
+                                      backgroundColor: Colors.transparent,
+                                      disabledBackgroundColor: isDark
+                                          ? const Color(0xFF1E2836).withValues(alpha: 0.6)
+                                          : const Color(0xFFE2E8F0).withValues(alpha: 0.7),
+                                      shadowColor: Colors.transparent,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      foregroundColor: Colors.white,
+                                      disabledForegroundColor: isDark
+                                          ? Colors.white38
+                                          : Colors.black38,
+                                      padding: EdgeInsets.zero,
+                                    ),
                                     child: AnimatedSwitcher(
                                       duration: const Duration(milliseconds: 200),
                                       child: busy

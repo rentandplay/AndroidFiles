@@ -16,7 +16,6 @@ import '../auth/login_screen.dart';
 import '../shared/terms_dialog.dart';
 import '../../widgets/mobile_controls.dart';
 import '../../widgets/glass_app_bar.dart';
-import '../../widgets/premium_animations.dart';
 import 'settings_screen.dart';
 import '../shared/support_chat_screen.dart';
 

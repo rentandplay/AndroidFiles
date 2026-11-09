@@ -734,15 +734,15 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
         ? Theme.of(context).colorScheme.error
         : Theme.of(context).colorScheme.primary;
 
-    return AnimatedCrossFade(
+    return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
-      firstCurve: Curves.easeOutCubic,
-      secondCurve: Curves.easeOutCubic,
-      sizeCurve: Curves.easeOutCubic,
-      crossFadeState:
-          _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-      firstChild: Padding(
-        padding: const EdgeInsets.only(bottom: 12),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(opacity: animation, child: child),
+      child: !_expanded
+          ? Padding(
+              key: const ValueKey('card-collapsed'),
+              padding: const EdgeInsets.only(bottom: 12),
         child: Material(
           color: Colors.transparent,
           child: InkWell(
@@ -823,9 +823,10 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
             ),
           ),
         ),
-      ),
-      secondChild: Padding(
-      padding: const EdgeInsets.only(bottom: 16),
+      )
+          : Padding(
+              key: const ValueKey('card-expanded'),
+              padding: const EdgeInsets.only(bottom: 16),
       child: RentalSection(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

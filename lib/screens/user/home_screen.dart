@@ -584,35 +584,39 @@ class HomeScreenState extends State<HomeScreen> {
                                 borderRadius: BorderRadius.circular(20),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 13, vertical: 7),
+                                      horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
                                     color: dark
                                         ? const Color(0xFF423226)
                                         : const Color(0xFFE8D7C8),
                                     borderRadius: BorderRadius.circular(20),
                                   ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Text(
-                                        'View details',
-                                        style: TextStyle(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.centerLeft,
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          'View details',
+                                          style: TextStyle(
+                                            color: dark
+                                                ? const Color(0xFFFFE6D5)
+                                                : const Color(0xFF3A200F),
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 5),
+                                        Icon(
+                                          Icons.arrow_forward_rounded,
+                                          size: 13,
                                           color: dark
                                               ? const Color(0xFFFFE6D5)
                                               : const Color(0xFF3A200F),
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w700,
                                         ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Icon(
-                                        Icons.arrow_forward_rounded,
-                                        size: 13,
-                                        color: dark
-                                            ? const Color(0xFFFFE6D5)
-                                            : const Color(0xFF3A200F),
-                                      ),
-                                    ],
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),

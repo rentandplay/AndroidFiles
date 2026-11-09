@@ -21,7 +21,8 @@ class ForgotPasswordScreen extends StatefulWidget {
 }
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
-  final _formKey = GlobalKey<FormState>();
+  final _emailFormKey = GlobalKey<FormState>();
+  final _passwordFormKey = GlobalKey<FormState>();
   late final TextEditingController _email;
   final _code = TextEditingController();
   final _password = TextEditingController();
@@ -68,7 +69,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _sendCode({bool resend = false}) async {
-    if (_busy || (!resend && !_formKey.currentState!.validate())) return;
+    if (_busy || (!resend && !_emailFormKey.currentState!.validate())) return;
     final address = _email.text.trim().toLowerCase();
     final validation = AccountValidation.email(address);
     if (validation != null) {
@@ -140,7 +141,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   Future<void> _savePassword() async {
-    if (_busy || !_formKey.currentState!.validate()) return;
+    if (_busy || !_passwordFormKey.currentState!.validate()) return;
     setState(() {
       _busy = true;
       _error = null;
@@ -253,7 +254,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget _emailForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Form(
-      key: _formKey,
+      key: _emailFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -393,7 +394,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   Widget _passwordForm(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     return Form(
-      key: _formKey,
+      key: _passwordFormKey,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [

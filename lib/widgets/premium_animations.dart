@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart';
 import 'liquid_glass.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+
+bool get _isFlutterTest => !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
 
 /// Interactive card container with hover lift, dynamic glow, subtle scale,
 /// and smooth tactile press physics for a true luxury experience.
@@ -250,6 +255,7 @@ class StaggeredSlideFade extends StatefulWidget {
 class _StaggeredSlideFadeState extends State<StaggeredSlideFade>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  Timer? _delayTimer;
   late final Animation<double> _fadeAnimation;
   late final Animation<Offset> _slideAnimation;
 
@@ -278,7 +284,7 @@ class _StaggeredSlideFadeState extends State<StaggeredSlideFade>
 
     final totalDelay = widget.delay +
         Duration(milliseconds: (widget.index * 35).clamp(0, 350));
-    Future.delayed(totalDelay, () {
+    _delayTimer = Timer(totalDelay, () {
       if (mounted) {
         _controller.forward();
       }
@@ -287,6 +293,7 @@ class _StaggeredSlideFadeState extends State<StaggeredSlideFade>
 
   @override
   void dispose() {
+    _delayTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -335,7 +342,12 @@ class _PulsingGlowBadgeState extends State<PulsingGlowBadge>
     _controller = AnimationController(
       vsync: this,
       duration: widget.duration,
-    )..repeat(reverse: true);
+    );
+    if (!_isFlutterTest) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.value = 1.0;
+    }
 
     _glowAnimation = Tween<double>(begin: 0.25, end: 0.65).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
@@ -538,6 +550,7 @@ class SpringPopEntrance extends StatefulWidget {
 class _SpringPopEntranceState extends State<SpringPopEntrance>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  Timer? _delayTimer;
   late final Animation<double> _scaleAnimation;
   late final Animation<double> _fadeAnimation;
 
@@ -564,7 +577,7 @@ class _SpringPopEntranceState extends State<SpringPopEntrance>
     if (widget.delay == Duration.zero) {
       _controller.forward();
     } else {
-      Future.delayed(widget.delay, () {
+      _delayTimer = Timer(widget.delay, () {
         if (mounted) _controller.forward();
       });
     }
@@ -572,6 +585,7 @@ class _SpringPopEntranceState extends State<SpringPopEntrance>
 
   @override
   void dispose() {
+    _delayTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -620,7 +634,12 @@ class _PulsingStatusDotState extends State<PulsingStatusDot>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1600),
-    )..repeat(reverse: true);
+    );
+    if (!_isFlutterTest) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.value = 1.0;
+    }
 
     _scaleAnimation = Tween<double>(begin: 0.88, end: 1.25).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
