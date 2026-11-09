@@ -631,6 +631,12 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
     final overdue =
         rental.isActive && hasDueDate && now.isAfter(rental.dueDate);
     final minutes = rental.dueDate.difference(now).inMinutes.abs();
+    final dueImminent = rental.isActive &&
+        hasDueDate &&
+        !overdue &&
+        !rental.hasPendingReturnRequest &&
+        !rental.dueDate.difference(now).isNegative &&
+        rental.dueDate.difference(now).inMinutes <= 15;
     final time = minutes >= 60
         ? '${minutes ~/ 60}h ${minutes % 60}m'
         : '${minutes < 1 ? 1 : minutes}m';
@@ -732,7 +738,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                         : Icons.sync_rounded;
     final alertColor = holdEnded || overdue || paymentRejected
         ? Theme.of(context).colorScheme.error
-        : Theme.of(context).colorScheme.primary;
+        : dueImminent ? const Color(0xFFD97706) : Theme.of(context).colorScheme.primary;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
@@ -954,7 +960,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                   icon: Icons.schedule_outlined,
                   label: 'Return by',
                   value: hasDueDate ? _date(rental.dueDate) : 'Ask the admin',
-                  isUrgent: overdue),
+                  isUrgent: overdue || dueImminent),
             if (rental.receivedAt != null)
               _RentalDetailLine(
                   icon: Icons.check_circle_outline_rounded,

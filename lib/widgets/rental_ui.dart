@@ -441,25 +441,85 @@ class RentalSteps extends StatelessWidget {
 }
 
 class RentalEmptyState extends StatelessWidget {
-  const RentalEmptyState(
-      {super.key, required this.title, required this.message, this.action});
+  const RentalEmptyState({
+    super.key,
+    required this.title,
+    required this.message,
+    this.action,
+    this.icon = Icons.receipt_long_outlined,
+  });
   final String title, message;
   final Widget? action;
+  final IconData icon;
+
   @override
-  Widget build(BuildContext context) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 16),
-      child: Column(children: [
-        Icon(Icons.receipt_long_outlined,
-            size: 44, color: Theme.of(context).colorScheme.onSurfaceVariant),
-        const SizedBox(height: 12),
-        Text(title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18)),
-        const SizedBox(height: 6),
-        Text(message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant)),
-        if (action != null) ...[const SizedBox(height: 12), action!],
-      ]));
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 460),
+          child: GlassCard(
+            borderRadius: 22,
+            padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 68,
+                  height: 68,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: RadialGradient(
+                      colors: [
+                        scheme.primary.withValues(alpha: isDark ? 0.24 : 0.16),
+                        scheme.primary.withValues(alpha: isDark ? 0.08 : 0.05),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: scheme.primary.withValues(alpha: isDark ? 0.32 : 0.22),
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: scheme.primary.withValues(alpha: isDark ? 0.18 : 0.10),
+                        blurRadius: 16,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, size: 32, color: scheme.primary),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    fontSize: 18,
+                    letterSpacing: -0.2,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: scheme.onSurfaceVariant,
+                    fontSize: 13.5,
+                    height: 1.45,
+                  ),
+                ),
+                if (action != null) ...[
+                  const SizedBox(height: 16),
+                  action!,
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

@@ -151,16 +151,26 @@ class _BookingTicketState extends State<BookingTicket> {
                   if (status == 'APPROVED' &&
                       !expired &&
                       image.startsWith('data:image/png;base64,'))
-                    ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 270),
-                        child: AspectRatio(
-                            aspectRatio: 1,
-                            child: Container(
-                                padding: const EdgeInsets.all(12),
-                                color: Colors.white,
-                                child: Image.memory(
-                                    base64Decode(image.split(',').last),
-                                    fit: BoxFit.contain)))),
+                    GestureDetector(
+                      key: const ValueKey('booking-ticket-qr-tap'),
+                      onTap: () => FullscreenQrScanDialog.show(
+                        context,
+                        imageDataUrl: image,
+                        rentalCode: code,
+                        itemName: widget.rental.itemName,
+                        rollingPin: data['rolling_pin']?.toString() ?? '',
+                      ),
+                      child: ConstrainedBox(
+                          constraints: const BoxConstraints(maxWidth: 270),
+                          child: AspectRatio(
+                              aspectRatio: 1,
+                              child: Container(
+                                  padding: const EdgeInsets.all(12),
+                                  color: Colors.white,
+                                  child: Image.memory(
+                                      base64Decode(image.split(',').last),
+                                      fit: BoxFit.contain)))),
+                    ),
                   const SizedBox(height: 12),
                   SelectableText(code,
                       textAlign: TextAlign.center,
@@ -359,27 +369,69 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
                 ],
               ),
               const SizedBox(height: 10),
-              if (!expired && image.startsWith('data:image/png;base64,'))
-                Container(
-                  width: 175,
-                  height: 175,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: .06),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      )
-                    ],
+              if (!expired && image.startsWith('data:image/png;base64,')) ...[
+                GestureDetector(
+                  key: const ValueKey('embedded-handoff-qr-tap'),
+                  onTap: () => FullscreenQrScanDialog.show(
+                    context,
+                    imageDataUrl: image,
+                    rentalCode: code,
+                    itemName: widget.rental.itemName,
+                    rollingPin: rollingPin,
                   ),
-                  child: Image.memory(
-                    base64Decode(image.split(',').last),
-                    fit: BoxFit.contain,
+                  child: Container(
+                    width: 175,
+                    height: 175,
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: .06),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        )
+                      ],
+                    ),
+                    child: Image.memory(
+                      base64Decode(image.split(',').last),
+                      fit: BoxFit.contain,
+                    ),
                   ),
                 ),
+                const SizedBox(height: 6),
+                InkWell(
+                  borderRadius: BorderRadius.circular(20),
+                  onTap: () => FullscreenQrScanDialog.show(
+                    context,
+                    imageDataUrl: image,
+                    rentalCode: code,
+                    itemName: widget.rental.itemName,
+                    rollingPin: rollingPin,
+                  ),
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.fullscreen_rounded,
+                            size: 15, color: scheme.primary),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tap QR for high-contrast scan mode',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               if (rollingPin.isNotEmpty) ...[
                 Container(
@@ -448,6 +500,184 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
           ),
         );
       },
+    );
+  }
+}
+
+class FullscreenQrScanDialog extends StatelessWidget {
+  const FullscreenQrScanDialog({
+    super.key,
+    required this.imageDataUrl,
+    required this.rentalCode,
+    required this.itemName,
+    this.rollingPin = '',
+  });
+
+  final String imageDataUrl;
+  final String rentalCode;
+  final String itemName;
+  final String rollingPin;
+
+  static Future<void> show(
+    BuildContext context, {
+    required String imageDataUrl,
+    required String rentalCode,
+    required String itemName,
+    String rollingPin = '',
+  }) {
+    HapticFeedback.lightImpact();
+    return showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.88),
+      builder: (_) => FullscreenQrScanDialog(
+        imageDataUrl: imageDataUrl,
+        rentalCode: rentalCode,
+        itemName: itemName,
+        rollingPin: rollingPin,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.white,
+      surfaceTintColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(26)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 18, 22, 22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFF3E8),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: const Color(0xFFDF762D).withValues(alpha: 0.35),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(Icons.wb_sunny_rounded,
+                            size: 14, color: Color(0xFFDF762D)),
+                        SizedBox(width: 5),
+                        Text(
+                          'HIGH-CONTRAST SCAN MODE',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: Color(0xFF9A471B),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close fullscreen QR',
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close_rounded,
+                        color: Color(0xFF0F172A)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                itemName,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0F172A),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                width: 260,
+                height: 260,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(
+                    color: const Color(0xFFE2E8F0),
+                    width: 2,
+                  ),
+                ),
+                child: Image.memory(
+                  base64Decode(imageDataUrl.split(',').last),
+                  fit: BoxFit.contain,
+                ),
+              ),
+              const SizedBox(height: 14),
+              if (rollingPin.isNotEmpty) ...[
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Column(
+                    children: [
+                      const Text(
+                        '6-DIGIT ROLLING PIN',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.8,
+                          color: Color(0xFFDF762D),
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      SelectableText(
+                        rollingPin,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 4,
+                          color: Color(0xFF0F172A),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+              ],
+              SelectableText(
+                rentalCode,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  color: Color(0xFF334155),
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Present this high-contrast pass to the Rent & Play operator or delivery rider.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF64748B),
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

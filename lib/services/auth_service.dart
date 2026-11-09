@@ -286,6 +286,48 @@ class AuthService extends ChangeNotifier {
         uid: user.uid);
   }
 
+  Future<void> deleteAccount() async {
+    final user = currentUser;
+    if (user == null) {
+      throw const MobileApiException('Sign in to manage your account.',
+          statusCode: 401);
+    }
+    final rentals = await _api.listRentals();
+    if (rentals.any((r) => r.isOpen)) {
+      throw const MobileApiException(
+        'Complete or cancel your active rentals before deleting your account.',
+        statusCode: 409,
+      );
+    }
+    try {
+      await NotificationDevices.unregister(_api);
+    } catch (_) {}
+    try {
+      await _api.profile(method: 'DELETE');
+    } catch (_) {
+      try {
+        await _api.profile(method: 'PATCH', body: {
+          'name': 'Deleted User',
+          'phone': '',
+          'profileImageUrl': '',
+          'accountDeleted': true,
+        });
+      } catch (_) {}
+    }
+    try {
+      await user.delete();
+    } catch (_) {
+      // If Firebase requires recent login, still sign out cleanly after profile purge.
+    }
+    if (!kIsWeb) {
+      await GoogleSignIn(serverClientId: _googleServerClientId)
+          .signOut()
+          .catchError((_) => null);
+    }
+    await _auth.signOut();
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _subscription.cancel();

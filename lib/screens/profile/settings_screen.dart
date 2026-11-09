@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/user_model.dart';
@@ -7,6 +8,8 @@ import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/business_settings.dart';
+import '../../services/rental_offline_cache.dart';
+import '../../utils/error_sanitizer.dart';
 import '../../widgets/live_business_settings.dart';
 import '../../widgets/mobile_controls.dart';
 import '../../widgets/glass_app_bar.dart';
@@ -172,6 +175,105 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  void _showPrivacyPolicyDialog(Color textPrimary, Color textSecondary) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.privacy_tip_outlined, color: Color(0xFFDF762D)),
+            SizedBox(width: 8),
+            Expanded(child: Text('Privacy & Data Protection')),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'How Rent & Play Protects Your Information',
+                style: TextStyle(fontWeight: FontWeight.w800, color: textPrimary),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '• Account & Contact Details: Your name, email, and Philippine mobile number are used solely to verify bookings, coordinate resort delivery, and send rental updates.\n'
+                '• ID Verification: Physical ID verification is checked by authorized staff at handoff to protect high-value sports and gaming equipment.\n'
+                '• Payment Receipts: Uploaded GCash or InstaPay screenshots are restricted to authorized store administrators for payment verification.\n'
+                '• Offline Cache Isolation: Offline rental passes and QR tickets cached on your device are scoped strictly to your account and cleared upon sign-out or cache reset.\n'
+                '• Account Deletion: You may permanently delete your account and personal profile data anytime under Account & Security when you have no open rentals.',
+                style: TextStyle(color: textSecondary, fontSize: 13, height: 1.45),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _clearCachedData(String? uid) async {
+    HapticFeedback.lightImpact();
+    PaintingBinding.instance.imageCache.clear();
+    PaintingBinding.instance.imageCache.clearLiveImages();
+    await RentalOfflineCache.clearAll(scope: uid);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Cached images and offline rental data cleared.'),
+      ),
+    );
+  }
+
+  Future<void> _confirmDeleteAccount(AuthService authService) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete account permanently?'),
+        content: const Text(
+          'This will permanently remove your renter profile and personal data. Any active rentals must be returned or cancelled before deleting your account.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Keep account'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: Theme.of(dialogContext).colorScheme.error,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Delete account'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    try {
+      await authService.deleteAccount();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Your account has been deleted.')),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ErrorSanitizer.format(error))),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
@@ -248,7 +350,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   style: TextStyle(fontSize: 12, color: textSecondary),
                 ),
                 value: themeProvider.isDarkMode,
-                onChanged: (val) => themeProvider.toggleTheme(val),
+                onChanged: (val) {
+                  HapticFeedback.selectionClick();
+                  themeProvider.toggleTheme(val);
+                },
               ),
             ),
 
@@ -293,7 +398,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: _pushNotifications,
                     onChanged: _preferencesBusy
                         ? null
-                        : (val) => _savePreferences(push: val),
+                        : (val) {
+                            HapticFeedback.selectionClick();
+                            _savePreferences(push: val);
+                          },
                   ),
                   Divider(height: 1, indent: 64, color: cardBorder),
                   SwitchListTile(
@@ -329,7 +437,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     value: _rentalReminders,
                     onChanged: _preferencesBusy
                         ? null
-                        : (val) => _savePreferences(reminders: val),
+                        : (val) {
+                            HapticFeedback.selectionClick();
+                            _savePreferences(reminders: val);
+                          },
                   ),
                 ],
               ),
@@ -457,6 +568,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       );
                     },
                   ),
+                  if (user != null) ...[
+                    Divider(height: 1, indent: 64, color: cardBorder),
+                    ListTile(
+                      key: const ValueKey('settings-delete-account-tile'),
+                      leading: Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .error
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.person_remove_outlined,
+                          color: Theme.of(context).colorScheme.error,
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        'Delete account & data',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Permanently remove your profile and personal data',
+                        style: TextStyle(fontSize: 12, color: textSecondary),
+                      ),
+                      trailing: Icon(Icons.chevron_right_rounded,
+                          color: textSecondary),
+                      onTap: () => _confirmDeleteAccount(authService),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -504,6 +652,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   Divider(height: 1, indent: 64, color: cardBorder),
                   ListTile(
+                    key: const ValueKey('settings-privacy-policy-tile'),
+                    leading: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E2838)
+                            : const Color(0xFFEEF2F6),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.privacy_tip_outlined,
+                        color: textPrimary,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Privacy & Data Protection',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'How your ID, contact details, and records are protected',
+                      style: TextStyle(fontSize: 12, color: textSecondary),
+                    ),
+                    trailing:
+                        Icon(Icons.chevron_right_rounded, color: textSecondary),
+                    onTap: () =>
+                        _showPrivacyPolicyDialog(textPrimary, textSecondary),
+                  ),
+                  Divider(height: 1, indent: 64, color: cardBorder),
+                  ListTile(
                     leading: Container(
                       width: 38,
                       height: 38,
@@ -530,6 +713,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     trailing:
                         Icon(Icons.chevron_right_rounded, color: textSecondary),
                     onTap: () => _showHelpDialog(textPrimary, textSecondary),
+                  ),
+                  Divider(height: 1, indent: 64, color: cardBorder),
+                  ListTile(
+                    key: const ValueKey('settings-clear-cache-tile'),
+                    leading: Container(
+                      width: 38,
+                      height: 38,
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? const Color(0xFF1E2838)
+                            : const Color(0xFFEEF2F6),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(
+                        Icons.cleaning_services_outlined,
+                        color: textPrimary,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Clear cached data',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        color: textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Free up device memory used by images and offline passes',
+                      style: TextStyle(fontSize: 12, color: textSecondary),
+                    ),
+                    trailing:
+                        Icon(Icons.chevron_right_rounded, color: textSecondary),
+                    onTap: () => _clearCachedData(user?.uid),
                   ),
                   Divider(height: 1, indent: 64, color: cardBorder),
                   ListTile(

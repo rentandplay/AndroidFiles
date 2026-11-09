@@ -139,4 +139,60 @@ class RentalOfflineCache {
       return null;
     }
   }
+
+  static String _resortKey(String scope) =>
+      'rental_preferred_resort:${scope.trim()}';
+
+  static Future<void> savePreferredResort(
+    String? scope,
+    String resort, {
+    String? customResort,
+  }) async {
+    final cleanScope = scope?.trim() ?? '';
+    final cleanResort = resort.trim();
+    if (cleanScope.isEmpty || cleanResort.isEmpty) return;
+    try {
+      final prefs = SharedPreferencesAsync();
+      final payload = jsonEncode({
+        'resort': cleanResort,
+        if (customResort != null && customResort.trim().isNotEmpty)
+          'customResort': customResort.trim(),
+      });
+      await prefs.setString(_resortKey(cleanScope), payload);
+    } catch (_) {}
+  }
+
+  static Future<Map<String, String>?> loadPreferredResort(String? scope) async {
+    final cleanScope = scope?.trim() ?? '';
+    if (cleanScope.isEmpty) return null;
+    try {
+      final prefs = SharedPreferencesAsync();
+      final raw = await prefs.getString(_resortKey(cleanScope));
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final resort = decoded['resort']?.toString().trim() ?? '';
+      if (resort.isEmpty) return null;
+      final custom = decoded['customResort']?.toString().trim() ?? '';
+      return {
+        'resort': resort,
+        if (custom.isNotEmpty) 'customResort': custom,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> clearAll({String? scope}) async {
+    try {
+      final prefs = SharedPreferencesAsync();
+      final cleanScope = scope?.trim() ?? '';
+      if (cleanScope.isNotEmpty) {
+        await prefs.remove(_listKey(cleanScope));
+        await prefs.remove(_resortKey(cleanScope));
+      } else {
+        await prefs.clear();
+      }
+    } catch (_) {}
+  }
 }

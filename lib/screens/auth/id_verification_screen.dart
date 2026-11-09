@@ -267,7 +267,7 @@ class _IdVerificationScreenState extends State<IdVerificationScreen> {
                   icon: Icons.badge_outlined,
                   title: 'Physical Valid ID Required',
                   message:
-                      'Show one of the accepted physical IDs listed below at handoff. Staff will verify it before releasing the equipment.',
+                      'Show one of the accepted physical IDs listed below at handoff. Staff will verify your original card (no photos or screenshots) and return it immediately.',
                 ),
 
                 LiveBusinessSettings(builder: (context, settings) => FutureBuilder<Map<String, dynamic>>(

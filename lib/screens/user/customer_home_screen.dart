@@ -1,3 +1,4 @@
+import '../../theme/app_theme.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
@@ -186,19 +187,13 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
 
   void _selectPage(int index) {
-
     if (_pages[index] == null) _pages[index] = _pageFor(index);
-
     if (index == 0) _homeKey.currentState?.refresh();
-
-    setState(() {
-
-      _selectedIndex = index;
-
-      if (_pages[2] != null) _pages[2] = _pageFor(2);
-
-    });
-
+    if (_selectedIndex != index) {
+      setState(() {
+        _selectedIndex = index;
+      });
+    }
   }
 
 
@@ -206,39 +201,30 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
   @override
 
   Widget build(BuildContext context) {
-
     final isSignedIn = Provider.of<AuthService>(context).currentUser != null;
-
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return LiquidGlassScope(
-
         child: Scaffold(
-
       extendBody: true,
-
+      backgroundColor: isDark ? AppTheme.darkBg : AppTheme.lightBg,
       body: isSignedIn
-
           ? AnimatedIndexedStack(
-
               index: _selectedIndex,
-
               children: [
-
                 for (var index = 0; index < _pages.length; index++)
-
                   HeroMode(
-
                     enabled: index == _selectedIndex,
-
                     child: TickerMode(
-
                       enabled: index == _selectedIndex,
-
-                      child: _pages[index] ?? const SizedBox.shrink(),
-
+                      child: index == 2 && _pages[2] != null
+                          ? ActiveRentalsScreen(
+                              key: const ValueKey('customer-active-rentals'),
+                              onBrowse: () => _selectPage(1),
+                              isActive: _selectedIndex == 2,
+                            )
+                          : (_pages[index] ?? const SizedBox.shrink()),
                     ),
-
                   ),
-
               ],
 
             )

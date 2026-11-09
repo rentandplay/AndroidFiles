@@ -1,5 +1,6 @@
 import '../shared/support_chat_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../../models/rental_notification.dart';
@@ -20,7 +21,9 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  bool _openedInitial = false, _marking = false;
+  bool _openedInitial = false, _marking = false, _hidePhoneAlertsCard = false;
+  String _filter = 'All';
+  final Set<String> _dismissedIds = <String>{};
 
   @override
   void initState() {
@@ -32,6 +35,22 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   void dispose() {
     RentalNotificationSuppression.isNotificationsScreenActive = false;
     super.dispose();
+  }
+
+  List<RentalNotification> _filteredItems(List<RentalNotification> items) {
+    return items.where((row) {
+      if (_dismissedIds.contains(row.id)) return false;
+      switch (_filter) {
+        case 'Unread':
+          return !row.isRead;
+        case 'Rentals':
+          return row.type != 'CHAT_MESSAGE';
+        case 'Chat':
+          return row.type == 'CHAT_MESSAGE';
+        default:
+          return true;
+      }
+    }).toList();
   }
 
   Future<void> _open(
@@ -89,6 +108,9 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
         });
       }
     }
+    final filteredItems =
+        service == null ? const <RentalNotification>[] : _filteredItems(service.items);
+
     return Scaffold(
         appBar: GlassAppBar(titleText: 'Notifications', actions: [
           IconButton(
@@ -116,7 +138,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                           physics: const AlwaysScrollableScrollPhysics(),
                           padding: const EdgeInsets.all(16),
                           children: [
-                            if (service.phoneAlertsSupported)
+                            if (service.phoneAlertsSupported &&
+                                !_hidePhoneAlertsCard)
                               GlassCard(
                                   margin: const EdgeInsets.only(bottom: 12),
                                   padding: const EdgeInsets.all(16),
@@ -124,10 +147,28 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       crossAxisAlignment:
                                           CrossAxisAlignment.stretch,
                                       children: [
-                                        Text('Phone alerts',
-                                            style: Theme.of(context)
-                                                .textTheme
-                                                .titleMedium),
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text('Phone alerts',
+                                                  style: Theme.of(context)
+                                                      .textTheme
+                                                      .titleMedium),
+                                            ),
+                                            IconButton(
+                                              key: const ValueKey(
+                                                  'notifications-dismiss-phone-alerts'),
+                                              tooltip: 'Hide phone alerts card',
+                                              visualDensity:
+                                                  VisualDensity.compact,
+                                              onPressed: () => setState(() =>
+                                                  _hidePhoneAlertsCard = true),
+                                              icon: const Icon(
+                                                  Icons.close_rounded,
+                                                  size: 18),
+                                            ),
+                                          ],
+                                        ),
                                         const SizedBox(height: 6),
                                         const Text(
                                             'Receive rental request and return updates when the app is in the background.'),
@@ -159,6 +200,40 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                               const AlertsScreen())),
                                   icon: const Icon(Icons.timer_outlined),
                                   label: const Text('View rental timers')),
+                            if (service.items.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      for (final filterOption in const [
+                                        'All',
+                                        'Unread',
+                                        'Rentals',
+                                        'Chat',
+                                      ])
+                                        Padding(
+                                          padding:
+                                              const EdgeInsets.only(right: 6),
+                                          child: ChoiceChip(
+                                            key: ValueKey(
+                                                'notif-filter-$filterOption'),
+                                            visualDensity:
+                                                VisualDensity.compact,
+                                            label: Text(filterOption),
+                                            selected: _filter == filterOption,
+                                            onSelected: (_) {
+                                              HapticFeedback.selectionClick();
+                                              setState(
+                                                  () => _filter = filterOption);
+                                            },
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             if (service.error.isNotEmpty) ...[
                               RentalNotice(
                                   title: 'Could not refresh notifications',
@@ -167,55 +242,90 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                   onPressed: () => service.refresh(),
                                   child: const Text('Try again'))
                             ],
-                            if (service.items.isEmpty && service.error.isEmpty)
-                              const RentalEmptyState(
-                                  title: 'No updates yet',
-                                  message:
-                                      'You will see rental requests, decisions and return updates here.'),
-                            for (final row in service.items)
-                              GlassCard(
+                            if (filteredItems.isEmpty && service.error.isEmpty)
+                              RentalEmptyState(
+                                  title: service.items.isEmpty
+                                      ? 'No updates yet'
+                                      : 'No matching notifications',
+                                  message: service.items.isEmpty
+                                      ? 'You will see rental requests, decisions and return updates here.'
+                                      : 'Try switching the filter above or refreshing your inbox.'),
+                            for (final row in filteredItems)
+                              Dismissible(
+                                key: ValueKey('notif-dismiss-${row.id}'),
+                                direction: DismissDirection.endToStart,
+                                background: Container(
                                   margin: const EdgeInsets.only(bottom: 10),
-                                  isSelected: !row.isRead,
-                                  child: ListTile(
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                              horizontal: 16, vertical: 12),
-                                      leading: Icon(
-                                          row.type.contains('REJECTED')
-                                              ? Icons.cancel_outlined
-                                              : row.type.contains('APPROVED') ||
-                                                      row.type
-                                                          .contains('COMPLETED')
-                                                  ? Icons.check_circle_outline
-                                                  : Icons.receipt_long_outlined,
-                                          color: row.type.contains('REJECTED')
-                                              ? Theme.of(context)
-                                                  .colorScheme
-                                                  .error
-                                              : Theme.of(context)
-                                                  .colorScheme
-                                                  .primary),
-                                      title: Text(row.title,
-                                          style: TextStyle(
-                                              fontWeight: row.isRead
-                                                  ? FontWeight.w500
-                                                  : FontWeight.w800)),
-                                      subtitle: Padding(
-                                          padding:
-                                              const EdgeInsets.only(top: 6),
-                                          child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(row.message),
-                                                const SizedBox(height: 8),
-                                                Text(
-                                                    '${row.rentalCode} · ${DateFormat('MMM d, h:mm a').format(row.createdAt.toUtc().add(const Duration(hours: 8)))}${row.isRead ? '' : ' · Unread'}',
-                                                    style: Theme.of(context)
-                                                        .textTheme
-                                                        .bodySmall)
-                                              ])),
-                                      onTap: () => _open(row, service))),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 20),
+                                  alignment: Alignment.centerRight,
+                                  decoration: BoxDecoration(
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .primary
+                                        .withValues(alpha: 0.18),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Icon(
+                                    Icons.done_all_rounded,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                onDismissed: (_) {
+                                  HapticFeedback.lightImpact();
+                                  setState(() => _dismissedIds.add(row.id));
+                                  if (!row.isRead) {
+                                    service
+                                        .markRead([row.id]).catchError((_) {});
+                                  }
+                                },
+                                child: GlassCard(
+                                    margin: const EdgeInsets.only(bottom: 10),
+                                    isSelected: !row.isRead,
+                                    child: ListTile(
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 16, vertical: 12),
+                                        leading: Icon(
+                                            row.type.contains('REJECTED')
+                                                ? Icons.cancel_outlined
+                                                : row.type.contains(
+                                                            'APPROVED') ||
+                                                        row.type.contains(
+                                                            'COMPLETED')
+                                                    ? Icons.check_circle_outline
+                                                    : Icons
+                                                        .receipt_long_outlined,
+                                            color: row.type.contains('REJECTED')
+                                                ? Theme.of(context)
+                                                    .colorScheme
+                                                    .error
+                                                : Theme.of(context)
+                                                    .colorScheme
+                                                    .primary),
+                                        title: Text(row.title,
+                                            style: TextStyle(
+                                                fontWeight: row.isRead
+                                                    ? FontWeight.w500
+                                                    : FontWeight.w800)),
+                                        subtitle: Padding(
+                                            padding:
+                                                const EdgeInsets.only(top: 6),
+                                            child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(row.message),
+                                                  const SizedBox(height: 8),
+                                                  Text(
+                                                      '${row.rentalCode} · ${DateFormat('MMM d, h:mm a').format(row.createdAt.toUtc().add(const Duration(hours: 8)))}${row.isRead ? '' : ' · Unread'}',
+                                                      style: Theme.of(context)
+                                                          .textTheme
+                                                          .bodySmall)
+                                                ])),
+                                        onTap: () => _open(row, service))),
+                              ),
                             if (service.nextCursor != null)
                               OutlinedButton(
                                   onPressed: () => service.refresh(older: true),

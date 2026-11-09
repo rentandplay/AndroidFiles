@@ -406,54 +406,32 @@ class FluidPageTransitionsBuilder extends PageTransitionsBuilder {
       reverseCurve: Curves.easeInCubic,
     );
 
+    // Opaque horizontal slide without opacity fade from 0.0,
+    // ensuring the background remains completely solid and preventing white flashes.
     final slideIn = Tween<Offset>(
-      begin: const Offset(0.06, 0),
+      begin: const Offset(0.18, 0),
       end: Offset.zero,
     ).animate(curvedAnimation);
 
     final slideOut = Tween<Offset>(
       begin: Offset.zero,
-      end: const Offset(-0.04, 0),
-    ).animate(curvedSecondary);
-
-    final scaleIn = Tween<double>(
-      begin: 0.985,
-      end: 1.0,
-    ).animate(curvedAnimation);
-
-    final fadeIn = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(curvedAnimation);
-
-    final fadeOut = Tween<double>(
-      begin: 1.0,
-      end: 0.88,
+      end: const Offset(-0.06, 0),
     ).animate(curvedSecondary);
 
     return SlideTransition(
       position: slideOut,
-      child: FadeTransition(
-        opacity: fadeOut,
-        child: SlideTransition(
-          position: slideIn,
-          child: FadeTransition(
-            opacity: fadeIn,
-            child: ScaleTransition(
-              scale: scaleIn,
-              child: child,
-            ),
-          ),
-        ),
+      child: SlideTransition(
+        position: slideIn,
+        child: child,
       ),
     );
   }
 }
 
-/// An Animated IndexedStack that smoothly animates fade and subtle upward slide
-/// when the active tab index changes, while completely preserving the state and
-/// scroll positions of all tab views.
-class AnimatedIndexedStack extends StatefulWidget {
+/// An IndexedStack that preserves the state and scroll positions of all tab
+/// views while keeping the screen background completely static and anchored,
+/// preventing white flashes and offscreen compositing overhead.
+class AnimatedIndexedStack extends StatelessWidget {
   final int index;
   final List<Widget> children;
   final Duration duration;
@@ -466,66 +444,10 @@ class AnimatedIndexedStack extends StatefulWidget {
   });
 
   @override
-  State<AnimatedIndexedStack> createState() => _AnimatedIndexedStackState();
-}
-
-class _AnimatedIndexedStackState extends State<AnimatedIndexedStack>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _fadeAnimation;
-  late final Animation<double> _slideAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: widget.duration,
-    )..value = 1.0;
-
-    _fadeAnimation = CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    );
-
-    _slideAnimation = Tween<double>(
-      begin: 10.0,
-      end: 0.0,
-    ).animate(CurvedAnimation(
-      parent: _controller,
-      curve: Curves.easeOutCubic,
-    ));
-  }
-
-  @override
-  void didUpdateWidget(covariant AnimatedIndexedStack oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.index != oldWidget.index) {
-      _controller.forward(from: 0.0);
-    }
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) => Opacity(
-        opacity: _fadeAnimation.value,
-        child: Transform.translate(
-          offset: Offset(0, _slideAnimation.value),
-          child: child,
-        ),
-      ),
-      child: IndexedStack(
-        index: widget.index,
-        children: widget.children,
-      ),
+    return IndexedStack(
+      index: index,
+      children: children,
     );
   }
 }
@@ -657,9 +579,10 @@ class _PulsingStatusDotState extends State<PulsingStatusDot>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, _) => Stack(
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, _) => Stack(
         alignment: Alignment.center,
         children: [
           Container(
@@ -682,6 +605,88 @@ class _PulsingStatusDotState extends State<PulsingStatusDot>
           ),
         ],
       ),
+    ),
+  );
+}
+}
+
+/// Translucent glassmorphic shimmer placeholder box for loading states.
+/// Respects [_isFlutterTest] so widget tests calling `pumpAndSettle()` never hang.
+class ShimmerSkeletonBox extends StatefulWidget {
+  final double? width;
+  final double height;
+  final double borderRadius;
+  final EdgeInsetsGeometry? margin;
+
+  const ShimmerSkeletonBox({
+    super.key,
+    this.width,
+    this.height = 16,
+    this.borderRadius = 10,
+    this.margin,
+  });
+
+  @override
+  State<ShimmerSkeletonBox> createState() => _ShimmerSkeletonBoxState();
+}
+
+class _ShimmerSkeletonBoxState extends State<ShimmerSkeletonBox>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    if (!_isFlutterTest) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.value = 0.5;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        final t = _controller.value;
+        final baseAlpha = isDark ? (0.08 + t * 0.08) : (0.45 + t * 0.30);
+        return Container(
+          width: widget.width,
+          height: widget.height,
+          margin: widget.margin,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(widget.borderRadius),
+            gradient: LinearGradient(
+              begin: Alignment(-1.0 + t * 1.5, -0.3),
+              end: Alignment(0.5 + t * 1.5, 0.3),
+              colors: isDark
+                  ? [
+                      const Color(0xFF1E293B).withValues(alpha: baseAlpha),
+                      const Color(0xFF334155).withValues(alpha: baseAlpha + 0.06),
+                      const Color(0xFF1E293B).withValues(alpha: baseAlpha),
+                    ]
+                  : [
+                      const Color(0xFFE2E8F0).withValues(alpha: baseAlpha),
+                      const Color(0xFFF8FAFC).withValues(alpha: baseAlpha + 0.15),
+                      const Color(0xFFE2E8F0).withValues(alpha: baseAlpha),
+                    ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
+

@@ -1,4 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart' as pdf;
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 import '../../widgets/staff_ui.dart';
 
 import '../../services/admin_firestore_service.dart';
@@ -26,12 +30,103 @@ class EquipmentListScreen extends StatefulWidget {
 class _EquipmentListScreenState extends State<EquipmentListScreen> {
   String _search = '';
   String _category = 'All';
+  bool _exportingPdf = false;
   late List<Map<String, dynamic>> _items;
 
   @override
   void initState() {
     super.initState();
     _items = widget.items;
+  }
+
+  Future<void> _exportAllLabelsPdf(List<Map<String, dynamic>> items) async {
+    if (_exportingPdf || items.isEmpty) return;
+    HapticFeedback.selectionClick();
+    setState(() => _exportingPdf = true);
+    try {
+      final document = pw.Document();
+      const mm = pdf.PdfPageFormat.mm;
+      final format = pdf.PdfPageFormat(50 * mm, 30 * mm, marginAll: 0);
+
+      for (final item in items) {
+        final code =
+            _first(item, ['item_code', 'qrCode', 'qr_code', 'id']) ?? 'EQP';
+        final payload =
+            _first(item, ['qr_data', 'qrData', 'qrCode', 'qr_code', 'item_code', 'id']) ??
+                code;
+        final name = _first(item, ['name']) ?? 'Equipment';
+
+        document.addPage(
+          pw.Page(
+            pageFormat: format,
+            margin: pw.EdgeInsets.zero,
+            build: (_) => pw.Padding(
+              padding: pw.EdgeInsets.all(1.5 * mm),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.BarcodeWidget(
+                    barcode: pw.Barcode.qrCode(),
+                    data: payload,
+                    width: 25 * mm,
+                    height: 25 * mm,
+                    margin: pw.EdgeInsets.zero,
+                    drawText: false,
+                  ),
+                  pw.SizedBox(width: 2 * mm),
+                  pw.Expanded(
+                    child: pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      mainAxisAlignment: pw.MainAxisAlignment.center,
+                      children: [
+                        pw.Text(
+                          code,
+                          maxLines: 1,
+                          style: pw.TextStyle(
+                            fontSize: 8,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                        pw.SizedBox(height: 1.2 * mm),
+                        pw.Text(
+                          name,
+                          maxLines: 2,
+                          style: const pw.TextStyle(fontSize: 7.2),
+                        ),
+                        pw.SizedBox(height: 2 * mm),
+                        pw.Text(
+                          'RENT & PLAY',
+                          style: pw.TextStyle(
+                            fontSize: 6.5,
+                            fontWeight: pw.FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+
+      final bytes = await document.save();
+      await Printing.layoutPdf(
+        name: 'Rent and Play QR Labels (${items.length})',
+        format: format,
+        dynamicLayout: false,
+        onLayout: (_) async => bytes,
+      );
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not export QR labels PDF: $error')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exportingPdf = false);
+    }
   }
 
   @override
@@ -106,18 +201,39 @@ class _EquipmentListScreenState extends State<EquipmentListScreen> {
         physics: const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
         children: [
-          Text(
-            'Equipment list',
-            style: theme.textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            '${_items.length} units · View details and print equipment labels',
-            style: theme.textTheme.bodySmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Equipment list',
+                      style: theme.textTheme.headlineSmall?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_items.length} units · View details and print equipment labels',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton.icon(
+                key: const ValueKey('equipment-export-qr-pdf'),
+                onPressed: items.isEmpty || _exportingPdf
+                    ? null
+                    : () => _exportAllLabelsPdf(items),
+                icon: const Icon(Icons.qr_code_2_rounded, size: 18),
+                label: Text(_exportingPdf ? 'Exporting…' : 'Export QR PDF'),
+              ),
+            ],
           ),
           const SizedBox(height: 14),
           TextField(

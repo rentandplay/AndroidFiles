@@ -51,6 +51,15 @@ class ChatApi extends Fake implements MobileApiService {
       'has_more': false
     };
   }
+
+  @override
+  Future<String> uploadChatAttachment({
+    required String threadId,
+    required List<int> bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    return 'https://example.supabase.co/storage/v1/object/public/chat_attachments/test.jpg';
+  }
 }
 
 void main() {
@@ -92,6 +101,22 @@ void main() {
     expect(find.byType(SelectableText), findsOneWidget);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
         isEmpty);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpAndSettle();
+  });
+  testWidgets(
+      'customer quick reply chips fill the input and attachment button is available',
+      (tester) async {
+    final api = ChatApi();
+    await tester.pumpWidget(
+        MaterialApp(home: SupportChatScreen(threadId: 'thread', api: api)));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.add_photo_alternate_rounded), findsOneWidget);
+    expect(find.text('🪪 School ID accepted?'), findsOneWidget);
+    await tester.tap(find.text('🪪 School ID accepted?'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<TextField>(find.byType(TextField)).controller!.text,
+        contains('School ID'));
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle();
   });

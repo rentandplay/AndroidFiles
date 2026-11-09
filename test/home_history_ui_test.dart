@@ -567,7 +567,7 @@ void main() {
     await tester.tap(find.byTooltip('Sort equipment'));
     await tester.pumpAndSettle();
     await tester.tap(find.byWidgetPredicate((widget) =>
-        widget is CheckedPopupMenuItem<String> && widget.value == 'name'));
+        widget is PopupMenuItem<String> && widget.value == 'name'));
     await tester.pumpAndSettle();
     expect(tester.getTopLeft(find.text('A unavailable')).dx,
         lessThan(tester.getTopLeft(find.text('B available')).dx));

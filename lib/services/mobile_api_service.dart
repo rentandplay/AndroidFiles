@@ -448,6 +448,20 @@ class MobileApiService {
           {String method = 'GET', Map<String, dynamic>? body}) =>
       _request('/mobile/profile', method: method, body: body);
 
+  Future<String> uploadChatAttachment({
+    required String threadId,
+    required List<int> bytes,
+    String contentType = 'image/jpeg',
+  }) async {
+    final mime = contentType.contains('png') ? 'image/png' : 'image/jpeg';
+    final response = await _request(
+      '/chat/threads/${Uri.encodeComponent(threadId)}/attachment',
+      method: 'POST',
+      body: {'dataUrl': 'data:$mime;base64,${base64Encode(bytes)}'},
+    );
+    return response['url'] as String;
+  }
+
   Future<String> uploadProfilePicture({
     required String uid,
     required List<int> bytes,

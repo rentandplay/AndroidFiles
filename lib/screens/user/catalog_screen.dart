@@ -34,7 +34,7 @@ class CatalogScreenState extends State<CatalogScreen> {
   String _searchQuery = '';
   bool _availableOnly = false;
   bool _savedOnly = false;
-  bool _availableFirst = true;
+  String _sortOption = 'available';
   final Set<String> _savedItemIds = {};
   String? _savedOwnerId;
   List<ItemModel> catalogItems = [];
@@ -126,6 +126,47 @@ class CatalogScreenState extends State<CatalogScreen> {
     }
   }
 
+  String _sortLabel(String sort) {
+    switch (sort) {
+      case 'popular':
+        return 'Most Popular';
+      case 'price_asc':
+        return 'Price: Low to High';
+      case 'price_desc':
+        return 'Price: High to Low';
+      case 'name_asc':
+        return 'Name: A–Z';
+      case 'name_desc':
+        return 'Name: Z–A';
+      case 'available':
+      default:
+        return 'Available first';
+    }
+  }
+
+  double _getItemPrice(ItemModel item) {
+    final options = item.rateOptions.where((option) {
+      final amount = option['amount'];
+      return amount is num && amount.isFinite && amount >= 0;
+    }).toList();
+    if (options.isNotEmpty) {
+      options.sort((a, b) => (a['amount'] as num).compareTo(b['amount'] as num));
+      return (options.first['amount'] as num).toDouble();
+    }
+    if (item.rateHourly > 0) {
+      return item.rateHourly;
+    }
+    if (item.salePrice != null && item.salePrice! > 0) {
+      return item.salePrice!;
+    }
+    final match = RegExp(r'₱\s*([\d,]+(?:\.\d+)?)').firstMatch(item.rateText);
+    if (match != null) {
+      final parsed = double.tryParse(match.group(1)!.replaceAll(',', ''));
+      if (parsed != null) return parsed;
+    }
+    return 0.0;
+  }
+
   List<ItemModel> get filteredItems {
     final query = _searchQuery.trim().toLowerCase();
     final items = catalogItems.where((item) {
@@ -143,14 +184,49 @@ class CatalogScreenState extends State<CatalogScreen> {
           .toLowerCase()
           .contains(query);
     }).toList();
+
     items.sort((a, b) {
-      if (_availableFirst) {
-        final availability = (b.status.toLowerCase() == 'available' ? 1 : 0)
-            .compareTo(a.status.toLowerCase() == 'available' ? 1 : 0);
-        if (availability != 0) return availability;
+      final aAvail = a.status.toLowerCase() == 'available' ? 1 : 0;
+      final bAvail = b.status.toLowerCase() == 'available' ? 1 : 0;
+
+      switch (_sortOption) {
+        case 'available':
+          final availability = bAvail.compareTo(aAvail);
+          if (availability != 0) return availability;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+
+        case 'popular':
+          final aPop = a.isPopular ? 1 : 0;
+          final bPop = b.isPopular ? 1 : 0;
+          final popComp = bPop.compareTo(aPop);
+          if (popComp != 0) return popComp;
+          final availability = bAvail.compareTo(aAvail);
+          if (availability != 0) return availability;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+
+        case 'price_asc':
+          final pA = _getItemPrice(a);
+          final pB = _getItemPrice(b);
+          final pComp = pA.compareTo(pB);
+          if (pComp != 0) return pComp;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+
+        case 'price_desc':
+          final pA = _getItemPrice(a);
+          final pB = _getItemPrice(b);
+          final pComp = pB.compareTo(pA);
+          if (pComp != 0) return pComp;
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+
+        case 'name_desc':
+          return b.name.toLowerCase().compareTo(a.name.toLowerCase());
+
+        case 'name_asc':
+        default:
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       }
-      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
     });
+
     return items;
   }
 
@@ -161,6 +237,7 @@ class CatalogScreenState extends State<CatalogScreen> {
       selectedCategory = 'All';
       _availableOnly = false;
       _savedOnly = false;
+      _sortOption = 'available';
     });
   }
 
@@ -385,9 +462,9 @@ class CatalogScreenState extends State<CatalogScreen> {
                           ),
                           const SizedBox(width: 10),
                           LiquidGlassSortButton(
-                            availableFirst: _availableFirst,
-                            onChanged: (value) => setState(() =>
-                                _availableFirst = value),
+                            selectedSort: _sortOption,
+                            onChanged: (value) =>
+                                setState(() => _sortOption = value),
                           ),
                         ],
                       ),
@@ -446,15 +523,61 @@ class CatalogScreenState extends State<CatalogScreen> {
                       const SizedBox(height: 10),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 2),
-                        child: Text(
-                          '${filteredItems.length} ${filteredItems.length == 1 ? 'item' : 'items'}',
-                          style: TextStyle(
-                            color:
-                                isDark ? Colors.white : const Color(0xFF0F172A),
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: -0.2,
-                          ),
+                        child: Row(
+                          children: [
+                            Text(
+                              '${filteredItems.length} ${filteredItems.length == 1 ? 'item' : 'items'}',
+                              style: TextStyle(
+                                color: isDark
+                                    ? Colors.white
+                                    : const Color(0xFF0F172A),
+                                fontSize: 14,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: -0.2,
+                              ),
+                            ),
+                            if (_sortOption != 'available') ...[
+                              const SizedBox(width: 8),
+                              InkWell(
+                                onTap: () => setState(
+                                    () => _sortOption = 'available'),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFDF762D).withValues(
+                                        alpha: isDark ? 0.2 : 0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(
+                                      color: const Color(0xFFDF762D)
+                                          .withValues(alpha: 0.3),
+                                      width: 1,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _sortLabel(_sortOption),
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color(0xFFDF762D),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(
+                                        Icons.close_rounded,
+                                        size: 13,
+                                        color: Color(0xFFDF762D),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],
@@ -524,7 +647,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                                   (_searchQuery.isNotEmpty ||
                                       selectedCategory != 'All' ||
                                       _availableOnly ||
-                                      _savedOnly)) ...[
+                                      _savedOnly ||
+                                      _sortOption != 'available')) ...[
                                 const SizedBox(height: 6),
                                 TextButton(
                                   onPressed: _clearFilters,

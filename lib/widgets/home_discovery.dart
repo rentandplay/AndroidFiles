@@ -82,10 +82,7 @@ class HomeDiscovery extends StatelessWidget {
               for (var i = 0; i < categories.length; i++)
                 Padding(
                   padding: const EdgeInsets.only(right: 8),
-                  child: StaggeredSlideFade(
-                    index: i,
-                    child: _categoryChip(context, categories[i]),
-                  ),
+                  child: _categoryChip(context, categories[i]),
                 ),
             ]),
           ),
@@ -102,10 +99,7 @@ class HomeDiscovery extends StatelessWidget {
                 for (var i = 0; i < suggestions.length; i++)
                   Padding(
                     padding: const EdgeInsets.only(right: 12, bottom: 4),
-                    child: StaggeredSlideFade(
-                      index: i,
-                      child: _equipmentCard(context, suggestions[i]),
-                    ),
+                    child: _equipmentCard(context, suggestions[i]),
                   ),
               ],
             ),

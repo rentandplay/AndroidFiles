@@ -267,16 +267,55 @@ class _MobileSearchFieldState extends State<MobileSearchField> {
 class LiquidGlassSortButton extends StatelessWidget {
   const LiquidGlassSortButton({
     super.key,
-    required this.availableFirst,
+    this.selectedSort = 'available',
+    this.availableFirst,
     required this.onChanged,
   });
 
-  final bool availableFirst;
-  final ValueChanged<bool> onChanged;
+  final String selectedSort;
+  final bool? availableFirst;
+  final ValueChanged<String> onChanged;
+
+  static const List<_SortOptionData> _sortOptions = [
+    _SortOptionData(
+      value: 'available',
+      label: 'Available first',
+      icon: Icons.check_circle_outline_rounded,
+    ),
+    _SortOptionData(
+      value: 'popular',
+      label: 'Most popular',
+      icon: Icons.local_fire_department_rounded,
+    ),
+    _SortOptionData(
+      value: 'price_asc',
+      label: 'Price: Low to High',
+      icon: Icons.trending_down_rounded,
+    ),
+    _SortOptionData(
+      value: 'price_desc',
+      label: 'Price: High to Low',
+      icon: Icons.trending_up_rounded,
+    ),
+    _SortOptionData(
+      value: 'name',
+      label: 'Name: A – Z',
+      icon: Icons.sort_by_alpha_rounded,
+    ),
+    _SortOptionData(
+      value: 'name_desc',
+      label: 'Name: Z – A',
+      icon: Icons.text_rotate_vertical_rounded,
+    ),
+  ];
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final effectiveSort = availableFirst != null
+        ? (availableFirst! ? 'available' : 'name')
+        : selectedSort;
+    final isCustomSort = effectiveSort != 'available';
 
     final fillGradient = isDark
         ? LinearGradient(
@@ -341,9 +380,11 @@ class LiquidGlassSortButton extends StatelessWidget {
           ),
           BoxShadow(
             color: const Color(0xFFDF762D).withValues(
-              alpha: isDark ? 0.08 : 0.06,
+              alpha: isDark
+                  ? (isCustomSort ? 0.22 : 0.08)
+                  : (isCustomSort ? 0.18 : 0.06),
             ),
-            blurRadius: 8,
+            blurRadius: isCustomSort ? 12 : 8,
             offset: const Offset(0, 2),
           ),
         ],
@@ -363,27 +404,224 @@ class LiquidGlassSortButton extends StatelessWidget {
                 borderRadius: BorderRadius.circular(radius),
                 gradient: fillGradient,
               ),
-              child: PopupMenuButton<String>(
-                tooltip: 'Sort equipment',
-                icon: Icon(
-                  Icons.tune_rounded,
-                  size: 22,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+              child: Theme(
+                data: Theme.of(context).copyWith(
+                  splashColor: const Color(0xFFDF762D).withValues(alpha: 0.15),
+                  highlightColor:
+                      const Color(0xFFDF762D).withValues(alpha: 0.08),
                 ),
-                initialValue: availableFirst ? 'available' : 'name',
-                onSelected: (value) => onChanged(value == 'available'),
-                itemBuilder: (_) => [
-                  CheckedPopupMenuItem(
-                    value: 'available',
-                    checked: availableFirst,
-                    child: const Text('Available first'),
+                child: PopupMenuButton<String>(
+                  tooltip: 'Sort equipment',
+                  position: PopupMenuPosition.under,
+                  offset: const Offset(0, 10),
+                  elevation: 16,
+                  shadowColor:
+                      Colors.black.withValues(alpha: isDark ? 0.5 : 0.16),
+                  surfaceTintColor: Colors.transparent,
+                  color: isDark
+                      ? const Color(0xFF162130)
+                      : const Color(0xFFFFFDFC),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: isDark
+                          ? const Color(0xFF28384E)
+                          : const Color(0xFFE8DFD5),
+                      width: 1.2,
+                    ),
                   ),
-                  CheckedPopupMenuItem(
-                    value: 'name',
-                    checked: !availableFirst,
-                    child: const Text('Name A–Z'),
+                  constraints: const BoxConstraints(
+                    minWidth: 230,
+                    maxWidth: 260,
                   ),
-                ],
+                  padding: EdgeInsets.zero,
+                  onSelected: (value) {
+                    if (value == 'reset_default') {
+                      onChanged('available');
+                    } else {
+                      onChanged(value);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    PopupMenuItem<String>(
+                      enabled: false,
+                      height: 34,
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 2),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFDF762D)
+                                  .withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Icon(
+                              Icons.tune_rounded,
+                              size: 13,
+                              color: Color(0xFFDF762D),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'SORT & FILTER',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                              color: isDark
+                                  ? const Color(0xFF9EA3B0)
+                                  : const Color(0xFF6E655F),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuDivider(height: 6),
+                    ..._sortOptions.map((opt) {
+                      final isSelected = effectiveSort == opt.value;
+                      return PopupMenuItem<String>(
+                        value: opt.value,
+                        height: 44,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? (isDark
+                                    ? const Color(0xFFDF762D)
+                                        .withValues(alpha: 0.18)
+                                    : const Color(0xFFFFF3EB))
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: isSelected
+                                ? Border.all(
+                                    color: const Color(0xFFDF762D)
+                                        .withValues(alpha: 0.35),
+                                    width: 1,
+                                  )
+                                : null,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                opt.icon,
+                                size: 18,
+                                color: isSelected
+                                    ? const Color(0xFFDF762D)
+                                    : (isDark
+                                        ? const Color(0xFF94A3B8)
+                                        : const Color(0xFF64748B)),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  opt.label,
+                                  style: TextStyle(
+                                    fontSize: 13.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w500,
+                                    color: isSelected
+                                        ? (isDark
+                                            ? const Color(0xFFF0AD7C)
+                                            : const Color(0xFFDF762D))
+                                        : (isDark
+                                            ? Colors.white
+                                            : const Color(0xFF1E293B)),
+                                  ),
+                                ),
+                              ),
+                              if (isSelected)
+                                Container(
+                                  width: 18,
+                                  height: 18,
+                                  decoration: const BoxDecoration(
+                                    color: Color(0xFFDF762D),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.check_rounded,
+                                    size: 12,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                    if (isCustomSort) ...[
+                      const PopupMenuDivider(height: 6),
+                      PopupMenuItem<String>(
+                        value: 'reset_default',
+                        height: 36,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 2),
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.restart_alt_rounded,
+                                size: 14,
+                                color: Color(0xFFDF762D),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Reset to default',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: isDark
+                                      ? const Color(0xFFF0AD7C)
+                                      : const Color(0xFFDF762D),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                  child: Center(
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          Icons.tune_rounded,
+                          size: 22,
+                          color: isCustomSort
+                              ? const Color(0xFFDF762D)
+                              : (isDark
+                                  ? Colors.white
+                                  : const Color(0xFF0F172A)),
+                        ),
+                        if (isCustomSort)
+                          Positioned(
+                            top: -2,
+                            right: -3,
+                            child: Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFDF762D),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDark
+                                      ? const Color(0xFF142032)
+                                      : Colors.white,
+                                  width: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),
@@ -391,6 +629,18 @@ class LiquidGlassSortButton extends StatelessWidget {
       ),
     );
   }
+}
+
+class _SortOptionData {
+  final String value;
+  final String label;
+  final IconData icon;
+
+  const _SortOptionData({
+    required this.value,
+    required this.label,
+    required this.icon,
+  });
 }
 
 class MobileFilterChip extends StatelessWidget {

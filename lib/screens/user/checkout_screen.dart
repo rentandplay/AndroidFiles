@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../../models/item_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
+import '../../services/rental_offline_cache.dart';
 import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
@@ -201,6 +202,23 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   Future<void> _loadUserProfile() async {
     try {
       final authService = Provider.of<AuthService>(context, listen: false);
+      final uid = authService.currentUser?.uid;
+      if (uid != null && uid.isNotEmpty) {
+        final savedResort = await RentalOfflineCache.loadPreferredResort(uid);
+        if (savedResort != null && mounted && _selectedResort.isEmpty) {
+          final resort = savedResort['resort'] ?? '';
+          if (privateResorts.contains(resort)) {
+            setState(() {
+              _selectedResort = resort;
+              if (resort == 'Other / Custom Resort' &&
+                  _customResortController.text.isEmpty &&
+                  savedResort['customResort'] != null) {
+                _customResortController.text = savedResort['customResort']!;
+              }
+            });
+          }
+        }
+      }
       final user = await authService.getCurrentUserModel();
       if (user != null && mounted) {
         setState(() {
@@ -211,6 +229,74 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         });
       }
     } catch (_) {}
+  }
+
+  Future<void> _showReceiptLightbox() {
+    if (_paymentProofImage == null) return Future.value();
+    HapticFeedback.selectionClick();
+    return showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.88),
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: Colors.transparent,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Payment receipt preview',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            'Expected ${rentalMoney(_total)} · Pinch to zoom',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close receipt preview',
+                      onPressed: () => Navigator.pop(dialogContext),
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white, size: 26),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: InteractiveViewer(
+                  minScale: 1.0,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Image.memory(
+                        base64Decode(_paymentProofImage!.split(',').last),
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   String _normalizedPhone(String value) {
@@ -664,6 +750,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                         onSelected: _isSubmitting
                                             ? null
                                             : (_) {
+                                                HapticFeedback.selectionClick();
                                                 setState(() {
                                                   _selectedDurationMinutes =
                                                       minutes;
@@ -681,6 +768,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                         fontWeight: FontWeight.w600)),
                                 const SizedBox(height: 8),
                                 DropdownButtonFormField<String>(
+                                  key: ValueKey('resort-dropdown-$_selectedResort'),
                                   initialValue: _selectedResort.isEmpty
                                       ? null
                                       : _selectedResort,
@@ -701,10 +789,25 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                       ? null
                                       : (place) {
                                           if (place != null) {
+                                            HapticFeedback.selectionClick();
                                             setState(() {
                                               _selectedResort = place;
                                               _acceptedRentalTerms = false;
                                             });
+                                            try {
+                                              final uid = Provider.of<AuthService>(
+                                                      context,
+                                                      listen: false)
+                                                  .currentUser
+                                                  ?.uid;
+                                              unawaited(RentalOfflineCache
+                                                  .savePreferredResort(
+                                                uid,
+                                                place,
+                                                customResort:
+                                                    _customResortController.text,
+                                              ));
+                                            } catch (_) {}
                                           }
                                         },
                                 ),
@@ -961,15 +1064,36 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                             : 'Change payment receipt')),
                                     if (_paymentProofImage != null) ...[
                                       const SizedBox(height: 8),
-                                      Center(
-                                          child: Image.memory(
-                                              base64Decode(_paymentProofImage!
-                                                  .split(',')
-                                                  .last),
-                                              height: 170,
-                                              fit: BoxFit.contain)),
-                                      Text('Selected: $_paymentProofName',
-                                          textAlign: TextAlign.center),
+                                      GestureDetector(
+                                        key: const ValueKey(
+                                            'checkout-receipt-preview-tap'),
+                                        onTap: _showReceiptLightbox,
+                                        child: Column(
+                                          children: [
+                                            ClipRRect(
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                              child: Image.memory(
+                                                base64Decode(_paymentProofImage!
+                                                    .split(',')
+                                                    .last),
+                                                height: 170,
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Selected: $_paymentProofName · Tap to zoom',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                color: scheme.primary,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ],
                                     CheckboxListTile(
                                         contentPadding: EdgeInsets.zero,

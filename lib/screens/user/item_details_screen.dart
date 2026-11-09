@@ -2,6 +2,7 @@ import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/premium_animations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../../models/item_model.dart';
@@ -82,6 +83,90 @@ class ItemDetailsScreen extends StatelessWidget {
           ),
       );
 
+  Future<void> _showImageLightbox(BuildContext context) {
+    HapticFeedback.selectionClick();
+    return showDialog<void>(
+      context: context,
+      barrierColor: Colors.black.withValues(alpha: 0.88),
+      builder: (dialogContext) => Dialog.fullscreen(
+        backgroundColor: Colors.transparent,
+        child: SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.name,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            '${item.category} · Pinch or double-tap to zoom',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      tooltip: 'Close image preview',
+                      onPressed: () => Navigator.pop(dialogContext),
+                      icon: const Icon(Icons.close_rounded,
+                          color: Colors.white, size: 26),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: InteractiveViewer(
+                  key: const ValueKey('item-details-interactive-viewer'),
+                  minScale: 1.0,
+                  maxScale: 4.0,
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: item.buildImage(
+                        fit: BoxFit.contain,
+                        height: 360,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _shareEquipmentDetails(BuildContext context) async {
+    HapticFeedback.selectionClick();
+    final rate = item.rateText.trim().isEmpty
+        ? 'Contact store for rates'
+        : item.rateText.trim();
+    final summary =
+        'Rent & Play · ${item.name} (${item.category})\nRate: $rate\nStatus: $_availabilityLabel';
+    await Clipboard.setData(ClipboardData(text: summary));
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Equipment details copied to clipboard to share.'),
+      ),
+    );
+  }
+
   Future<void> _continueToRental(BuildContext context) async {
     final authService = Provider.of<AuthService>(context, listen: false);
     if (authService.currentUser == null) {
@@ -158,6 +243,11 @@ class ItemDetailsScreen extends StatelessWidget {
         titleText: 'Equipment details',
         actions: [
           HeaderActionPod(
+            icon: Icons.ios_share_rounded,
+            tooltip: 'Share equipment details',
+            onTap: () => _shareEquipmentDetails(context),
+          ),
+          HeaderActionPod(
             icon: Icons.help_outline_rounded,
             tooltip: 'How renting works',
             onTap: () => _showRentalGuide(context),
@@ -186,41 +276,82 @@ class ItemDetailsScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            height: 224,
-                            width: double.infinity,
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              gradient: RadialGradient(
-                                center: Alignment.center,
-                                radius: 0.85,
-                                colors: Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? const [
-                                        Color(0xFF233248),
-                                        Color(0xFF151F2E),
-                                      ]
-                                    : const [
-                                        Color(0xFFFBF6EE),
-                                        Color(0xFFF3ECE1),
+                        GestureDetector(
+                          key: const ValueKey('item-details-image-zoom-tap'),
+                          onTap: () => _showImageLightbox(context),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(16),
+                            child: Stack(
+                              children: [
+                                Container(
+                                  height: 224,
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    gradient: RadialGradient(
+                                      center: Alignment.center,
+                                      radius: 0.85,
+                                      colors: Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? const [
+                                              Color(0xFF233248),
+                                              Color(0xFF151F2E),
+                                            ]
+                                          : const [
+                                              Color(0xFFFBF6EE),
+                                              Color(0xFFF3ECE1),
+                                            ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? Colors.white.withValues(alpha: 0.10)
+                                          : const Color(0xFFE8E0D5),
+                                    ),
+                                  ),
+                                  child: Hero(
+                                    tag: 'item-image-${item.id}',
+                                    child: item.buildImage(
+                                      fit: BoxFit.contain,
+                                      height: 192,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  right: 10,
+                                  bottom: 10,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 10, vertical: 5),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          Colors.black.withValues(alpha: 0.48),
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(
+                                        color: Colors.white
+                                            .withValues(alpha: 0.22),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: const [
+                                        Icon(Icons.zoom_in_rounded,
+                                            size: 14, color: Colors.white),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Tap to zoom',
+                                          style: TextStyle(
+                                            color: Colors.white,
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
                                       ],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: Theme.of(context).brightness ==
-                                        Brightness.dark
-                                    ? Colors.white.withValues(alpha: 0.10)
-                                    : const Color(0xFFE8E0D5),
-                              ),
-                            ),
-                            child: Hero(
-                              tag: 'item-image-${item.id}',
-                              child: item.buildImage(
-                                fit: BoxFit.contain,
-                                height: 192,
-                              ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
