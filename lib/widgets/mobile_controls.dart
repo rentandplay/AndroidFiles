@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
 Color mobileAccentText(BuildContext context) =>
@@ -5,9 +6,45 @@ Color mobileAccentText(BuildContext context) =>
         ? const Color(0xFFF0AD7C)
         : const Color(0xFF9A471B);
 
+/// Custom painter for liquid glass specular borders with directional light catch.
+class LiquidGlassBorderPainter extends CustomPainter {
+  LiquidGlassBorderPainter({
+    required this.borderRadius,
+    required this.borderGradient,
+    this.borderWidth = 1.2,
+  });
+
+  final double borderRadius;
+  final Gradient borderGradient;
+  final double borderWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final rrect = RRect.fromRectAndRadius(
+      rect.deflate(borderWidth / 2),
+      Radius.circular(borderRadius),
+    );
+
+    final paint = Paint()
+      ..shader = borderGradient.createShader(rect)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = borderWidth;
+
+    canvas.drawRRect(rrect, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant LiquidGlassBorderPainter oldDelegate) =>
+      oldDelegate.borderRadius != borderRadius ||
+      oldDelegate.borderGradient != borderGradient ||
+      oldDelegate.borderWidth != borderWidth;
+}
+
 /// Search stays visually compact while growing with the user's text size.
-/// Styled with iOS 27 Liquid Glass aesthetic: translucent frosted fill and specular borders.
-class MobileSearchField extends StatelessWidget {
+/// Engineered with authentic Liquid Glass aesthetic: translucent frosted fill,
+/// directional specular border reflections, and soft ambient refraction glow.
+class MobileSearchField extends StatefulWidget {
   const MobileSearchField({
     super.key,
     required this.controller,
@@ -20,88 +57,333 @@ class MobileSearchField extends StatelessWidget {
   final String hintText;
 
   @override
+  State<MobileSearchField> createState() => _MobileSearchFieldState();
+}
+
+class _MobileSearchFieldState extends State<MobileSearchField> {
+  final FocusNode _focusNode = FocusNode();
+  bool _isFocused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode.addListener(_onFocusChange);
+    widget.controller.addListener(_onControllerChange);
+  }
+
+  void _onFocusChange() {
+    if (mounted) {
+      setState(() => _isFocused = _focusNode.hasFocus);
+    }
+  }
+
+  void _onControllerChange() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(MobileSearchField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_onControllerChange);
+      widget.controller.addListener(_onControllerChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    _focusNode.removeListener(_onFocusChange);
+    _focusNode.dispose();
+    widget.controller.removeListener(_onControllerChange);
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final glassFill = isDark
-        ? const Color(0xFF192536).withValues(alpha: 0.78)
-        : Colors.white.withValues(alpha: 0.90);
+    final fillGradient = isDark
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.45, 1.0],
+            colors: [
+              const Color(0xFF1E2B3E).withValues(alpha: 0.82),
+              const Color(0xFF142032).withValues(alpha: 0.74),
+              const Color(0xFF0F1826).withValues(alpha: 0.80),
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.45, 1.0],
+            colors: [
+              Colors.white.withValues(alpha: 0.85),
+              const Color(0xFFFFF9F2).withValues(alpha: 0.68),
+              Colors.white.withValues(alpha: 0.78),
+            ],
+          );
 
-    final glassBorder = isDark
-        ? Colors.white.withValues(alpha: 0.16)
-        : const Color(0xFFE2E8F0);
+    final borderGradient = _isFocused
+        ? const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: [0.0, 0.50, 1.0],
+            colors: [
+              Color(0xFFFF9E58),
+              Color(0xFFDF762D),
+              Color(0xFFBA4708),
+            ],
+          )
+        : (isDark
+            ? LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.45, 0.85, 1.0],
+                colors: [
+                  Colors.white.withValues(alpha: 0.42),
+                  Colors.white.withValues(alpha: 0.16),
+                  Colors.white.withValues(alpha: 0.08),
+                  const Color(0xFFDF762D).withValues(alpha: 0.32),
+                ],
+              )
+            : LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                stops: const [0.0, 0.45, 0.85, 1.0],
+                colors: [
+                  Colors.white,
+                  Colors.white.withValues(alpha: 0.70),
+                  const Color(0xFFE2D9CF).withValues(alpha: 0.65),
+                  const Color(0xFFDF762D).withValues(alpha: 0.38),
+                ],
+              ));
+
+    const radius = 18.0;
 
     return ConstrainedBox(
       constraints: const BoxConstraints(minHeight: 48, maxHeight: 52),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(radius),
           boxShadow: [
             BoxShadow(
               color: isDark
-                  ? Colors.black.withValues(alpha: 0.25)
-                  : const Color(0xFF0F172A).withValues(alpha: 0.04),
-              blurRadius: 12,
+                  ? Colors.black.withValues(alpha: 0.35)
+                  : const Color(0xFF0F172A).withValues(alpha: 0.06),
+              blurRadius: 16,
               offset: const Offset(0, 4),
+            ),
+            BoxShadow(
+              color: (_isFocused
+                      ? const Color(0xFFDF762D)
+                      : const Color(0xFFFF9E58))
+                  .withValues(
+                      alpha: isDark
+                          ? (_isFocused ? 0.25 : 0.08)
+                          : (_isFocused ? 0.20 : 0.06)),
+              blurRadius: _isFocused ? 14 : 8,
+              offset: const Offset(0, 2),
             ),
           ],
         ),
-        child: TextField(
-          controller: controller,
-          onChanged: onChanged,
-          textInputAction: TextInputAction.search,
-          onSubmitted: (_) => FocusScope.of(context).unfocus(),
-          onTapOutside: (_) => FocusScope.of(context).unfocus(),
-          style: TextStyle(
-            fontSize: 14,
-            height: 1.3,
-            fontWeight: FontWeight.w500,
-            color: scheme.onSurface,
-          ),
-          decoration: InputDecoration(
-            hintText: hintText,
-            hintStyle: TextStyle(
-              fontSize: 14,
-              color: scheme.onSurfaceVariant.withValues(alpha: 0.8),
-              fontWeight: FontWeight.w400,
-            ),
-            isDense: true,
-            filled: true,
-            fillColor: glassFill,
-            contentPadding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            prefixIcon: Icon(
-              Icons.search_rounded,
-              size: 20,
-              color: isDark ? const Color(0xFFF0AD7C) : const Color(0xFFDF762D),
-            ),
-            prefixIconConstraints:
-                const BoxConstraints(minWidth: 44, minHeight: 48),
-            suffixIcon: controller.text.isEmpty
-                ? null
-                : IconButton(
-                    tooltip: 'Clear search',
-                    iconSize: 18,
-                    icon: const Icon(Icons.close_rounded),
-                    onPressed: () {
-                      controller.clear();
-                      onChanged('');
-                    },
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(radius),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+            child: CustomPaint(
+              foregroundPainter: LiquidGlassBorderPainter(
+                borderRadius: radius,
+                borderGradient: borderGradient,
+                borderWidth: _isFocused ? 1.5 : 1.2,
+              ),
+              child: Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(radius),
+                  gradient: fillGradient,
+                ),
+                child: TextField(
+                  controller: widget.controller,
+                  focusNode: _focusNode,
+                  onChanged: widget.onChanged,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (_) => FocusScope.of(context).unfocus(),
+                  onTapOutside: (_) => FocusScope.of(context).unfocus(),
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.3,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.onSurface,
                   ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: glassBorder, width: 1.1),
+                  decoration: InputDecoration(
+                    hintText: widget.hintText,
+                    hintStyle: TextStyle(
+                      fontSize: 14,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w400,
+                    ),
+                    isDense: true,
+                    filled: false,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 12),
+                    prefixIcon: Icon(
+                      Icons.search_rounded,
+                      size: 20,
+                      color: isDark
+                          ? const Color(0xFFF0AD7C)
+                          : const Color(0xFFDF762D),
+                    ),
+                    prefixIconConstraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 48),
+                    suffixIcon: widget.controller.text.isEmpty
+                        ? null
+                        : IconButton(
+                            tooltip: 'Clear search',
+                            iconSize: 18,
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () {
+                              widget.controller.clear();
+                              widget.onChanged('');
+                            },
+                          ),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                  ),
+                ),
+              ),
             ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(color: glassBorder, width: 1.1),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Matching Liquid Glass sort button with frosted blur and specular rim.
+class LiquidGlassSortButton extends StatelessWidget {
+  const LiquidGlassSortButton({
+    super.key,
+    required this.availableFirst,
+    required this.onChanged,
+  });
+
+  final bool availableFirst;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final fillGradient = isDark
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.45, 1.0],
+            colors: [
+              const Color(0xFF1E2B3E).withValues(alpha: 0.82),
+              const Color(0xFF142032).withValues(alpha: 0.74),
+              const Color(0xFF0F1826).withValues(alpha: 0.80),
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.45, 1.0],
+            colors: [
+              Colors.white.withValues(alpha: 0.85),
+              const Color(0xFFFFF9F2).withValues(alpha: 0.68),
+              Colors.white.withValues(alpha: 0.78),
+            ],
+          );
+
+    final borderGradient = isDark
+        ? LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.45, 0.85, 1.0],
+            colors: [
+              Colors.white.withValues(alpha: 0.42),
+              Colors.white.withValues(alpha: 0.16),
+              Colors.white.withValues(alpha: 0.08),
+              const Color(0xFFDF762D).withValues(alpha: 0.32),
+            ],
+          )
+        : LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            stops: const [0.0, 0.45, 0.85, 1.0],
+            colors: [
+              Colors.white,
+              Colors.white.withValues(alpha: 0.70),
+              const Color(0xFFE2D9CF).withValues(alpha: 0.65),
+              const Color(0xFFDF762D).withValues(alpha: 0.38),
+            ],
+          );
+
+    const radius = 18.0;
+
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(radius),
+        boxShadow: [
+          BoxShadow(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.35)
+                : const Color(0xFF0F172A).withValues(alpha: 0.06),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+          BoxShadow(
+            color: const Color(0xFFDF762D).withValues(
+              alpha: isDark ? 0.08 : 0.06,
             ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(16),
-              borderSide: BorderSide(
-                color: isDark ? const Color(0xFFF57C00) : const Color(0xFFDF762D),
-                width: 1.5,
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(radius),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+          child: CustomPaint(
+            foregroundPainter: LiquidGlassBorderPainter(
+              borderRadius: radius,
+              borderGradient: borderGradient,
+              borderWidth: 1.2,
+            ),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(radius),
+                gradient: fillGradient,
+              ),
+              child: PopupMenuButton<String>(
+                tooltip: 'Sort equipment',
+                icon: Icon(
+                  Icons.tune_rounded,
+                  size: 22,
+                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+                ),
+                initialValue: availableFirst ? 'available' : 'name',
+                onSelected: (value) => onChanged(value == 'available'),
+                itemBuilder: (_) => [
+                  CheckedPopupMenuItem(
+                    value: 'available',
+                    checked: availableFirst,
+                    child: const Text('Available first'),
+                  ),
+                  CheckedPopupMenuItem(
+                    value: 'name',
+                    checked: !availableFirst,
+                    child: const Text('Name A–Z'),
+                  ),
+                ],
               ),
             ),
           ),

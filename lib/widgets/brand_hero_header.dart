@@ -399,6 +399,7 @@ class BrowseCategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return PremiumPressable(
       onTap: onSelected,
       child: AnimatedContainer(
@@ -414,14 +415,35 @@ class BrowseCategoryChip extends StatelessWidget {
               ? const LinearGradient(
                   colors: [Color(0xFFFF8533), Color(0xFFE46618)],
                 )
-              : null,
-          color: isSelected ? null : Colors.white,
+              : LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: isDark
+                      ? [
+                          const Color(0xFF1E2B3E).withValues(alpha: 0.85),
+                          const Color(0xFF142032).withValues(alpha: 0.75),
+                        ]
+                      : [
+                          Colors.white.withValues(alpha: 0.95),
+                          const Color(0xFFFFF9F3).withValues(alpha: 0.85),
+                        ],
+                ),
           borderRadius: BorderRadius.circular(20),
+          border: isSelected
+              ? null
+              : Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.16)
+                      : const Color(0xFFE2D9CF).withValues(alpha: 0.8),
+                  width: 1.1,
+                ),
           boxShadow: [
             BoxShadow(
               color: isSelected
                   ? const Color(0xFFE46618).withValues(alpha: 0.40)
-                  : Colors.black.withValues(alpha: 0.12),
+                  : (isDark
+                      ? Colors.black.withValues(alpha: 0.25)
+                      : const Color(0xFF0F172A).withValues(alpha: 0.05)),
               blurRadius: isSelected ? 8 : 6,
               offset: const Offset(0, 2),
             ),
@@ -440,7 +462,7 @@ class BrowseCategoryChip extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               style: TextStyle(
-                color: isSelected ? Colors.white : const Color(0xFF0F172A),
+                color: isSelected ? Colors.white : (isDark ? Colors.white : const Color(0xFF0F172A)),
                 fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
                 fontSize: 13,
                 letterSpacing: -0.1,

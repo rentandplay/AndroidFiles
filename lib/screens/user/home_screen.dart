@@ -57,6 +57,7 @@ class HomeScreenState extends State<HomeScreen> {
   String _rentalError = '';
   String _catalogError = '';
   int _carouselIndex = 0;
+  Timer? _carouselTimer;
 
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -74,8 +75,28 @@ class HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _startCarouselTimer() {
+    _carouselTimer?.cancel();
+    if (_featuredItems.length <= 1) return;
+    _carouselTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted || !_carouselController.hasClients || _featuredItems.length <= 1) return;
+      final nextIndex = (_carouselIndex + 1) % _featuredItems.length;
+      _carouselController.animateToPage(
+        nextIndex,
+        duration: const Duration(milliseconds: 600),
+        curve: Curves.easeInOutCubic,
+      );
+    });
+  }
+
+  void _resetCarouselTimer() {
+    _carouselTimer?.cancel();
+    _startCarouselTimer();
+  }
+
   @override
   void dispose() {
+    _carouselTimer?.cancel();
     _eventSubscription?.cancel();
     _carouselController.dispose();
     super.dispose();
@@ -100,8 +121,23 @@ class HomeScreenState extends State<HomeScreen> {
       final available = catalogItems
           .where((item) => item.status.toLowerCase() == 'available')
           .toList();
-      final featureCount = (available.length ~/ 2).clamp(1, 3).toInt();
-      items = available.take(featureCount).toList();
+
+      // Filter and prioritize popular items for the carousel
+      final popular = available.where((item) => item.isPopular).toList();
+      popular.sort((a, b) {
+        final aBadminton = a.name.toLowerCase().contains('badminton');
+        final bBadminton = b.name.toLowerCase().contains('badminton');
+        if (aBadminton && !bBadminton) return -1;
+        if (!aBadminton && bBadminton) return 1;
+        return a.name.compareTo(b.name);
+      });
+
+      if (popular.isNotEmpty) {
+        final remaining = available.where((item) => !item.isPopular).toList();
+        items = [...popular, ...remaining].take(6).toList();
+      } else {
+        items = available.take(6).toList();
+      }
     } catch (error) {
       catalogError = '$error';
       // Keep the rental summary usable if the featured catalog cannot load.
@@ -125,6 +161,7 @@ class HomeScreenState extends State<HomeScreen> {
       _loading = false;
       if (_carouselIndex >= items.length) _carouselIndex = 0;
     });
+    _startCarouselTimer();
   }
 
   Future<void> refresh() => _loadHome();
@@ -297,21 +334,33 @@ class HomeScreenState extends State<HomeScreen> {
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: List.generate(
                                       _featuredItems.length,
-                                      (index) => AnimatedContainer(
-                                        duration:
-                                            const Duration(milliseconds: 180),
-                                        width:
-                                            index == _carouselIndex ? 18 : 6,
-                                        height: 6,
-                                        margin: const EdgeInsets.symmetric(
-                                            horizontal: 3),
-                                        decoration: BoxDecoration(
-                                          color: index == _carouselIndex
-                                              ? scheme.primary
-                                              : scheme.outline
-                                                  .withValues(alpha: .6),
-                                          borderRadius:
-                                              BorderRadius.circular(8),
+                                      (index) => GestureDetector(
+                                        onTap: () {
+                                          _carouselController.animateToPage(
+                                            index,
+                                            duration: const Duration(
+                                                milliseconds: 350),
+                                            curve: Curves.easeInOut,
+                                          );
+                                          _resetCarouselTimer();
+                                        },
+                                        child: AnimatedContainer(
+                                          duration:
+                                              const Duration(milliseconds: 240),
+                                          width:
+                                              index == _carouselIndex ? 22 : 6,
+                                          height: 6,
+                                          margin: const EdgeInsets.symmetric(
+                                              horizontal: 3),
+                                          decoration: BoxDecoration(
+                                            color: index == _carouselIndex
+                                                ? const Color(0xFFDF762D)
+                                                : (isDark
+                                                    ? const Color(0xFF45362B)
+                                                    : const Color(0xFFE2D6CB)),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -379,168 +428,229 @@ class HomeScreenState extends State<HomeScreen> {
     ));
   }
 
+  String _formatPopularRate(ItemModel item) {
+    if (item.rateHourly > 0) {
+      final amount = item.rateHourly.truncateToDouble() == item.rateHourly
+          ? item.rateHourly.toInt().toString()
+          : item.rateHourly.toStringAsFixed(2);
+      return '₱$amount / Per hour';
+    }
+    return catalogPriceLabel(item);
+  }
+
   Widget _buildCarousel(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final featureText =
-        dark ? const Color(0xFFFFF3E6) : const Color(0xFF332218);
     if (_featuredItems.isEmpty) {
       return _buildFallbackSlide(context);
     }
 
     return SizedBox(
       height: _featureHeight(context),
-      child: PageView.builder(
+      child: NotificationListener<ScrollNotification>(
+        onNotification: (notification) {
+          if (notification is ScrollStartNotification) {
+            _carouselTimer?.cancel();
+          } else if (notification is ScrollEndNotification) {
+            _startCarouselTimer();
+          }
+          return false;
+        },
+        child: PageView.builder(
         controller: _carouselController,
         itemCount: _featuredItems.length,
-        onPageChanged: (index) => setState(() => _carouselIndex = index),
+        onPageChanged: (index) {
+          setState(() => _carouselIndex = index);
+          _resetCarouselTimer();
+        },
         itemBuilder: (context, index) {
           final item = _featuredItems[index];
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: PremiumPressable(
-              onTap: () => widget.onItemSelected(item),
-              child: LiquidGlassContainer(
-                borderRadius: 24,
-                blurSigma: 16,
-                glowColor: const Color(0xFFDF762D),
-                customGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    const Color(0xFFF5AA73).withValues(alpha: dark ? .26 : .24),
-                    const Color(0xFFFFD8AE).withValues(alpha: dark ? .09 : .12),
-                  ],
+            child: Container(
+              decoration: BoxDecoration(
+                color: dark ? const Color(0xFF261D17) : const Color(0xFFFAF3EA),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: dark ? const Color(0xFF3E3025) : const Color(0xFFEFE2D3),
+                  width: 1,
                 ),
-                borderGradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  stops: const [0.0, 0.45, 1.0],
-                  colors: [
-                    Colors.white.withValues(alpha: 0.85),
-                    Colors.white.withValues(alpha: 0.30),
-                    const Color(0xFFFFC093).withValues(alpha: 0.50),
-                  ],
-                ),
-                onTap: () => widget.onItemSelected(item),
-                child: Stack(
-                  children: [
-                    // Specular angled light shine streak
-                    Positioned(
-                      top: -45,
-                      left: -30,
-                      right: -30,
-                      height: 100,
-                      child: Transform.rotate(
-                        angle: -0.25,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            gradient: LinearGradient(
-                              begin: Alignment.topCenter,
-                              end: Alignment.bottomCenter,
-                              colors: [
-                                Colors.white.withValues(alpha: 0.35),
-                                Colors.white.withValues(alpha: 0.0),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    // Glowing liquid refraction orb
-                    Positioned(
-                      right: -25,
-                      bottom: -35,
-                      child: Container(
-                        width: 190,
-                        height: 190,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          gradient: RadialGradient(
-                            colors: [
-                              Colors.white.withValues(alpha: 0.28),
-                              Colors.white.withValues(alpha: 0.0),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 10, 12),
-                      child: Row(children: [
+                boxShadow: [
+                  BoxShadow(
+                    color: dark
+                        ? Colors.black.withValues(alpha: 0.35)
+                        : const Color(0xFFDF762D).withValues(alpha: 0.08),
+                    blurRadius: 18,
+                    offset: const Offset(0, 5),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () => widget.onItemSelected(item),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        // Left side: Details
                         Expanded(
                           flex: 6,
                           child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
                             crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(item.name,
-                                  maxLines: 2,
+                              // ⚡ POPULAR badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 9, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: dark
+                                      ? const Color(0xFF382A20)
+                                      : const Color(0xFFF1E6D9),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.bolt_rounded,
+                                      size: 13,
+                                      color: dark
+                                          ? const Color(0xFFFFB37C)
+                                          : const Color(0xFF2C1810),
+                                    ),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      'POPULAR',
+                                      style: TextStyle(
+                                        color: dark
+                                            ? const Color(0xFFFFE7D6)
+                                            : const Color(0xFF2C1810),
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              // Item Name
+                              Text(
+                                item.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  color: dark
+                                      ? const Color(0xFFFFF1E6)
+                                      : const Color(0xFF2C1810),
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.4,
+                                  height: 1.15,
+                                ),
+                              ),
+                              const SizedBox(height: 7),
+                              // Price pill badge: "₱100 / Per hour"
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: dark
+                                      ? const Color(0xFF382A20)
+                                      : const Color(0xFFEFE5D8),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Text(
+                                  _formatPopularRate(item),
+                                  maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
-                                      color: featureText,
-                                      fontSize: 18,
-                                      height: 1.1,
-                                      fontWeight: FontWeight.w800)),
-                              const SizedBox(height: 5),
-                              Tooltip(
-                                  message: item.rateText,
-                                  child: Text(catalogPriceLabel(item),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                          color: featureText,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600))),
-                              const SizedBox(height: 8),
-                              FilledButton.icon(
-                                onPressed: () => widget.onItemSelected(item),
-                                iconAlignment: IconAlignment.end,
-                                icon: const Icon(Icons.arrow_forward_rounded,
-                                    size: 15),
-                                label: const Text('View details'),
-                                style: FilledButton.styleFrom(
-                                  foregroundColor: featureText,
-                                  backgroundColor: const Color(0xFFDF762D)
-                                      .withValues(alpha: dark ? .25 : .12),
-                                  minimumSize: const Size(0, 36),
+                                    color: dark
+                                        ? const Color(0xFFFFDAB9)
+                                        : const Color(0xFF3E2819),
+                                    fontSize: 11.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 9),
+                              // View details button
+                              InkWell(
+                                onTap: () => widget.onItemSelected(item),
+                                borderRadius: BorderRadius.circular(20),
+                                child: Container(
                                   padding: const EdgeInsets.symmetric(
-                                      horizontal: 12),
-                                  textStyle: Theme.of(context)
-                                      .textTheme
-                                      .labelLarge
-                                      ?.copyWith(
+                                      horizontal: 13, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: dark
+                                        ? const Color(0xFF423226)
+                                        : const Color(0xFFE8D7C8),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        'View details',
+                                        style: TextStyle(
+                                          color: dark
+                                              ? const Color(0xFFFFE6D5)
+                                              : const Color(0xFF3A200F),
                                           fontSize: 12,
-                                          fontWeight: FontWeight.w700),
-                                  shape: const StadiumBorder(),
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Icon(
+                                        Icons.arrow_forward_rounded,
+                                        size: 13,
+                                        color: dark
+                                            ? const Color(0xFFFFE6D5)
+                                            : const Color(0xFF3A200F),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                         ),
+                        const SizedBox(width: 8),
+                        // Right side: Item image
                         Expanded(
-                            flex: 5,
+                          flex: 5,
+                          child: Center(
                             child: Hero(
-                                tag: 'item-image-${item.id}',
-                                child: item.buildImage(
-                                    fit: BoxFit.contain,
-                                    height: 108,
-                                    width: 130))),
-                      ]),
+                              tag: 'item-image-${item.id}',
+                              child: item.buildImage(
+                                fit: BoxFit.contain,
+                                height: 114,
+                                width: 130,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
           );
         },
+        ),
       ),
     );
   }
 
   double _featureHeight(BuildContext context) =>
-      140 *
+      154 *
       (MediaQuery.textScalerOf(context).scale(14) / 14)
-          .clamp(1.0, double.infinity);
+          .clamp(1.0, 1.25);
 
   Widget _buildFallbackSlide(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),

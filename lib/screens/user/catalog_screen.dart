@@ -246,216 +246,173 @@ class CatalogScreenState extends State<CatalogScreen> {
                   child: CustomerHomeHeroBackground(
                     child: SafeArea(
                       bottom: false,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Top row: rent&play wordmark + Login button
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                const RentPlayWordmark(isLightOnDark: true),
-                                if (user == null)
-                                  HeroLoginButton(
-                                    onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) => const LoginScreen()),
-                                    ),
-                                  )
-                                else
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const RentalNotificationBellPod(
-                                        podBg: Color(0x28FFFFFF),
-                                        podBorder: Color(0x40FFFFFF),
-                                        iconColor: Colors.white,
-                                      ),
-                                      if (isAdmin) ...[
-                                        const SizedBox(width: 6),
-                                        HeaderActionPod(
-                                          podBg: Colors.white
-                                              .withValues(alpha: 0.16),
-                                          podBorder: Colors.white
-                                              .withValues(alpha: 0.25),
-                                          iconColor: Colors.white,
-                                          child: PopupMenuButton<String>(
-                                            padding: EdgeInsets.zero,
-                                            icon: const Icon(Icons.more_vert,
-                                                size: 20),
-                                            tooltip: 'More Options',
-                                            onSelected: (value) async {
-                                              if (value == 'admin') {
-                                                final navigator =
-                                                    Navigator.of(context);
-                                                navigator.push(
-                                                  MaterialPageRoute(
-                                                    builder: (_) =>
-                                                        AdminDashboardScreen(
-                                                      onSignedOut: () {
-                                                        navigator
-                                                            .pushAndRemoveUntil(
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                const LoginScreen(),
-                                                          ),
-                                                          (route) => false,
-                                                        );
-                                                      },
-                                                    ),
-                                                  ),
-                                                );
-                                              } else if (value == 'logout') {
-                                                ScaffoldMessenger.of(context)
-                                                    .showSnackBar(
-                                                  const SnackBar(
-                                                      content: Text(
-                                                          'Logged out successfully.')),
-                                                );
-                                                await authService.logout();
-                                                if (mounted) {
-                                                  setState(() =>
-                                                      _currentUserModel = null);
-                                                }
-                                              }
-                                            },
-                                            itemBuilder: (context) => [
-                                              const PopupMenuItem(
-                                                value: 'admin',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(
-                                                        Icons
-                                                            .admin_panel_settings_outlined,
-                                                        size: 20,
-                                                        color:
-                                                            Color(0xFFF57C00)),
-                                                    SizedBox(width: 10),
-                                                    Text('Staff Dashboard'),
-                                                  ],
-                                                ),
-                                              ),
-                                              const PopupMenuDivider(),
-                                              const PopupMenuItem(
-                                                value: 'logout',
-                                                child: Row(
-                                                  children: [
-                                                    Icon(Icons.logout,
-                                                        size: 20,
-                                                        color: Colors.red),
-                                                    SizedBox(width: 10),
-                                                    Text('Logout',
-                                                        style: TextStyle(
-                                                            color: Colors.red,
-                                                            fontWeight:
-                                                                FontWeight
-                                                                    .bold)),
-                                                  ],
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 14),
-                          // Search bar + separate filter/tune button matching reference
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(children: [
-                              Expanded(
-                                  child: MobileSearchField(
-                                controller: _searchController,
-                                onChanged: (value) =>
-                                    setState(() => _searchQuery = value),
-                                hintText: 'Search equipment',
-                              )),
-                              const SizedBox(width: 10),
-                              Material(
-                                color: Colors.transparent,
-                                child: Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black
-                                            .withValues(alpha: 0.16),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 3),
-                                      ),
-                                    ],
-                                  ),
-                                  child: PopupMenuButton<String>(
-                                    tooltip: 'Sort equipment',
-                                    icon: const Icon(Icons.tune_rounded,
-                                        size: 22, color: Color(0xFF0F172A)),
-                                    initialValue:
-                                        _availableFirst ? 'available' : 'name',
-                                    onSelected: (value) => setState(() =>
-                                        _availableFirst = value == 'available'),
-                                    itemBuilder: (_) => [
-                                      CheckedPopupMenuItem(
-                                        value: 'available',
-                                        checked: _availableFirst,
-                                        child: const Text('Available first'),
-                                      ),
-                                      CheckedPopupMenuItem(
-                                        value: 'name',
-                                        checked: !_availableFirst,
-                                        child: const Text('Name A–Z'),
-                                      ),
-                                    ],
-                                  ),
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const RentPlayWordmark(isLightOnDark: true),
+                            if (user == null)
+                              HeroLoginButton(
+                                onPressed: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (_) => const LoginScreen()),
                                 ),
-                              ),
-                            ]),
-                          ),
-                          const SizedBox(height: 12),
-                          // Horizontal Category Chips row spanning full screen width
-                          SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            physics: const BouncingScrollPhysics(),
-                            child: Row(
-                              children: [
-                                for (final category in categories)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 8),
-                                    child: BrowseCategoryChip(
-                                      label: category,
-                                      isSelected: selectedCategory == category,
-                                      onSelected: () => setState(
-                                          () => selectedCategory = category),
-                                    ),
+                              )
+                            else
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const RentalNotificationBellPod(
+                                    podBg: Color(0x28FFFFFF),
+                                    podBorder: Color(0x40FFFFFF),
+                                    iconColor: Colors.white,
                                   ),
-                                const SizedBox(width: 8),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                        ],
+                                  if (isAdmin) ...[
+                                    const SizedBox(width: 6),
+                                    HeaderActionPod(
+                                      podBg: Colors.white
+                                          .withValues(alpha: 0.16),
+                                      podBorder: Colors.white
+                                          .withValues(alpha: 0.25),
+                                      iconColor: Colors.white,
+                                      child: PopupMenuButton<String>(
+                                        padding: EdgeInsets.zero,
+                                        icon: const Icon(Icons.more_vert,
+                                            size: 20),
+                                        tooltip: 'More Options',
+                                        onSelected: (value) async {
+                                          if (value == 'admin') {
+                                            final navigator =
+                                                Navigator.of(context);
+                                            navigator.push(
+                                              MaterialPageRoute(
+                                                builder: (_) =>
+                                                    AdminDashboardScreen(
+                                                  onSignedOut: () {
+                                                    navigator
+                                                        .pushAndRemoveUntil(
+                                                      MaterialPageRoute(
+                                                        builder: (_) =>
+                                                            const LoginScreen(),
+                                                      ),
+                                                      (route) => false,
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            );
+                                          } else if (value == 'logout') {
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                  content: Text(
+                                                      'Logged out successfully.')),
+                                            );
+                                            await authService.logout();
+                                            if (mounted) {
+                                              setState(() =>
+                                                  _currentUserModel = null);
+                                            }
+                                          }
+                                        },
+                                        itemBuilder: (context) => [
+                                          const PopupMenuItem(
+                                            value: 'admin',
+                                            child: Row(
+                                              children: [
+                                                Icon(
+                                                    Icons
+                                                        .admin_panel_settings_outlined,
+                                                    size: 20,
+                                                    color:
+                                                        Color(0xFFF57C00)),
+                                                SizedBox(width: 10),
+                                                Text('Staff Dashboard'),
+                                              ],
+                                            ),
+                                          ),
+                                          const PopupMenuDivider(),
+                                          const PopupMenuItem(
+                                            value: 'logout',
+                                            child: Row(
+                                              children: [
+                                                Icon(Icons.logout,
+                                                    size: 20,
+                                                    color: Colors.red),
+                                                SizedBox(width: 10),
+                                                Text('Logout',
+                                                    style: TextStyle(
+                                                        color: Colors.red,
+                                                        fontWeight:
+                                                            FontWeight
+                                                                .bold)),
+                                              ],
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
 
-              // 2. White Surface with Filters & Items Count
+              // 2. Search Controls, Category Chips & Filters below the wave header
               SliverToBoxAdapter(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // Liquid Glass Search bar + matching Sort/Tune button
+                      Row(
+                        children: [
+                          Expanded(
+                            child: MobileSearchField(
+                              controller: _searchController,
+                              onChanged: (value) =>
+                                  setState(() => _searchQuery = value),
+                              hintText: 'Search equipment',
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          LiquidGlassSortButton(
+                            availableFirst: _availableFirst,
+                            onChanged: (value) => setState(() =>
+                                _availableFirst = value),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      // Horizontal Category Chips row spanning full screen width
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        child: Row(
+                          children: [
+                            for (final category in categories)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: BrowseCategoryChip(
+                                  label: category,
+                                  isSelected: selectedCategory == category,
+                                  onSelected: () => setState(
+                                      () => selectedCategory = category),
+                                ),
+                              ),
+                            const SizedBox(width: 8),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
                       SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
@@ -580,7 +537,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                 )
               else
                 SliverPadding(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
                   sliver: SliverGrid(
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
                       crossAxisCount: gridColumns,
@@ -610,6 +567,7 @@ class CatalogScreenState extends State<CatalogScreen> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
     final statusKey = item.status.toUpperCase();
+    final isAvailable = statusKey == 'AVAILABLE' && item.availableQuantity > 0;
     final statusColor = switch (statusKey) {
       'AVAILABLE' => isDark ? const Color(0xFF89D5B8) : const Color(0xFF216F56),
       'RENTED' || 'RESERVED_PENDING' => mobileAccentText(context),
@@ -662,8 +620,10 @@ class CatalogScreenState extends State<CatalogScreen> {
                       curve: Curves.easeOutCubic,
                       child: Hero(
                         tag: 'item-image-${item.id}',
-                        child:
-                            item.buildImage(fit: BoxFit.contain, height: 100),
+                        child: Opacity(
+                          opacity: isAvailable ? 1.0 : 0.65,
+                          child: item.buildImage(fit: BoxFit.contain, height: 100),
+                        ),
                       ),
                     ),
                   ),
@@ -830,8 +790,8 @@ class CatalogScreenState extends State<CatalogScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           color: mobileAccentText(context),
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
                           height: 1.15,
                         ),
                       ),

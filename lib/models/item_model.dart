@@ -18,6 +18,7 @@ class ItemModel {
   final String? stockGroupId;
   final int availableQuantity;
   final int totalQuantity;
+  final bool isPopular;
 
   ItemModel({
     required this.id,
@@ -37,6 +38,7 @@ class ItemModel {
     this.stockGroupId,
     this.availableQuantity = 1,
     this.totalQuantity = 1,
+    this.isPopular = false,
   });
 
   String get cleanImageUrl {
@@ -120,7 +122,20 @@ class ItemModel {
       'imageUrl': cleanImageUrl,
       'status': status,
       'qrCode': qrCode,
+      'isPopular': isPopular,
     };
+  }
+
+  static bool _isDefaultPopular(String name) {
+    final lower = name.toLowerCase();
+    return lower.contains('badminton') ||
+        lower.contains('pickleball') ||
+        lower.contains('bike') ||
+        lower.contains('bicycle') ||
+        lower.contains('basketball') ||
+        lower.contains('volleyball') ||
+        lower.contains('ps4') ||
+        lower.contains('switch');
   }
 
   static String _catalogCategory(String value) {
@@ -171,6 +186,9 @@ class ItemModel {
       stockGroupId: map['stock_group_id']?.toString(),
       availableQuantity: (map['available_quantity'] as num?)?.toInt() ?? 1,
       totalQuantity: (map['total_quantity'] as num?)?.toInt() ?? 1,
+      isPopular: map['is_popular'] == true ||
+          map['isPopular'] == true ||
+          _isDefaultPopular(map['name']?.toString() ?? ''),
     );
   }
 
@@ -192,6 +210,7 @@ class ItemModel {
     String? stockGroupId,
     int? availableQuantity,
     int? totalQuantity,
+    bool? isPopular,
   }) {
     return ItemModel(
       id: id ?? this.id,
@@ -211,6 +230,7 @@ class ItemModel {
       stockGroupId: stockGroupId ?? this.stockGroupId,
       availableQuantity: availableQuantity ?? this.availableQuantity,
       totalQuantity: totalQuantity ?? this.totalQuantity,
+      isPopular: isPopular ?? this.isPopular,
     );
   }
 
@@ -311,6 +331,7 @@ class ItemModel {
         isForSale: false,
         imageUrl: 'assets/images/Bike.png',
         status: 'available',
+        isPopular: true,
       ),
       ItemModel(
         id: 'item_pickleball',
@@ -324,6 +345,7 @@ class ItemModel {
         isForSale: false,
         imageUrl: 'assets/images/Pickleball_Set.png',
         status: 'available',
+        isPopular: true,
       ),
       ItemModel(
         id: 'item_badminton',
@@ -337,6 +359,7 @@ class ItemModel {
         isForSale: false,
         imageUrl: 'assets/images/Badminton_Set.png',
         status: 'available',
+        isPopular: true,
       ),
       ItemModel(
         id: 'item_basketball',
@@ -351,6 +374,7 @@ class ItemModel {
         isForSale: false,
         imageUrl: 'assets/images/Basketball.png',
         status: 'available',
+        isPopular: true,
       ),
       ItemModel(
         id: 'item_volleyball',
@@ -365,6 +389,7 @@ class ItemModel {
         isForSale: false,
         imageUrl: 'assets/images/Volleyball.png',
         status: 'available',
+        isPopular: true,
       ),
 
       // Cards
