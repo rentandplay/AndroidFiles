@@ -4,6 +4,7 @@ import '../../services/server_clock.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_dual_tracker.dart';
 import '../../widgets/glass_app_bar.dart';
+import '../../widgets/premium_animations.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
@@ -521,13 +522,15 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                         _rentalQuery = '';
                                       }),
                                   child: const Text('Clear filters'))),
-                        for (final rental in visible)
-                          Center(
-                            child: ConstrainedBox(
-                              constraints: const BoxConstraints(maxWidth: 680),
-                              child: RentalBookingCard(
-                                key: ValueKey(rental.rentalId),
-                                rental: rental,
+                        for (final (i, rental) in visible.indexed)
+                          StaggeredSlideFade(
+                            index: i,
+                            child: Center(
+                              child: ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 680),
+                                child: RentalBookingCard(
+                                  key: ValueKey(rental.rentalId),
+                                  rental: rental,
                                 api: _api,
                                 initiallyExpanded: visible.length == 1,
                                 onTicket: () => TransactionTicketDialog.show(
@@ -567,6 +570,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                               ),
                             ),
                           ),
+                        ),
                       ]),
                 ),
         ),
@@ -730,8 +734,14 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
         ? Theme.of(context).colorScheme.error
         : Theme.of(context).colorScheme.primary;
 
-    if (!_expanded) {
-      return Padding(
+    return AnimatedCrossFade(
+      duration: const Duration(milliseconds: 240),
+      firstCurve: Curves.easeOutCubic,
+      secondCurve: Curves.easeOutCubic,
+      sizeCurve: Curves.easeOutCubic,
+      crossFadeState:
+          _expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+      firstChild: Padding(
         padding: const EdgeInsets.only(bottom: 12),
         child: Material(
           color: Colors.transparent,
@@ -813,10 +823,8 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
             ),
           ),
         ),
-      );
-    }
-
-    return Padding(
+      ),
+      secondChild: Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: RentalSection(
         child: Column(
@@ -966,8 +974,9 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }
 
 class _RentalItemThumbnail extends StatelessWidget {

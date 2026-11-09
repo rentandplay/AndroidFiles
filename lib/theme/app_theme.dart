@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../widgets/premium_animations.dart';
 
 class AppTheme {
   // Brand Colors
@@ -26,6 +27,15 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FluidPageTransitionsBuilder(),
+          TargetPlatform.iOS: FluidPageTransitionsBuilder(),
+          TargetPlatform.windows: FluidPageTransitionsBuilder(),
+          TargetPlatform.macOS: FluidPageTransitionsBuilder(),
+          TargetPlatform.linux: FluidPageTransitionsBuilder(),
+        },
+      ),
       primaryColor: brandOrange,
       scaffoldBackgroundColor: lightBg,
       cardColor: lightSurface,
@@ -129,6 +139,15 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FluidPageTransitionsBuilder(),
+          TargetPlatform.iOS: FluidPageTransitionsBuilder(),
+          TargetPlatform.windows: FluidPageTransitionsBuilder(),
+          TargetPlatform.macOS: FluidPageTransitionsBuilder(),
+          TargetPlatform.linux: FluidPageTransitionsBuilder(),
+        },
+      ),
       primaryColor: brandOrange,
       scaffoldBackgroundColor: darkBg,
       cardColor: darkSurface,

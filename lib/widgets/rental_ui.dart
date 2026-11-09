@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'liquid_glass.dart';
+import 'premium_animations.dart';
 
 String rentalMoney(num? value) => value == null
     ? '—'
@@ -43,6 +44,8 @@ class RentalStatusBadge extends StatelessWidget {
           ? const Color(0xFFF0AD7C)
           : const Color(0xFF9A471B),
     };
+    final isActive = status.toUpperCase() == 'ACTIVE' ||
+        status.toUpperCase() == 'RENTED';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
@@ -50,13 +53,22 @@ class RentalStatusBadge extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: .26)),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(
-        rentalStatusLabel(status),
-        style: TextStyle(
-          color: color,
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isActive) ...[
+            PulsingStatusDot(color: color, size: 6),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            rentalStatusLabel(status),
+            style: TextStyle(
+              color: color,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -292,63 +304,65 @@ class RentalActionBar extends StatelessWidget {
                             ],
                             SizedBox(
                               width: double.infinity,
-                              child: Container(
-                                height: 50,
-                                decoration: BoxDecoration(
-                                  gradient: onPressed == null || busy
-                                      ? null
-                                      : const LinearGradient(
-                                          colors: [
-                                            Color(0xFFFF8A3D),
-                                            Color(0xFFDF762D),
-                                          ],
-                                        ),
-                                  borderRadius: BorderRadius.circular(16),
-                                  boxShadow: onPressed == null || busy
-                                      ? null
-                                      : [
-                                          BoxShadow(
-                                            color: const Color(0xFFDF762D)
-                                                .withValues(alpha: 0.28),
-                                            blurRadius: 12,
-                                            offset: const Offset(0, 4),
-                                            blurStyle: BlurStyle.outer,
-                                          ),
-                                        ],
-                                ),
-                                child: FilledButton(
-                                  onPressed: busy ? null : onPressed,
-                                  style: FilledButton.styleFrom(
-                                    minimumSize: const Size.fromHeight(50),
-                                    backgroundColor: onPressed == null || busy
+                              child: PremiumPressable(
+                                onTap: busy ? null : onPressed,
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  height: 50,
+                                  decoration: BoxDecoration(
+                                    gradient: onPressed == null || busy
                                         ? null
-                                        : Colors.transparent,
-                                    shadowColor: Colors.transparent,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(16),
-                                    ),
-                                    foregroundColor: Colors.white,
+                                        : const LinearGradient(
+                                            colors: [
+                                              Color(0xFFFF8A3D),
+                                              Color(0xFFDF762D),
+                                            ],
+                                          ),
+                                    borderRadius: BorderRadius.circular(16),
+                                    boxShadow: onPressed == null || busy
+                                        ? null
+                                        : [
+                                            BoxShadow(
+                                              color: const Color(0xFFDF762D)
+                                                  .withValues(alpha: 0.28),
+                                              blurRadius: 12,
+                                              offset: const Offset(0, 4),
+                                              blurStyle: BlurStyle.outer,
+                                            ),
+                                          ],
                                   ),
-                                  child: busy
-                                      ? const SizedBox(
-                                          width: 20,
-                                          height: 20,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2,
-                                            valueColor:
-                                                AlwaysStoppedAnimation<Color>(
-                                                    Colors.white),
-                                          ),
-                                        )
-                                      : Text(
-                                          label,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: -0.2,
-                                          ),
-                                        ),
+                                  child: Center(
+                                    child: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 200),
+                                      child: busy
+                                          ? const SizedBox(
+                                              key: ValueKey('busy-spinner'),
+                                              width: 20,
+                                              height: 20,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 2,
+                                                valueColor:
+                                                    AlwaysStoppedAnimation<Color>(
+                                                        Colors.white),
+                                              ),
+                                            )
+                                          : Text(
+                                              label,
+                                              key: ValueKey(label),
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 15,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: -0.2,
+                                                color: onPressed == null
+                                                    ? (isDark
+                                                        ? Colors.white38
+                                                        : Colors.black38)
+                                                    : Colors.white,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),

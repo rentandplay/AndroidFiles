@@ -1,5 +1,6 @@
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/glass_app_bar.dart';
+import '../../widgets/premium_animations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -956,7 +957,10 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                                       ),
                                     );
                                   }
-                                  return _historyCard(visible[index]);
+                                  return StaggeredSlideFade(
+                                    index: index,
+                                    child: _historyCard(visible[index]),
+                                  );
                                 },
                               ),
                       ),

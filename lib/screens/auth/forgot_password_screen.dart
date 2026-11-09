@@ -7,6 +7,7 @@ import '../../services/mobile_api_service.dart';
 import '../../utils/account_validation.dart';
 import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
+import '../../widgets/premium_animations.dart';
 
 enum _ResetStep { email, code, password, complete }
 
@@ -523,30 +524,57 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
               child: Center(
                 child: ConstrainedBox(
                   constraints: const BoxConstraints(maxWidth: 460),
-                  child: GlassCard(
-                    borderRadius: 22,
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (_step != _ResetStep.complete) ...[
-                          _progress(context),
-                          const SizedBox(height: 26),
+                  child: StaggeredSlideFade(
+                    index: 0,
+                    child: GlassCard(
+                      borderRadius: 22,
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_step != _ResetStep.complete) ...[
+                            _progress(context),
+                            const SizedBox(height: 26),
+                          ],
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 220),
+                            child: Text(
+                              _stepTitle,
+                              key: ValueKey(_stepTitle),
+                              textAlign: TextAlign.center,
+                              style: Theme.of(context)
+                                  .textTheme
+                                  .headlineSmall
+                                  ?.copyWith(fontWeight: FontWeight.w800),
+                            ),
+                          ),
+                          const SizedBox(height: 22),
+                          AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 260),
+                            switchInCurve: Curves.easeOutCubic,
+                            switchOutCurve: Curves.easeInCubic,
+                            transitionBuilder: (child, animation) => FadeTransition(
+                              opacity: animation,
+                              child: SlideTransition(
+                                position: Tween<Offset>(
+                                  begin: const Offset(0.04, 0),
+                                  end: Offset.zero,
+                                ).animate(animation),
+                                child: child,
+                              ),
+                            ),
+                            child: KeyedSubtree(
+                              key: ValueKey(_step),
+                              child: switch (_step) {
+                                _ResetStep.email => _emailForm(context),
+                                _ResetStep.code => _codeForm(context),
+                                _ResetStep.password => _passwordForm(context),
+                                _ResetStep.complete => _complete(context),
+                              },
+                            ),
+                          ),
                         ],
-                        Text(_stepTitle,
-                            textAlign: TextAlign.center,
-                            style: Theme.of(context)
-                                .textTheme
-                                .headlineSmall
-                                ?.copyWith(fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 22),
-                        switch (_step) {
-                          _ResetStep.email => _emailForm(context),
-                          _ResetStep.code => _codeForm(context),
-                          _ResetStep.password => _passwordForm(context),
-                          _ResetStep.complete => _complete(context),
-                        },
-                      ],
+                      ),
                     ),
                   ),
                 ),

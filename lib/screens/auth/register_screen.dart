@@ -12,6 +12,7 @@ import '../../theme/app_theme.dart';
 import '../../utils/account_validation.dart';
 import '../../utils/error_sanitizer.dart';
 import '../../widgets/google_logo_icon.dart';
+import '../../widgets/premium_animations.dart';
 import '../shared/terms_dialog.dart';
 import '../user/customer_home_screen.dart';
 import 'id_verification_screen.dart';
@@ -616,8 +617,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                     ),
 
                     // Hero Showcase Header
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
+                    StaggeredSlideFade(
+                      index: 0,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 20),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -672,9 +675,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ],
                       ),
                     ),
+                  ),
 
                     // Bottom White Sheet Form
-                    Container(
+                    StaggeredSlideFade(
+                      index: 1,
+                      duration: const Duration(milliseconds: 380),
+                      slideOffset: 24.0,
+                      child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: const BorderRadius.vertical(
@@ -1355,47 +1363,56 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ConstrainedBox(
                                 constraints:
                                     const BoxConstraints(minHeight: 50),
-                                child: ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: _formAccent,
-                                    foregroundColor: Colors.white,
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 13,
-                                      horizontal: 16,
+                                child: PremiumPressable(
+                                  onTap: _isLoading ? null : _handleRegister,
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: _formAccent,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 13,
+                                        horizontal: 16,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      elevation: 2,
+                                      shadowColor:
+                                          _formAccent.withValues(alpha: 0.35),
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    elevation: 2,
-                                    shadowColor:
-                                        _formAccent.withValues(alpha: 0.35),
-                                  ),
-                                  onPressed:
-                                      _isLoading ? null : _handleRegister,
-                                  child: _isLoading
-                                      ? const Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            SizedBox(
-                                              height: 20,
-                                              width: 20,
-                                              child: CircularProgressIndicator(
-                                                strokeWidth: 2,
-                                                color: Colors.white,
+                                    onPressed:
+                                        _isLoading ? null : _handleRegister,
+                                    child: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 200),
+                                      child: _isLoading
+                                          ? const Row(
+                                              key: ValueKey('loading'),
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                SizedBox(
+                                                  height: 20,
+                                                  width: 20,
+                                                  child: CircularProgressIndicator(
+                                                    strokeWidth: 2,
+                                                    color: Colors.white,
+                                                  ),
+                                                ),
+                                                SizedBox(width: 10),
+                                                Text('Creating account…'),
+                                              ],
+                                            )
+                                          : const Text(
+                                              'Create Account',
+                                              key: ValueKey('label'),
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.w700,
+                                                letterSpacing: 0.2,
                                               ),
                                             ),
-                                            SizedBox(width: 10),
-                                            Text('Creating account…'),
-                                          ],
-                                        )
-                                      : const Text(
-                                          'Create Account',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 0.2,
-                                          ),
-                                        ),
+                                    ),
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 14),
@@ -1429,29 +1446,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               ConstrainedBox(
                                 constraints:
                                     const BoxConstraints(minHeight: 48),
-                                child: OutlinedButton.icon(
-                                  style: OutlinedButton.styleFrom(
-                                    backgroundColor: const Color(0xFFFDFDFE),
-                                    padding: const EdgeInsets.symmetric(
-                                      vertical: 11,
-                                      horizontal: 16,
+                                child: PremiumPressable(
+                                  onTap: _isLoading ? null : _handleGoogleSignUp,
+                                  borderRadius: BorderRadius.circular(14),
+                                  child: OutlinedButton.icon(
+                                    style: OutlinedButton.styleFrom(
+                                      backgroundColor: const Color(0xFFFDFDFE),
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 11,
+                                        horizontal: 16,
+                                      ),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(14),
+                                      ),
+                                      side: const BorderSide(
+                                        color: Color(0xFFCBD5E1),
+                                      ),
                                     ),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(14),
-                                    ),
-                                    side: const BorderSide(
-                                      color: Color(0xFFCBD5E1),
-                                    ),
-                                  ),
-                                  onPressed:
-                                      _isLoading ? null : _handleGoogleSignUp,
-                                  icon: const GoogleLogoIcon(size: 20),
-                                  label: const Text(
-                                    'Continue with Google',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: Colors.black87,
+                                    onPressed:
+                                        _isLoading ? null : _handleGoogleSignUp,
+                                    icon: const GoogleLogoIcon(size: 20),
+                                    label: const Text(
+                                      'Continue with Google',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Colors.black87,
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -1533,6 +1554,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                       ),
                     ),
+                  ),
                   ],
                 ),
               ),

@@ -1,5 +1,6 @@
 import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
+import '../../widgets/premium_animations.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -179,7 +180,9 @@ class ItemDetailsScreen extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  RentalSection(
+                  StaggeredSlideFade(
+                    index: 0,
+                    child: RentalSection(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -213,7 +216,7 @@ class ItemDetailsScreen extends StatelessWidget {
                               ),
                             ),
                             child: Hero(
-                              tag: 'item-image-',
+                              tag: 'item-image-${item.id}',
                               child: item.buildImage(
                                 fit: BoxFit.contain,
                                 height: 192,
@@ -284,17 +287,23 @@ class ItemDetailsScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (!isAvailable) ...[
-                  RentalNotice(
+              ),
+              if (!isAvailable) ...[
+                StaggeredSlideFade(
+                  index: 1,
+                  child: RentalNotice(
                     title: _availabilityLabel,
                     message:
                         'You can still browse this item, but a rental request is not available right now.',
                     icon: Icons.inventory_2_outlined,
                   ),
-                  const SizedBox(height: 16),
-                ],
-                if (item.description.trim().isNotEmpty)
-                  RentalSection(
+                ),
+                const SizedBox(height: 16),
+              ],
+              if (item.description.trim().isNotEmpty)
+                StaggeredSlideFade(
+                  index: 2,
+                  child: RentalSection(
                     title: 'About this equipment',
                     icon: Icons.info_outline_rounded,
                     child: Text(
@@ -305,7 +314,10 @@ class ItemDetailsScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                RentalSection(
+                ),
+              StaggeredSlideFade(
+                index: 3,
+                child: RentalSection(
                   title: 'Rental price and terms',
                   icon: Icons.receipt_long_outlined,
                   child: Column(
@@ -336,7 +348,8 @@ class ItemDetailsScreen extends StatelessWidget {
                       ],
                     ],
                   ),
-                  ),
+                ),
+              ),
                 ],
               ),
             ),

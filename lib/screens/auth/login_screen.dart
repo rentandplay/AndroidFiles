@@ -10,6 +10,7 @@ import '../../services/admin_firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/google_logo_icon.dart';
+import '../../widgets/premium_animations.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import 'required_password_change_screen.dart';
@@ -469,14 +470,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
                             // Expanded Hero Showcase (centers the large logo with breathing room)
                             Expanded(
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 16,
-                                  vertical: 6,
-                                ),
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
+                              child: StaggeredSlideFade(
+                                index: 0,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 6,
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
                                     SizedBox(
                                       height: logoHeight,
                                       width: screenSize.width * 0.84,
@@ -531,6 +534,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
+                          ),
 
                             // Bottom White Sheet (Hugs form content cleanly & anchors flush at bottom)
                             Container(
@@ -547,7 +551,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                 ],
                               ),
-                              child: Padding(
+                              child: StaggeredSlideFade(
+                                index: 1,
+                                duration: const Duration(milliseconds: 380),
+                                slideOffset: 24.0,
+                                child: Padding(
                                 padding: EdgeInsets.fromLTRB(
                                   24,
                                   20,
@@ -941,10 +949,11 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
                   );
                 },
               ),

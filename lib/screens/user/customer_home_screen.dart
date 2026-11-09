@@ -10,6 +10,8 @@ import '../../services/auth_service.dart';
 
 import '../../widgets/liquid_glass.dart';
 
+import '../../widgets/premium_animations.dart';
+
 import '../profile/profile_screen.dart';
 
 import '../rental/rental_history_screen.dart';
@@ -215,7 +217,7 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
       body: isSignedIn
 
-          ? IndexedStack(
+          ? AnimatedIndexedStack(
 
               index: _selectedIndex,
 

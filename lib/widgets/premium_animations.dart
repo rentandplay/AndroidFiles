@@ -369,3 +369,300 @@ class _PulsingGlowBadgeState extends State<PulsingGlowBadge>
     );
   }
 }
+
+/// A luxury page transitions builder that provides ultra-smooth, fluid
+/// screen transitions with subtle slide, scale, and fade.
+class FluidPageTransitionsBuilder extends PageTransitionsBuilder {
+  const FluidPageTransitionsBuilder();
+
+  @override
+  Widget buildTransitions<T>(
+    PageRoute<T> route,
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    final curvedAnimation = CurvedAnimation(
+      parent: animation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+    final curvedSecondary = CurvedAnimation(
+      parent: secondaryAnimation,
+      curve: Curves.easeOutCubic,
+      reverseCurve: Curves.easeInCubic,
+    );
+
+    final slideIn = Tween<Offset>(
+      begin: const Offset(0.06, 0),
+      end: Offset.zero,
+    ).animate(curvedAnimation);
+
+    final slideOut = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(-0.04, 0),
+    ).animate(curvedSecondary);
+
+    final scaleIn = Tween<double>(
+      begin: 0.985,
+      end: 1.0,
+    ).animate(curvedAnimation);
+
+    final fadeIn = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(curvedAnimation);
+
+    final fadeOut = Tween<double>(
+      begin: 1.0,
+      end: 0.88,
+    ).animate(curvedSecondary);
+
+    return SlideTransition(
+      position: slideOut,
+      child: FadeTransition(
+        opacity: fadeOut,
+        child: SlideTransition(
+          position: slideIn,
+          child: FadeTransition(
+            opacity: fadeIn,
+            child: ScaleTransition(
+              scale: scaleIn,
+              child: child,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// An Animated IndexedStack that smoothly animates fade and subtle upward slide
+/// when the active tab index changes, while completely preserving the state and
+/// scroll positions of all tab views.
+class AnimatedIndexedStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  final Duration duration;
+
+  const AnimatedIndexedStack({
+    super.key,
+    required this.index,
+    required this.children,
+    this.duration = const Duration(milliseconds: 240),
+  });
+
+  @override
+  State<AnimatedIndexedStack> createState() => _AnimatedIndexedStackState();
+}
+
+class _AnimatedIndexedStackState extends State<AnimatedIndexedStack>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _fadeAnimation;
+  late final Animation<double> _slideAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    )..value = 1.0;
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    _slideAnimation = Tween<double>(
+      begin: 10.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    ));
+  }
+
+  @override
+  void didUpdateWidget(covariant AnimatedIndexedStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.index != oldWidget.index) {
+      _controller.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Opacity(
+        opacity: _fadeAnimation.value,
+        child: Transform.translate(
+          offset: Offset(0, _slideAnimation.value),
+          child: child,
+        ),
+      ),
+      child: IndexedStack(
+        index: widget.index,
+        children: widget.children,
+      ),
+    );
+  }
+}
+
+/// Spring-pop scale and fade entrance for badges, buttons, cards, and avatars.
+class SpringPopEntrance extends StatefulWidget {
+  final Widget child;
+  final Duration delay;
+  final Duration duration;
+
+  const SpringPopEntrance({
+    super.key,
+    required this.child,
+    this.delay = Duration.zero,
+    this.duration = const Duration(milliseconds: 400),
+  });
+
+  @override
+  State<SpringPopEntrance> createState() => _SpringPopEntranceState();
+}
+
+class _SpringPopEntranceState extends State<SpringPopEntrance>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: widget.duration,
+    );
+
+    _scaleAnimation = Tween<double>(begin: 0.82, end: 1.0).animate(
+      CurvedAnimation(
+        parent: _controller,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    _fadeAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeOutCubic,
+    );
+
+    if (widget.delay == Duration.zero) {
+      _controller.forward();
+    } else {
+      Future.delayed(widget.delay, () {
+        if (mounted) _controller.forward();
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) => Opacity(
+        opacity: _fadeAnimation.value,
+        child: Transform.scale(
+          scale: _scaleAnimation.value,
+          alignment: Alignment.center,
+          child: child,
+        ),
+      ),
+      child: widget.child,
+    );
+  }
+}
+
+/// Breathing status indicator dot for active rentals, live statuses, and alerts.
+class PulsingStatusDot extends StatefulWidget {
+  final Color color;
+  final double size;
+
+  const PulsingStatusDot({
+    super.key,
+    required this.color,
+    this.size = 8.0,
+  });
+
+  @override
+  State<PulsingStatusDot> createState() => _PulsingStatusDotState();
+}
+
+class _PulsingStatusDotState extends State<PulsingStatusDot>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _scaleAnimation;
+  late final Animation<double> _opacityAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1600),
+    )..repeat(reverse: true);
+
+    _scaleAnimation = Tween<double>(begin: 0.88, end: 1.25).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+    _opacityAnimation = Tween<double>(begin: 0.35, end: 0.85).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) => Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: widget.size * _scaleAnimation.value * 1.8,
+            height: widget.size * _scaleAnimation.value * 1.8,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.color.withValues(
+                alpha: (1.0 - _opacityAnimation.value) * 0.45,
+              ),
+            ),
+          ),
+          Container(
+            width: widget.size,
+            height: widget.size,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: widget.color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
