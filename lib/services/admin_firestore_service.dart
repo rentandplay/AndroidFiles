@@ -7,7 +7,21 @@ class AdminApiException implements Exception {
   final String message;
   final int? statusCode;
   @override
-  String toString() => message;
+  String toString() {
+    final lower = message.toLowerCase();
+    if (lower.contains('econnrefused') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('socketexception') ||
+        lower.contains('firestore') ||
+        lower.contains('firebase') ||
+        lower.contains('database') ||
+        lower.contains('postgres') ||
+        lower.contains('apps/backend') ||
+        lower.contains('npm run dev')) {
+      return 'Could not connect to the rental service. Please check your network and try again.';
+    }
+    return message;
+  }
 }
 
 /// Web and Android use the same authenticated backend and transaction rules.
@@ -64,7 +78,7 @@ class AdminFirestoreService {
       return await _api.adminRequest(path,
           method: method, body: body, forceRefresh: forceRefresh);
     } on MobileApiException catch (error) {
-      throw AdminApiException(error.message, statusCode: error.statusCode);
+      throw AdminApiException(error.userMessage, statusCode: error.statusCode);
     } catch (_) {
       throw const AdminApiException(
           'Could not reach the rental service. Check your connection and refresh.',
@@ -100,16 +114,16 @@ class AdminFirestoreService {
   String _authMessage(FirebaseAuthException error) => switch (error.code) {
         'invalid-email' => 'Enter a valid email address.',
         'user-disabled' =>
-          'This Firebase account is disabled. Contact an administrator.',
+          'This account has been disabled. Contact an administrator.',
         'user-not-found' ||
         'wrong-password' ||
         'invalid-credential' =>
           'Email or password is incorrect.',
         'network-request-failed' =>
-          'Could not reach Firebase Authentication. Check your connection and try again.',
+          'Could not reach the authentication service. Check your connection and try again.',
         'requires-recent-login' =>
           'Sign out and sign in again before changing this account detail.',
-        _ => error.message ??
-            'Firebase Authentication could not complete this action.',
+        _ =>
+          'Could not complete this action. Please check your connection and try again.',
       };
 }

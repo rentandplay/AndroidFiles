@@ -10,6 +10,7 @@ import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../theme/app_theme.dart';
 import '../../utils/account_validation.dart';
+import '../../utils/error_sanitizer.dart';
 import '../../widgets/google_logo_icon.dart';
 import '../shared/terms_dialog.dart';
 import '../user/customer_home_screen.dart';
@@ -305,7 +306,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (error) {
       if (!mounted) return;
       _showMessage(
-        'Google Sign-In failed: ${_errorMessage(error)}',
+        ErrorSanitizer.format(error, fallback: 'Google Sign-In could not be completed. Please try again.'),
         isError: true,
       );
     } finally {
@@ -356,7 +357,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         case 'network-request-failed':
           return 'Connection failed. Please check your internet and try again.';
         default:
-          return error.message ?? 'Could not create account. Please try again.';
+          return ErrorSanitizer.format(error, fallback: 'Could not create account. Please try again.');
       }
     }
     return 'Could not complete registration. Please try again.';

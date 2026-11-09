@@ -10,6 +10,7 @@ import '../../widgets/rental_ui.dart';
 import 'alerts_screen.dart';
 import 'notification_booking_screen.dart';
 import '../../widgets/notification_widgets.dart';
+import '../../utils/error_sanitizer.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key, this.initialId});
@@ -40,7 +41,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(ErrorSanitizer.format(error))));
       }
     }
     if (!mounted) return;
@@ -68,7 +69,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(ErrorSanitizer.format(error))));
       }
     } finally {
       if (mounted) setState(() => _marking = false);

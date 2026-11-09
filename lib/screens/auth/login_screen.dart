@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../utils/account_validation.dart';
+import '../../utils/error_sanitizer.dart';
 import '../../services/admin_firestore_service.dart';
 import '../../models/user_model.dart';
 import '../../theme/app_theme.dart';
@@ -148,7 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 'Too many unsuccessful attempts. Please try again in a few minutes.';
             break;
           default:
-            errorMessage = e.message ?? 'Could not sign in. Please try again.';
+            errorMessage = ErrorSanitizer.format(e, fallback: 'Could not sign in. Please try again.');
         }
       } else {
         final errText = e.toString().toLowerCase();
@@ -226,7 +227,10 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Google Sign-In Error: ${e.toString()}'),
+          content: Text(ErrorSanitizer.format(
+            e,
+            fallback: 'Google Sign-In could not be completed. Please try again.',
+          )),
           backgroundColor: Colors.red,
         ),
       );

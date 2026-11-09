@@ -16,6 +16,7 @@ import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
 import 'active_rentals_screen.dart';
+import '../../utils/error_sanitizer.dart';
 
 const String mobileRentalTermsVersion = '2026-10-13-rental-v1';
 
@@ -269,7 +270,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(ErrorSanitizer.format(error))));
       }
     }
   }

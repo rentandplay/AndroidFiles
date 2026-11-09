@@ -158,7 +158,7 @@ class AuthService extends ChangeNotifier {
       if (phone.isNotEmpty) 'phone': phone,
     };
     var result = await _api.profile(method: 'POST', body: profileBody);
-    final photoUrl = user?.photoURL?.trim() ?? '';
+
     final existingMap = result['user'] is Map
         ? Map<String, dynamic>.from(result['user'] as Map)
         : const <String, dynamic>{};

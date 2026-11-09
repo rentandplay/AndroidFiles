@@ -11,6 +11,7 @@ import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/rental_ui.dart';
 import '../../widgets/mobile_controls.dart';
+import '../../utils/error_sanitizer.dart';
 import '../auth/login_screen.dart';
 import '../user/catalog_screen.dart';
 
@@ -120,7 +121,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(ErrorSanitizer.format(error))));
       }
     } finally {
       if (mounted) setState(() => _loadingMore = false);

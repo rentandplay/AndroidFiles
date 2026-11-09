@@ -21,6 +21,7 @@ import '../auth/login_screen.dart';
 import '../shared/transaction_ticket_dialog.dart';
 import 'return_equipment_screen.dart';
 import '../../widgets/notification_widgets.dart';
+import '../../utils/error_sanitizer.dart';
 
 class ActiveRentalsScreen extends StatefulWidget {
   const ActiveRentalsScreen(
@@ -296,7 +297,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(ErrorSanitizer.format(error))));
       }
     } finally {
       if (mounted) setState(() => _cancelling.remove(rental.rentalId));
@@ -332,7 +333,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     } catch (error) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('$error')));
+            .showSnackBar(SnackBar(content: Text(ErrorSanitizer.format(error))));
       }
     } finally {
       if (mounted) setState(() => _uploadingProof.remove(rental.rentalId));
