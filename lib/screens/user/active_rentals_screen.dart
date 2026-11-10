@@ -517,10 +517,13 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                               message:
                                   'Try another filter or search for an item or rental code.',
                               action: TextButton(
-                                  onPressed: () => setState(() {
-                                        _rentalFilter = 'All';
-                                        _rentalQuery = '';
-                                      }),
+                                  onPressed: () {
+                                    _rentalSearchController.clear();
+                                    setState(() {
+                                      _rentalFilter = 'All';
+                                      _rentalQuery = '';
+                                    });
+                                  },
                                   child: const Text('Clear filters'))),
                         for (final (i, rental) in visible.indexed)
                           StaggeredSlideFade(
@@ -843,7 +846,22 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
               child: Row(children: [
                 Icon(Icons.bolt_rounded, size: 16, color: Theme.of(context).colorScheme.primary),
                 const SizedBox(width: 4),
-                Expanded(child: Text('LIVE ACTIVITY & HANDOVER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: .8, color: Theme.of(context).colorScheme.primary))),
+                Expanded(
+                  child: Text(
+                    rental.isAwaitingPickup
+                        ? 'LIVE ACTIVITY & HANDOVER'
+                        : (rental.isAwaitingInspection ||
+                                rental.hasPendingReturnRequest)
+                            ? 'LIVE ACTIVITY & RETURN'
+                            : 'LIVE RENTAL ACTIVITY',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: .8,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ),
                 const SizedBox(width: 8),
                 Text('Collapse', style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSurfaceVariant)),
                 Icon(Icons.keyboard_arrow_up_rounded, size: 18, color: Theme.of(context).colorScheme.onSurfaceVariant),
@@ -879,9 +897,11 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                 rental: rental,
                 step: _progressStep(),
                 initiallyExpanded: true),
-            if (rental.isAwaitingPickup ||
-                const ['PREPARED', 'OUT_FOR_DELIVERY', 'APPROVED']
-                    .contains(rental.deliveryStatus.toUpperCase())) ...[
+            if (!rental.isActive &&
+                !rental.isAwaitingInspection &&
+                (rental.isAwaitingPickup ||
+                    const ['PREPARED', 'OUT_FOR_DELIVERY', 'APPROVED']
+                        .contains(rental.deliveryStatus.toUpperCase()))) ...[
               const SizedBox(height: 10),
               EmbeddedRentalHandoffQr(rental: rental, api: widget.api),
             ],

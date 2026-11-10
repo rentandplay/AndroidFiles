@@ -116,11 +116,11 @@ class LiquidGlassContainer extends StatelessWidget {
       child: child,
     );
 
-    content = clear && filterBackdrop
+    final shouldFilter = clear && filterBackdrop && blurSigma > 0;
+    content = shouldFilter
         ? LiquidGlassOptics(
             borderRadius: borderRadius,
-            // Share one small blur across the non-overlapping content cards.
-            blurSigma: 3,
+            blurSigma: blurSigma,
             child: content,
           )
         : ClipRRect(borderRadius: radius, child: content);
@@ -168,7 +168,7 @@ class LiquidGlassContainer extends StatelessWidget {
       );
     }
 
-    return body;
+    return RepaintBoundary(child: body);
   }
 }
 
@@ -824,7 +824,7 @@ class GlassCard extends StatelessWidget {
       );
     }
 
-    return body;
+    return RepaintBoundary(child: body);
   }
 }
 

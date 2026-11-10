@@ -4,6 +4,7 @@ import '../../widgets/premium_animations.dart';
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
@@ -501,7 +502,25 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
   }
 
   Widget _historyCard(RentalModel rental) {
-    if (_compactView && !widget.isAdmin) return _compactHistoryCard(rental);
+    if (widget.isAdmin) return _detailedHistoryCard(rental);
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 260),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      transitionBuilder: (child, animation) => FadeTransition(
+        opacity: animation,
+        child: SizeTransition(
+          sizeFactor: animation,
+          child: child,
+        ),
+      ),
+      child: _compactView
+          ? _compactHistoryCard(rental)
+          : _detailedHistoryCard(rental),
+    );
+  }
+
+  Widget _detailedHistoryCard(RentalModel rental) {
     final code = rental.displayReference;
     final attention = _needsAttention(rental);
     final scheme = Theme.of(context).colorScheme;
@@ -509,6 +528,7 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
     final stackedStatus = MediaQuery.sizeOf(context).width < 350 ||
         MediaQuery.textScalerOf(context).scale(16) > 19;
     return GlassCard(
+      key: ValueKey('history-detailed-${rental.rentalId}'),
       margin: const EdgeInsets.only(bottom: 12),
       borderRadius: 20,
       padding: const EdgeInsets.all(16),
@@ -749,8 +769,18 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
         key: const ValueKey('history-view-toggle'),
         tooltip: _compactView ? 'Show detailed view' : 'Show compact view',
         isSelected: _compactView,
-        icon: const Icon(Icons.view_agenda_outlined),
-        selectedIcon: const Icon(Icons.view_list_rounded),
+        icon: const AnimatedRotation(
+          duration: Duration(milliseconds: 260),
+          curve: Curves.easeInOutCubic,
+          turns: 0.5,
+          child: Icon(Icons.view_agenda_outlined),
+        ),
+        selectedIcon: const AnimatedRotation(
+          duration: Duration(milliseconds: 260),
+          curve: Curves.easeInOutCubic,
+          turns: 0.0,
+          child: Icon(Icons.view_list_rounded),
+        ),
         iconSize: 20,
         style: IconButton.styleFrom(
           foregroundColor: mobileAccentText(context),
@@ -759,7 +789,10 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
-        onPressed: () => setState(() => _compactView = !_compactView),
+        onPressed: () {
+          HapticFeedback.selectionClick();
+          setState(() => _compactView = !_compactView);
+        },
       ));
 
   @override
@@ -926,7 +959,9 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                             : ListView.builder(
                                 keyboardDismissBehavior:
                                     ScrollViewKeyboardDismissBehavior.onDrag,
-                                physics: const AlwaysScrollableScrollPhysics(),
+                                physics: const AlwaysScrollableScrollPhysics(
+                                  parent: BouncingScrollPhysics(),
+                                ),
                                 padding:
                                     const EdgeInsets.fromLTRB(16, 0, 16, 24),
                                 itemCount: visible.length +

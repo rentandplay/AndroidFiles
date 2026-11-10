@@ -116,8 +116,10 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
           ? 'Due at ${_formatTime(rental.dueDate)} (${_formatDate(rental.dueDate)})'
           : 'Return deadline active';
       milestones.add(RentalTimelineMilestone(
-        title: 'Active Rental · In Use',
-        description: 'Handoff confirmed. Rental timer running. $dueText.',
+        title: isTop ? 'Active Rental · In Use' : 'Equipment Handed Over',
+        description: isTop
+            ? 'Handoff confirmed. Rental timer running. $dueText.'
+            : 'Handoff confirmed at ${rental.customerHandoffLocation}.',
         timestamp: rental.startDate.millisecondsSinceEpoch > 0
             ? rental.startDate
             : null,
@@ -136,8 +138,9 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
         final isTop = milestones.isEmpty;
         milestones.add(RentalTimelineMilestone(
           title: 'Out for Delivery · Lakewoods',
-          description:
-              'Driver is en route to ${rental.deliveryLocation}. Please have your valid ID & QR code ready.',
+          description: isTop
+              ? 'Driver is en route to ${rental.deliveryLocation}. Please have your valid ID & QR code ready.'
+              : 'Dispatched for delivery to ${rental.deliveryLocation}.',
           timestamp: null,
           isActive: isTop,
           icon: Icons.local_shipping_outlined,
@@ -146,11 +149,13 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
         final isTop = milestones.isEmpty;
         milestones.add(RentalTimelineMilestone(
           title: rental.isRentAndPlayPickup
-              ? 'Ready for Shop Handover'
+              ? (isTop ? 'Ready for Shop Handover' : 'Prepared at Shop Hub')
               : 'Equipment Prepared for Delivery',
           description: rental.isRentAndPlayPickup
-              ? 'Item sanitized and inspected at Rent & Play Hub. Show your QR code at counter.'
-              : 'Equipment packed and ready for delivery to ${rental.deliveryLocation}.',
+              ? (isTop
+                  ? 'Item sanitized and inspected at Rent & Play Hub. Show your QR code at counter.'
+                  : 'Item was sanitized, inspected, and prepared at Rent & Play Hub.')
+              : 'Equipment packed and prepared for ${rental.deliveryLocation}.',
           timestamp: null,
           isActive: isTop,
           icon: Icons.inventory_2_outlined,
@@ -308,7 +313,11 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(
-                        'LIVE ACTIVITY LOG',
+                        widget.rental.normalizedStatus == 'COMPLETED' ||
+                                widget.rental.normalizedStatus == 'REJECTED' ||
+                                widget.rental.normalizedStatus == 'CANCELLED'
+                            ? 'ACTIVITY LOG'
+                            : 'LIVE ACTIVITY LOG',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -319,24 +328,28 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: AppTheme.brandOrange,
-                        shape: BoxShape.circle,
+                    if (widget.rental.normalizedStatus != 'COMPLETED' &&
+                        widget.rental.normalizedStatus != 'REJECTED' &&
+                        widget.rental.normalizedStatus != 'CANCELLED') ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: AppTheme.brandOrange,
+                          shape: BoxShape.circle,
+                        ),
                       ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      'Live',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: AppTheme.brandOrange,
+                      const SizedBox(width: 4),
+                      Text(
+                        'Live',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: AppTheme.brandOrange,
+                        ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 10),

@@ -117,9 +117,9 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
     final row = _row, status = row?['status']?.toString() ?? '';
     return Scaffold(
         appBar: GlassAppBar(titleText: 'Rental details', actions: [
-          IconButton(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
+          HeaderActionPod(
+              onTap: _load,
+              icon: Icons.refresh_rounded,
               tooltip: 'Refresh rental')
         ]),
         body: LiquidAmbientBackdrop(
@@ -155,16 +155,31 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                               alignment: Alignment.centerLeft,
                               child: RentalStatusBadge(status: status)),
                           if (!_admin) ...[
-                            const SizedBox(height: 14),
-                            RentalDualTracker(
-                                rental: RentalModel.fromMap(row),
-                                step: _progressStep(RentalModel.fromMap(row)),
-                                initiallyExpanded: true),
-                            if (RentalModel.fromMap(row).isAwaitingPickup) ...[
-                              const SizedBox(height: 6),
-                              EmbeddedRentalHandoffQr(
-                                  rental: RentalModel.fromMap(row), api: _api),
-                            ],
+                            Builder(builder: (context) {
+                              final rentalObj = RentalModel.fromMap(row);
+                              final isOngoing = rentalObj.isActive ||
+                                  rentalObj.isPendingVerification ||
+                                  rentalObj.isAwaitingPickup ||
+                                  rentalObj.isAwaitingInspection ||
+                                  rentalObj.hasPendingReturnRequest;
+                              if (!isOngoing) return const SizedBox.shrink();
+                              return Column(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  const SizedBox(height: 14),
+                                  RentalDualTracker(
+                                      rental: rentalObj,
+                                      step: _progressStep(rentalObj),
+                                      initiallyExpanded: true),
+                                  if (rentalObj.isAwaitingPickup) ...[
+                                    const SizedBox(height: 6),
+                                    EmbeddedRentalHandoffQr(
+                                        rental: rentalObj, api: _api),
+                                  ],
+                                ],
+                              );
+                            }),
                           ],
                           const SizedBox(height: 16),
                           if (_admin)
@@ -176,7 +191,17 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                                   'Shop pickup'),
                           RentalValueRow(
                               'Rental fee', _money(row['rental_fee'])),
-                          RentalValueRow('Return by', _date(row['due_at'])),
+                          if (!['REJECTED', 'CANCELLED']
+                                  .contains(status.toUpperCase()) ||
+                              DateTime.tryParse(
+                                      row['due_at']?.toString() ?? '') !=
+                                  null)
+                            RentalValueRow('Return by', _date(row['due_at'])),
+                          if (DateTime.tryParse(
+                                  row['returned_at']?.toString() ?? '') !=
+                              null)
+                            RentalValueRow(
+                                'Returned', _date(row['returned_at'])),
                           if (row['balance_due'] != null)
                             RentalValueRow(
                                 'Balance due', _money(row['balance_due'])),
@@ -235,8 +260,12 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                             FilledButton.icon(
                                 onPressed: () => TransactionTicketDialog.show(
                                     context, RentalModel.fromMap(row)),
-                                icon: const Icon(Icons.qr_code),
-                                label: const Text('Show rental handoff QR')),
+                                icon: Icon(status == 'APPROVED'
+                                    ? Icons.qr_code_rounded
+                                    : Icons.confirmation_number_outlined),
+                                label: Text(status == 'APPROVED'
+                                    ? 'Show rental handoff QR'
+                                    : 'View booking request hold')),
                           if (!_admin &&
                               status == 'ACTIVE' &&
                               row['latest_return_request_status'] !=

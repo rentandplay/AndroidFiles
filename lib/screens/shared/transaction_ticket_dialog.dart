@@ -199,9 +199,11 @@ class _BookingTicketState extends State<BookingTicket> {
                   RentalNotice(
                       title: expired
                           ? 'This hold has ended'
-                          : widget.rental.isRentAndPlayPickup
-                              ? 'Show this to Rent & Play'
-                              : 'Show this to delivery staff',
+                          : status == 'PENDING_ADMIN_APPROVAL'
+                              ? 'Request under review'
+                              : widget.rental.isRentAndPlayPickup
+                                  ? 'Show this to Rent & Play'
+                                  : 'Show this to delivery staff',
                       isError: expired,
                       message: expired
                           ? 'Close this ticket and refresh My Rentals to check your rental request.'

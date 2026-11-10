@@ -8,7 +8,6 @@ import '../../services/notification_service.dart';
 import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
-import 'alerts_screen.dart';
 import 'notification_booking_screen.dart';
 import '../../widgets/notification_widgets.dart';
 import '../../utils/error_sanitizer.dart';
@@ -21,7 +20,7 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  bool _openedInitial = false, _marking = false, _hidePhoneAlertsCard = false;
+  bool _openedInitial = false, _marking = false;
   String _filter = 'All';
   final Set<String> _dismissedIds = <String>{};
 
@@ -110,20 +109,30 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
     final filteredItems =
         service == null ? const <RentalNotification>[] : _filteredItems(service.items);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final canMarkRead = service != null && service.unreadCount > 0 && !_marking;
+    final disabledColor = isDark ? Colors.white38 : const Color(0xFF94A3B8);
 
     return Scaffold(
-        appBar: GlassAppBar(titleText: 'Notifications', actions: [
-          IconButton(
+        appBar: GlassAppBar(
+          titleText: 'Notifications',
+          actions: [
+            HeaderActionPod(
               tooltip: 'Mark shown as read',
-              onPressed: service == null || service.unreadCount == 0 || _marking
-                  ? null
-                  : () => _markRead(service),
-              icon: const Icon(Icons.done_all)),
-          IconButton(
+              icon: Icons.done_all_rounded,
+              iconColor: canMarkRead ? null : disabledColor,
+              onTap: canMarkRead ? () => _markRead(service) : null,
+            ),
+            const SizedBox(width: 8),
+            HeaderActionPod(
               tooltip: 'Refresh notifications',
-              onPressed: service == null ? null : () => service.refresh(),
-              icon: const Icon(Icons.refresh)),
-        ]),
+              icon: Icons.refresh_rounded,
+              iconColor: service == null ? disabledColor : null,
+              onTap: service == null ? null : () => service.refresh(),
+            ),
+            const SizedBox(width: 4),
+          ],
+        ),
         body: LiquidAmbientBackdrop(
           child: service == null || !service.signedIn
               ? const RentalEmptyState(
@@ -135,76 +144,17 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                   : RefreshIndicator(
                       onRefresh: service.refresh,
                       child: ListView(
-                          physics: const AlwaysScrollableScrollPhysics(),
+                          physics: const AlwaysScrollableScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
                           padding: const EdgeInsets.all(16),
                           children: [
-                            if (service.phoneAlertsSupported &&
-                                !_hidePhoneAlertsCard)
-                              GlassCard(
-                                  margin: const EdgeInsets.only(bottom: 12),
-                                  padding: const EdgeInsets.all(16),
-                                  child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.stretch,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text('Phone alerts',
-                                                  style: Theme.of(context)
-                                                      .textTheme
-                                                      .titleMedium),
-                                            ),
-                                            IconButton(
-                                              key: const ValueKey(
-                                                  'notifications-dismiss-phone-alerts'),
-                                              tooltip: 'Hide phone alerts card',
-                                              visualDensity:
-                                                  VisualDensity.compact,
-                                              onPressed: () => setState(() =>
-                                                  _hidePhoneAlertsCard = true),
-                                              icon: const Icon(
-                                                  Icons.close_rounded,
-                                                  size: 18),
-                                            ),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 6),
-                                        const Text(
-                                            'Receive rental request and return updates when the app is in the background.'),
-                                        const SizedBox(height: 12),
-                                        OutlinedButton.icon(
-                                            onPressed:
-                                                service.enablingPhoneAlerts
-                                                    ? null
-                                                    : service.enablePhoneAlerts,
-                                            icon: Icon(service
-                                                    .phoneAlertsEnabled
-                                                ? Icons.notifications_active
-                                                : Icons.notifications_outlined),
-                                            label: Text(service
-                                                    .enablingPhoneAlerts
-                                                ? 'Enabling…'
-                                                : service.phoneAlertsEnabled
-                                                    ? 'Phone alerts on'
-                                                    : 'Enable phone alerts')),
-                                        if (service.phoneAlertError.isNotEmpty)
-                                          Text(service.phoneAlertError),
-                                      ])),
-                            if (service.audience == 'CUSTOMER')
-                              TextButton.icon(
-                                  onPressed: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              const AlertsScreen())),
-                                  icon: const Icon(Icons.timer_outlined),
-                                  label: const Text('View rental timers')),
                             if (service.items.isNotEmpty)
                               Padding(
-                                padding: const EdgeInsets.only(bottom: 8),
+                                padding: const EdgeInsets.only(bottom: 10),
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
+                                  physics: const BouncingScrollPhysics(),
                                   child: Row(
                                     children: [
                                       for (final filterOption in const [
@@ -215,7 +165,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                       ])
                                         Padding(
                                           padding:
-                                              const EdgeInsets.only(right: 6),
+                                              const EdgeInsets.only(right: 8),
                                           child: ChoiceChip(
                                             key: ValueKey(
                                                 'notif-filter-$filterOption'),
@@ -223,6 +173,35 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                                                 VisualDensity.compact,
                                             label: Text(filterOption),
                                             selected: _filter == filterOption,
+                                            showCheckmark: _filter == filterOption,
+                                            checkmarkColor: Colors.white,
+                                            selectedColor: const Color(0xFFDF762D),
+                                            backgroundColor: isDark
+                                                ? const Color(0xFF1E2B3E).withValues(alpha: 0.65)
+                                                : Colors.white.withValues(alpha: 0.90),
+                                            labelStyle: TextStyle(
+                                              fontWeight: _filter == filterOption
+                                                  ? FontWeight.w700
+                                                  : FontWeight.w600,
+                                              fontSize: 12.5,
+                                              color: _filter == filterOption
+                                                  ? Colors.white
+                                                  : (isDark
+                                                      ? const Color(0xFFE2E8F0)
+                                                      : const Color(0xFF334155)),
+                                            ),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(20),
+                                            ),
+                                            side: BorderSide(
+                                              color: _filter == filterOption
+                                                  ? Colors.transparent
+                                                  : (isDark
+                                                      ? Colors.white.withValues(alpha: 0.16)
+                                                      : const Color(0xFFE2D9CF).withValues(alpha: 0.85)),
+                                              width: 1.1,
+                                            ),
                                             onSelected: (_) {
                                               HapticFeedback.selectionClick();
                                               setState(
