@@ -1,3 +1,5 @@
+
+
 import '../../widgets/brand_hero_header.dart';
 import '../../widgets/customer_home_backdrop.dart';
 import '../../widgets/home_rental_pager.dart';
@@ -25,7 +27,13 @@ import '../../widgets/rental_ui.dart';
 import '../auth/login_screen.dart';
 import '../shared/support_chat_screen.dart';
 
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
+bool get _isHomeTest => !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
 class HomeScreen extends StatefulWidget {
+
   const HomeScreen({
     super.key,
     required this.onBrowse,
@@ -456,205 +464,214 @@ class HomeScreenState extends State<HomeScreen> {
           return false;
         },
         child: PageView.builder(
-        controller: _carouselController,
-        itemCount: _featuredItems.length,
-        onPageChanged: (index) {
-          setState(() => _carouselIndex = index);
-          _resetCarouselTimer();
-        },
-        itemBuilder: (context, index) {
-          final item = _featuredItems[index];
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 7),
-            child: Container(
-              decoration: BoxDecoration(
-                color: dark ? const Color(0xFF261D17) : const Color(0xFFFAF3EA),
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(
-                  color: dark ? const Color(0xFF3E3025) : const Color(0xFFEFE2D3),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: dark
-                        ? Colors.black.withValues(alpha: 0.35)
-                        : const Color(0xFFDF762D).withValues(alpha: 0.08),
-                    blurRadius: 18,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () => widget.onItemSelected(item),
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Left side: Details
-                        Expanded(
-                          flex: 6,
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // ⚡ POPULAR badge
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 9, vertical: 3.5),
-                                decoration: BoxDecoration(
-                                  color: dark
-                                      ? const Color(0xFF382A20)
-                                      : const Color(0xFFF1E6D9),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.bolt_rounded,
-                                      size: 13,
-                                      color: dark
-                                          ? const Color(0xFFFFB37C)
-                                          : const Color(0xFF2C1810),
-                                    ),
-                                    const SizedBox(width: 3),
-                                    Text(
-                                      'POPULAR',
-                                      style: TextStyle(
-                                        color: dark
-                                            ? const Color(0xFFFFE7D6)
-                                            : const Color(0xFF2C1810),
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w800,
-                                        letterSpacing: 0.6,
+          clipBehavior: Clip.none,
+          controller: _carouselController,
+          itemCount: _featuredItems.length,
+          onPageChanged: (index) {
+            setState(() => _carouselIndex = index);
+            _resetCarouselTimer();
+          },
+          itemBuilder: (context, index) {
+            final item = _featuredItems[index];
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 7),
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  // Base card surface (with top margin so 3D image pops up over the top rim)
+                  Positioned.fill(
+                    top: 14,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: dark ? const Color(0xFF261D17) : const Color(0xFFFAF3EA),
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(
+                          color: dark ? const Color(0xFF3E3025) : const Color(0xFFEFE2D3),
+                          width: 1,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: dark
+                                ? Colors.black.withValues(alpha: 0.35)
+                                : const Color(0xFFDF762D).withValues(alpha: 0.08),
+                            blurRadius: 18,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => widget.onItemSelected(item),
+                          borderRadius: BorderRadius.circular(24),
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                // Left side: Details
+                                Expanded(
+                                  flex: 6,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      // ⚡ POPULAR badge
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 9, vertical: 3.5),
+                                        decoration: BoxDecoration(
+                                          color: dark
+                                              ? const Color(0xFF382A20)
+                                              : const Color(0xFFF1E6D9),
+                                          borderRadius: BorderRadius.circular(16),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.bolt_rounded,
+                                              size: 13,
+                                              color: dark
+                                                  ? const Color(0xFFFFB37C)
+                                                  : const Color(0xFF2C1810),
+                                            ),
+                                            const SizedBox(width: 3),
+                                            Text(
+                                              'POPULAR',
+                                              style: TextStyle(
+                                                color: dark
+                                                    ? const Color(0xFFFFE7D6)
+                                                    : const Color(0xFF2C1810),
+                                                fontSize: 10.5,
+                                                fontWeight: FontWeight.w800,
+                                                letterSpacing: 0.6,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(height: 7),
-                              // Item Name
-                              Text(
-                                item.name,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  color: dark
-                                      ? const Color(0xFFFFF1E6)
-                                      : const Color(0xFF2C1810),
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.w800,
-                                  letterSpacing: -0.4,
-                                  height: 1.15,
-                                ),
-                              ),
-                              const SizedBox(height: 7),
-                              // Price pill badge: "₱100 / Per hour"
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 3.5),
-                                decoration: BoxDecoration(
-                                  color: dark
-                                      ? const Color(0xFF382A20)
-                                      : const Color(0xFFEFE5D8),
-                                  borderRadius: BorderRadius.circular(14),
-                                ),
-                                child: Text(
-                                  _formatPopularRate(item),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: dark
-                                        ? const Color(0xFFFFDAB9)
-                                        : const Color(0xFF3E2819),
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 9),
-                              // View details button
-                              InkWell(
-                                onTap: () => widget.onItemSelected(item),
-                                borderRadius: BorderRadius.circular(20),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: dark
-                                        ? const Color(0xFF423226)
-                                        : const Color(0xFFE8D7C8),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Text(
-                                          'View details',
-                                          style: TextStyle(
+                                      const SizedBox(height: 6),
+                                      // Item Name
+                                      Text(
+                                        item.name,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: dark
+                                              ? const Color(0xFFFFF1E6)
+                                              : const Color(0xFF2C1810),
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.4,
+                                          height: 1.15,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 5),
+                                      // Price label (clean typography without border/pill)
+                                      Text(
+                                        _formatPopularRate(item),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: dark
+                                              ? const Color(0xFFFFB37C)
+                                              : const Color(0xFFDF762D),
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.2,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      // View details button
+                                      InkWell(
+                                        onTap: () => widget.onItemSelected(item),
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 6),
+                                          decoration: BoxDecoration(
                                             color: dark
-                                                ? const Color(0xFFFFE6D5)
-                                                : const Color(0xFF3A200F),
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
+                                                ? const Color(0xFF423226)
+                                                : const Color(0xFFE8D7C8),
+                                            borderRadius: BorderRadius.circular(20),
+                                          ),
+                                          child: FittedBox(
+                                            fit: BoxFit.scaleDown,
+                                            alignment: Alignment.centerLeft,
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Text(
+                                                  'View details',
+                                                  style: TextStyle(
+                                                    color: dark
+                                                        ? const Color(0xFFFFE6D5)
+                                                        : const Color(0xFF3A200F),
+                                                    fontSize: 12,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 5),
+                                                Icon(
+                                                  Icons.arrow_forward_rounded,
+                                                  size: 13,
+                                                  color: dark
+                                                      ? const Color(0xFFFFE6D5)
+                                                      : const Color(0xFF3A200F),
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         ),
-                                        const SizedBox(width: 5),
-                                        Icon(
-                                          Icons.arrow_forward_rounded,
-                                          size: 13,
-                                          color: dark
-                                              ? const Color(0xFFFFE6D5)
-                                              : const Color(0xFF3A200F),
-                                        ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        // Right side: Item image
-                        Expanded(
-                          flex: 5,
-                          child: Center(
-                            child: Hero(
-                              tag: 'item-image-${item.id}',
-                              child: item.buildImage(
-                                fit: BoxFit.contain,
-                                height: 114,
-                                width: 130,
-                              ),
+                                const SizedBox(width: 8),
+                                // Right side spacer (reserved for 3D floating pop-up image)
+                                const Expanded(
+                                  flex: 5,
+                                  child: SizedBox.shrink(),
+                                ),
+                              ],
                             ),
                           ),
                         ),
-                      ],
+                      ),
                     ),
                   ),
-                ),
+
+                  // 3D Floating Pop-Up Image Layer (positioned over the right side)
+                  Positioned(
+                    top: 0,
+                    right: 6,
+                    bottom: 4,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onTap: () => widget.onItemSelected(item),
+                      child: _Floating3DCardImage(
+                        item: item,
+                        dark: dark,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-          );
-        },
+            );
+          },
         ),
       ),
     );
   }
 
   double _featureHeight(BuildContext context) =>
-      154 *
+      168 *
       (MediaQuery.textScalerOf(context).scale(14) / 14)
           .clamp(1.0, 1.25);
+
 
   Widget _buildFallbackSlide(BuildContext context) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 18),
@@ -1157,6 +1174,127 @@ class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
           ),
         ],
       ],
+    );
+  }
+}
+
+class _Floating3DCardImage extends StatefulWidget {
+  final ItemModel item;
+  final bool dark;
+
+  const _Floating3DCardImage({
+    required this.item,
+    required this.dark,
+  });
+
+  @override
+  State<_Floating3DCardImage> createState() => _Floating3DCardImageState();
+}
+
+class _Floating3DCardImageState extends State<_Floating3DCardImage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _anim;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    );
+    _anim = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.easeInOutSine,
+    );
+    if (!_isHomeTest) {
+      _controller.repeat(reverse: true);
+    } else {
+      _controller.value = 0.5;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _anim,
+      builder: (context, child) {
+        final progress = _anim.value;
+        final floatY = progress * 7.0;
+        final tilt = (progress - 0.5) * 0.04;
+
+        return SizedBox(
+          width: 138,
+          height: 160,
+          child: Stack(
+            alignment: Alignment.center,
+            clipBehavior: Clip.none,
+            children: [
+              // Contact floor shadow on card surface (reacts dynamically to float height)
+              Positioned(
+                bottom: 10,
+                child: Container(
+                  width: 66 + (progress * 10),
+                  height: 12 - (progress * 2),
+                  decoration: BoxDecoration(
+                    borderRadius:
+                        const BorderRadius.all(Radius.elliptical(50, 10)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (widget.dark ? Colors.black : const Color(0xFF2C1810))
+                            .withValues(alpha: widget.dark
+                                ? (0.42 - progress * 0.10)
+                                : (0.20 - progress * 0.06)),
+                        blurRadius: 14 + (progress * 4),
+                        spreadRadius: 1,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // 3D Floating Pop-Up Image
+              Positioned(
+                top: 0,
+                child: Transform(
+                  alignment: Alignment.center,
+                  transform: Matrix4.identity()
+                    ..translate(0.0, -floatY - 4.0, 0.0)
+                    ..rotateZ(tilt),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(28),
+                      boxShadow: [
+                        BoxShadow(
+                          color: (widget.dark ? Colors.black : const Color(0xFF2C1810))
+                              .withValues(alpha: widget.dark ? 0.32 : 0.15),
+                          blurRadius: 18,
+                          offset: const Offset(2, 6),
+                          spreadRadius: -2,
+                        ),
+                      ],
+                    ),
+                    child: Hero(
+                      tag: 'item-image-${widget.item.id}',
+                      child: widget.item.buildImage(
+                        fit: BoxFit.contain,
+                        height: 126,
+                        width: 132,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

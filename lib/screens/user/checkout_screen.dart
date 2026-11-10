@@ -32,6 +32,10 @@ class CheckoutScreen extends StatefulWidget {
 class _CheckoutScreenState extends State<CheckoutScreen> {
   final _form = GlobalKey<FormState>();
   int _selectedDurationMinutes = 60;
+  bool _isCustomDuration = false;
+  int _customDays = 2;
+  int _customHours = 0;
+  Timer? _customQuoteDebounce;
   String _selectedResort = '';
   DateTime? _scheduledStartAt;
   final _customResortController = TextEditingController();
@@ -65,9 +69,44 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       .isNotEmpty;
   bool get _paymentAvailable =>
       _paymentInstructions != null && (_cashAllowed || _qrAvailable);
+  bool get _isScheduleWindowValid {
+    if (_scheduledStartAt == null) return true;
+    final nowUtc = ServerClock.instance.now.toUtc();
+    final startUtc = _scheduledStartAt!.toUtc();
+    if (startUtc.isBefore(nowUtc.add(const Duration(minutes: 4)))) {
+      return false;
+    }
+    if (startUtc.isAfter(nowUtc.add(const Duration(days: 180)))) {
+      return false;
+    }
+    return true;
+  }
+
+  String? get _scheduleValidationError {
+    if (_scheduledStartAt == null) return null;
+    final nowUtc = ServerClock.instance.now.toUtc();
+    final startUtc = _scheduledStartAt!.toUtc();
+    if (startUtc.isBefore(nowUtc.add(const Duration(minutes: 4)))) {
+      return 'Start time must be at least 5 minutes from now. Pick a later time or tap X to rent now.';
+    }
+    if (startUtc.isAfter(nowUtc.add(const Duration(days: 180)))) {
+      return 'Schedule start time within the next 180 days.';
+    }
+    if (_business.loaded && !_business.isOpen(_scheduledStartAt!)) {
+      final opens =
+          formatBusinessTime(_business.values['opens_at'] ?? '08:00');
+      final closes =
+          formatBusinessTime(_business.values['closes_at'] ?? '20:00');
+      return 'Start time must be within store hours ($opens – $closes).';
+    }
+    return null;
+  }
+
   bool get _handoffAllowed =>
       _business.loaded &&
-      _business.isOpen(_scheduledStartAt ?? ServerClock.instance.now);
+      _business.isOpen(_scheduledStartAt ?? ServerClock.instance.now) &&
+      _isScheduleWindowValid;
+
   void _businessUpdated() {
     if (mounted) setState(() {});
   }
@@ -75,9 +114,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool get _hasDailyBaseRate =>
       widget.item.rateOptions.any((rate) => rate['id'] == 'admin-base-daily');
 
+  int get _customDurationMinutes => (_customDays * 24 + _customHours) * 60;
+
+  String? get _customDurationError {
+    if (!_isCustomDuration) return null;
+    final mins = _customDurationMinutes;
+    if (mins < 60) {
+      return 'Minimum rental duration is 1 hour.';
+    }
+    if (mins > 10080) {
+      return 'Maximum rental duration is 7 days (168 hours). Contact resort staff for longer stays.';
+    }
+    return null;
+  }
+
+  bool get _isDurationValid =>
+      _selectedDurationMinutes >= 60 &&
+      _selectedDurationMinutes <= 10080 &&
+      _customDurationError == null;
+
+  DateTime get _estimatedReturnAt {
+    final start = _scheduledStartAt ?? ServerClock.instance.now;
+    return start.add(Duration(minutes: _selectedDurationMinutes));
+  }
+
+  bool get _returnDuringStoreHours {
+    if (!_business.loaded) return true;
+    return _business.isOpen(_estimatedReturnAt);
+  }
+
   List<int> get _durationChoices {
-    final minutes =
-        _hasDailyBaseRate ? <int>{1440} : <int>{60, 120, 180, 300, 480};
+    final minutes = _hasDailyBaseRate
+        ? <int>{1320, 1440}
+        : <int>{60, 120, 180, 300, 480, 1320, 1440};
     for (final rate in widget.item.rateOptions) {
       if (rate['kind'] == 'FLAT') continue;
       final duration = rate['duration_minutes'];
@@ -89,11 +158,26 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   String _durationLabel(int minutes) {
+    if (minutes == 1320) return '22 hrs (Whole day)';
+    if (minutes == 1440) return '24 hrs (1 day)';
     final hours = minutes ~/ 60;
     final remainingMinutes = minutes % 60;
     if (hours == 0) return '$minutes min${minutes == 1 ? '' : 's'}';
     if (remainingMinutes == 0) {
+      if (hours > 24) {
+        final days = hours ~/ 24;
+        final extraH = hours % 24;
+        if (extraH == 0) {
+          return '$hours hrs ($days day${days == 1 ? '' : 's'})';
+        }
+        return '$hours hrs ($days d $extraH hr${extraH == 1 ? '' : 's'})';
+      }
       return '$hours hr${hours == 1 ? '' : 's'}';
+    }
+    if (hours >= 24) {
+      final days = hours ~/ 24;
+      final extraH = hours % 24;
+      return '$days d $extraH hr $remainingMinutes min';
     }
     return '$hours hr${hours == 1 ? '' : 's'} $remainingMinutes min';
   }
@@ -363,6 +447,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   Future<void> _loadQuote() async {
     final version = ++_quoteVersion;
+    if (!_isDurationValid || !_isScheduleWindowValid) {
+      setState(() {
+        _quoteLoading = false;
+        _quote = null;
+        _acceptedRentalTerms = false;
+        _quoteError = _customDurationError ??
+            _scheduleValidationError ??
+            'Choose a valid rental time and duration.';
+      });
+      return;
+    }
     setState(() {
       _quoteLoading = true;
       _quoteError = '';
@@ -392,6 +487,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   void dispose() {
+    _customQuoteDebounce?.cancel();
     _settingsEvents?.cancel();
     _business.removeListener(_businessUpdated);
     _business.dispose();
@@ -421,9 +517,17 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     return '${rentalMoney(rate)} per started late ${unit >= 1440 ? 'day' : 'hour'}';
   }
 
-  String get _packageLength => _billedMinutes % 60 == 0
-      ? '${_billedMinutes ~/ 60} hour${_billedMinutes == 60 ? '' : 's'}'
-      : '$_billedMinutes minutes';
+  String get _packageLength {
+    if (_billedMinutes == 1320) return '22 hours (Whole day)';
+    if (_billedMinutes == 1440) return '24 hours (1 day)';
+    if (_billedMinutes >= 2880 && _billedMinutes % 1440 == 0) {
+      final days = _billedMinutes ~/ 1440;
+      return '${_billedMinutes ~/ 60} hours ($days days)';
+    }
+    return _billedMinutes % 60 == 0
+        ? '${_billedMinutes ~/ 60} hour${_billedMinutes == 60 ? '' : 's'}'
+        : '$_billedMinutes minutes';
+  }
 
   Future<void> _showRentalTerms() async {
     if (_quote == null || _quoteLoading) return;
@@ -497,7 +601,140 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  void _setCustomDuration(int days, int hours, {bool immediateQuote = false}) {
+    final clampedDays = days.clamp(0, 7);
+    int clampedHours = hours.clamp(0, 23);
+    if (clampedDays == 7) {
+      clampedHours = 0;
+    } else if (clampedDays == 0 && clampedHours < 1) {
+      clampedHours = 1;
+    }
+    final totalMinutes = (clampedDays * 24 + clampedHours) * 60;
+    setState(() {
+      _isCustomDuration = true;
+      _customDays = clampedDays;
+      _customHours = clampedHours;
+      _selectedDurationMinutes = totalMinutes;
+      _requestKey = MobileApiService.operationKey();
+      _acceptedRentalTerms = false;
+    });
+    _customQuoteDebounce?.cancel();
+    if (immediateQuote) {
+      _loadQuote();
+    } else {
+      _customQuoteDebounce = Timer(const Duration(milliseconds: 350), () {
+        if (mounted) _loadQuote();
+      });
+    }
+  }
+
+  Future<void> _showExactHoursDialog() async {
+    final currentHours = (_selectedDurationMinutes ~/ 60).clamp(1, 168);
+    final result = await showDialog<int>(
+      context: context,
+      builder: (_) => _ExactHoursDialog(initialHours: currentHours),
+    );
+    if (result != null && mounted) {
+      _setCustomDuration(result ~/ 24, result % 24, immediateQuote: true);
+    }
+  }
+
+  Future<void> _pickScheduledStartTime() async {
+    final nowManila =
+        ServerClock.instance.now.toUtc().add(const Duration(hours: 8));
+    final firstDay = DateTime(nowManila.year, nowManila.month, nowManila.day);
+    final lastDay = firstDay.add(const Duration(days: 180));
+    final rawInitial = (_scheduledStartAt ?? ServerClock.instance.now)
+        .toUtc()
+        .add(const Duration(hours: 8));
+    var initialDate =
+        DateTime(rawInitial.year, rawInitial.month, rawInitial.day);
+    if (initialDate.isBefore(firstDay)) {
+      initialDate = firstDay;
+    } else if (initialDate.isAfter(lastDay)) {
+      initialDate = lastDay;
+    }
+    final day = await showDatePicker(
+      context: context,
+      helpText: 'Select rental start date',
+      initialDate: initialDate,
+      firstDate: firstDay,
+      lastDate: lastDay,
+    );
+    if (day == null || !mounted) {
+      return;
+    }
+
+    final storeHoursHint = _business.loaded &&
+            _business.values['opens_at'] != _business.values['closes_at']
+        ? 'Store hours: ${formatBusinessTime(_business.values['opens_at'] ?? '08:00')} – ${formatBusinessTime(_business.values['closes_at'] ?? '20:00')}'
+        : 'Select handoff time';
+
+    DateTime defaultManilaTime =
+        (_scheduledStartAt ?? ServerClock.instance.now.add(const Duration(minutes: 15)))
+            .toUtc()
+            .add(const Duration(hours: 8));
+    if (_scheduledStartAt == null && day.isAfter(firstDay) && _business.loaded) {
+      final candidateUtc = DateTime.parse(
+          '${DateFormat('yyyy-MM-dd').format(day)}T${defaultManilaTime.hour.toString().padLeft(2, '0')}:${defaultManilaTime.minute.toString().padLeft(2, '0')}:00+08:00');
+      if (!_business.isOpen(candidateUtc)) {
+        final opensParts =
+            (_business.values['opens_at'] ?? '08:00').toString().split(':');
+        final openHour = int.tryParse(opensParts.first) ?? 8;
+        final openMin =
+            opensParts.length > 1 ? (int.tryParse(opensParts[1]) ?? 0) : 0;
+        defaultManilaTime = DateTime(
+            day.year, day.month, day.day, openHour, openMin);
+      }
+    }
+
+    final time = await showTimePicker(
+      context: context,
+      helpText: storeHoursHint,
+      initialTime: TimeOfDay.fromDateTime(defaultManilaTime),
+    );
+    if (time == null || !mounted) {
+      return;
+    }
+    final selected = DateTime.parse(
+        '${DateFormat('yyyy-MM-dd').format(day)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+08:00');
+
+    setState(() {
+      _scheduledStartAt = selected;
+      _requestKey = MobileApiService.operationKey();
+      _acceptedRentalTerms = false;
+    });
+
+    if (selected
+        .toUtc()
+        .isBefore(ServerClock.instance.now.toUtc().add(const Duration(minutes: 5)))) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              'Start time must be at least 5 minutes from now. Choose a later time or tap X to rent now.')));
+    } else if (_business.loaded && !_business.isOpen(selected)) {
+      final opens =
+          formatBusinessTime(_business.values['opens_at'] ?? '08:00');
+      final closes =
+          formatBusinessTime(_business.values['closes_at'] ?? '20:00');
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+              'Start time must be within store hours ($opens – $closes).')));
+    }
+    _loadQuote();
+  }
+
   Future<void> _submitRentalRequest() async {
+    if (!_isDurationValid) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(_customDurationError ??
+              'Please choose a valid rental duration (1 hour to 7 days).')));
+      return;
+    }
+    if (_scheduleValidationError != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_scheduleValidationError!)));
+      return;
+    }
     if (!_acceptedRentalTerms) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Review and accept the rental terms first.')));
@@ -582,6 +819,194 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  Widget _buildCustomDurationPanel(
+      BuildContext context, ColorScheme scheme) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final error = _customDurationError;
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: dark
+            ? const Color(0xFF1F2735).withValues(alpha: 0.7)
+            : scheme.surfaceContainerLow,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: error != null
+              ? scheme.error
+              : scheme.outlineVariant.withValues(alpha: 0.7),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.schedule_rounded, size: 17, color: scheme.primary),
+              const SizedBox(width: 6),
+              const Expanded(
+                child: Text(
+                  'Custom duration (1 hr – 7 days)',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _isSubmitting ? null : _showExactHoursDialog,
+                style: TextButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                ),
+                icon: const Icon(Icons.edit_outlined, size: 14),
+                label: const Text('Type hours', style: TextStyle(fontSize: 12)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (final preset in const [
+                (36, '36 hrs (1.5d)'),
+                (48, '2 days (48h)'),
+                (72, '3 days (72h)'),
+                (120, '5 days'),
+                (168, '7 days (Max)'),
+              ])
+                ActionChip(
+                  visualDensity: VisualDensity.compact,
+                  label: Text(preset.$2, style: const TextStyle(fontSize: 12)),
+                  backgroundColor: _selectedDurationMinutes == preset.$1 * 60
+                      ? scheme.primaryContainer
+                      : null,
+                  onPressed: _isSubmitting
+                      ? null
+                      : () {
+                          HapticFeedback.selectionClick();
+                          _setCustomDuration(
+                            preset.$1 ~/ 24,
+                            preset.$1 % 24,
+                            immediateQuote: true,
+                          );
+                        },
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _DurationStepper(
+                  label: 'Days',
+                  value: _customDays,
+                  min: 0,
+                  max: 7,
+                  enabled: !_isSubmitting,
+                  onChanged: (nextDays) {
+                    _setCustomDuration(nextDays, _customHours);
+                  },
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _DurationStepper(
+                  label: 'Hours',
+                  value: _customHours,
+                  min: _customDays == 0 ? 1 : 0,
+                  max: _customDays >= 7 ? 0 : 23,
+                  enabled: !_isSubmitting && _customDays < 7,
+                  onChanged: (nextHours) {
+                    _setCustomDuration(_customDays, nextHours);
+                  },
+                ),
+              ),
+            ],
+          ),
+          if (error != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              error,
+              style: TextStyle(
+                color: scheme.error,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildReturnSchedulePreview(
+      BuildContext context, ColorScheme scheme) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final returnLocal = _estimatedReturnAt.toUtc().add(const Duration(hours: 8));
+    final returnLabel = DateFormat('EEE, MMM d · h:mm a').format(returnLocal);
+    final opens = formatBusinessTime(_business.values['opens_at'] ?? '08:00');
+    final closes = formatBusinessTime(_business.values['closes_at'] ?? '20:00');
+    final withinHours = _returnDuringStoreHours;
+    final warnText = dark ? const Color(0xFFFBBF24) : Colors.amber.shade900;
+    final warnBg = const Color(0xFFF59E0B).withValues(alpha: 0.14);
+    final warnBorder = dark
+        ? const Color(0xFFF59E0B).withValues(alpha: 0.38)
+        : Colors.amber.shade700.withValues(alpha: 0.35);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: withinHours
+            ? scheme.primaryContainer.withValues(alpha: 0.35)
+            : warnBg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: withinHours
+              ? scheme.primary.withValues(alpha: 0.25)
+              : warnBorder,
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                withinHours
+                    ? Icons.event_available_rounded
+                    : Icons.info_outline_rounded,
+                size: 15,
+                color: withinHours ? scheme.primary : warnText,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Estimated return: $returnLabel',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: withinHours ? scheme.onSurface : warnText,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (!withinHours) ...[
+            const SizedBox(height: 3),
+            Text(
+              'Note: Return falls outside store hours ($opens – $closes). Consider choosing a duration (like 22 hrs) so return fits store hours, or coordinate drop-off with staff.',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: warnText,
+                height: 1.35,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -600,7 +1025,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                   _acceptedRentalTerms &&
                   _paymentAvailable &&
                   _handoffAllowed &&
-                  _termsLoaded
+                  _termsLoaded &&
+                  _isDurationValid &&
+                  _scheduleValidationError == null
               ? _submitRentalRequest
               : null,
         ),
@@ -621,16 +1048,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                         if (_termsError.isNotEmpty)
                           TextButton(
                               onPressed: _loadTerms, child: Text(_termsError)),
-                        if (_business.loaded && !_business.openNow)
+                        if (_business.loaded &&
+                            !_business.openNow &&
+                            _scheduledStartAt == null)
                           RentalNotice(
                               message:
-                                  'Shop is currently closed. Staff handoff resumes at ${_business.values['opens_at']}. Schedule a start within operating hours.'),
+                                  'Shop is currently closed. Staff handoff resumes at ${formatBusinessTime(_business.values['opens_at'] ?? '08:00')}. Tap "Rent now" below to schedule a start within operating hours.'),
                         if (_business.loaded &&
-                            !_handoffAllowed &&
-                            _scheduledStartAt != null)
-                          const RentalNotice(
-                              message:
-                                  'Choose a scheduled start within store operating hours.'),
+                            _scheduledStartAt != null &&
+                            _scheduleValidationError != null)
+                          RentalNotice(
+                              isError: true,
+                              message: _scheduleValidationError!),
                         if (_business.error.isNotEmpty)
                           RentalNotice(message: _business.error),
                         RentalSection(
@@ -691,10 +1120,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                                 .add(
                                                     const Duration(hours: 8)))),
                                     subtitle: const Text(
-                                        'Delivery within Lakewood Subdivision only'),
+                                        'Delivery within Lakewood Subdivision only · Tap to schedule'),
                                     trailing: _scheduledStartAt == null
-                                        ? null
+                                        ? Icon(Icons.chevron_right_rounded,
+                                            color: scheme.onSurfaceVariant)
                                         : IconButton(
+                                            tooltip: 'Switch to Rent now',
                                             icon: const Icon(Icons.close),
                                             onPressed: () {
                                               setState(() {
@@ -705,53 +1136,34 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                               });
                                               _loadQuote();
                                             }),
-                                    onTap: () async {
-                                      final day = await showDatePicker(
-                                          context: context,
-                                          initialDate: ServerClock.instance.now
-                                              .toUtc()
-                                              .add(const Duration(hours: 8)),
-                                          firstDate: ServerClock.instance.now
-                                              .toUtc()
-                                              .add(const Duration(hours: 8)),
-                                          lastDate: ServerClock.instance.now
-                                              .toUtc()
-                                              .add(const Duration(hours: 8))
-                                              .add(const Duration(days: 180)));
-                                      if (day == null || !context.mounted) {
-                                        return;
-                                      }
-                                      final time = await showTimePicker(
-                                          context: context,
-                                          initialTime: TimeOfDay.fromDateTime(
-                                              ServerClock.instance.now
-                                                  .toUtc()
-                                                  .add(const Duration(hours: 8))
-                                                  .add(const Duration(
-                                                      minutes: 15))));
-                                      if (time == null || !context.mounted) {
-                                        return;
-                                      }
-                                      setState(() {
-                                        _scheduledStartAt = DateTime.parse(
-                                            '${DateFormat('yyyy-MM-dd').format(day)}T${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:00+08:00');
-                                        _requestKey =
-                                            MobileApiService.operationKey();
-                                        _acceptedRentalTerms = false;
-                                      });
-                                      _loadQuote();
-                                    }),
+                                    onTap: _isSubmitting
+                                        ? null
+                                        : _pickScheduledStartTime),
+                                if (_scheduleValidationError != null) ...[
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 10),
+                                    child: Text(
+                                      _scheduleValidationError!,
+                                      style: TextStyle(
+                                        color: scheme.error,
+                                        fontSize: 12.5,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                                 Wrap(spacing: 8, runSpacing: 8, children: [
                                   for (final minutes in _durationChoices)
                                     ChoiceChip(
                                         label: Text(_durationLabel(minutes)),
-                                        selected:
+                                        selected: !_isCustomDuration &&
                                             minutes == _selectedDurationMinutes,
                                         onSelected: _isSubmitting
                                             ? null
                                             : (_) {
                                                 HapticFeedback.selectionClick();
                                                 setState(() {
+                                                  _isCustomDuration = false;
                                                   _selectedDurationMinutes =
                                                       minutes;
                                                   _requestKey = MobileApiService
@@ -759,7 +1171,39 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                                                 });
                                                 _loadQuote();
                                               }),
+                                  ChoiceChip(
+                                      avatar: const Icon(Icons.tune_rounded,
+                                          size: 15),
+                                      label: Text(_isCustomDuration
+                                          ? 'Custom: ${_durationLabel(_selectedDurationMinutes)}'
+                                          : 'Custom time...'),
+                                      selected: _isCustomDuration,
+                                      onSelected: _isSubmitting
+                                          ? null
+                                          : (_) {
+                                              HapticFeedback.selectionClick();
+                                              if (!_isCustomDuration) {
+                                                final initialHours =
+                                                    _selectedDurationMinutes >
+                                                            1440
+                                                        ? _selectedDurationMinutes ~/
+                                                            60
+                                                        : 48;
+                                                _setCustomDuration(
+                                                    initialHours ~/ 24,
+                                                    initialHours % 24,
+                                                    immediateQuote: true);
+                                              }
+                                            }),
                                 ]),
+                                if (_isCustomDuration) ...[
+                                  const SizedBox(height: 12),
+                                  _buildCustomDurationPanel(context, scheme),
+                                ],
+                                if (_isDurationValid) ...[
+                                  const SizedBox(height: 10),
+                                  _buildReturnSchedulePreview(context, scheme),
+                                ],
                                 const SizedBox(height: 14),
                                 Text('Which resort are you staying at?',
                                     style: TextStyle(
@@ -1164,6 +1608,165 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+class _DurationStepper extends StatelessWidget {
+  const _DurationStepper({
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String label;
+  final int value;
+  final int min;
+  final int max;
+  final bool enabled;
+  final ValueChanged<int> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.outlineVariant.withValues(alpha: 0.7)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          IconButton(
+            onPressed: enabled && value > min ? () => onChanged(value - 1) : null,
+            icon: const Icon(Icons.remove_circle_outline_rounded, size: 20),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 28),
+          ),
+          Expanded(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$value',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: enabled && value < max ? () => onChanged(value + 1) : null,
+            icon: const Icon(Icons.add_circle_outline_rounded, size: 20),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 26, minHeight: 28),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExactHoursDialog extends StatefulWidget {
+  const _ExactHoursDialog({required this.initialHours});
+  final int initialHours;
+
+  @override
+  State<_ExactHoursDialog> createState() => _ExactHoursDialogState();
+}
+
+class _ExactHoursDialogState extends State<_ExactHoursDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late final TextEditingController _controller =
+      TextEditingController(text: widget.initialHours.toString());
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Custom rental hours'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Enter total rental hours (minimum 1 hour, maximum 7 days / 168 hours).',
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _controller,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                  decoration: const InputDecoration(
+                    labelText: 'Total hours',
+                    hintText: 'e.g. 22, 36, 48, 72',
+                    suffixText: 'hours',
+                    errorMaxLines: 3,
+                  ),
+                  validator: (value) {
+                    final parsed = int.tryParse((value ?? '').trim());
+                    if (parsed == null) {
+                      return 'Enter a valid whole number of hours.';
+                    }
+                    if (parsed < 1) {
+                      return 'Minimum rental duration is 1 hour.';
+                    }
+                    if (parsed > 168) {
+                      return 'Maximum is 168 hours (7 days). Contact resort staff for longer stays.';
+                    }
+                    return null;
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState?.validate() == true) {
+              Navigator.pop(context, int.parse(_controller.text.trim()));
+            }
+          },
+          child: const Text('Apply'),
+        ),
+      ],
     );
   }
 }
