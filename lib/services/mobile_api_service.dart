@@ -93,14 +93,16 @@ class MobileApiService {
     final list = <String>[
       if (_hasExplicitBaseUrl) _configuredBaseUrl,
       if (kDebugMode) ...[
-        'http://192.168.8.102:3000/api',
         'http://127.0.0.1:3000/api',
+        'http://172.20.10.6:3000/api',
+        'http://192.168.8.102:3000/api',
         'http://192.168.1.7:3000/api',
         'http://10.0.2.2:3000/api',
       ],
+      'http://127.0.0.1:3000/api',
+      'http://172.20.10.6:3000/api',
       'https://rent-and-play.onrender.com/api',
       'http://192.168.8.102:3000/api',
-      'http://127.0.0.1:3000/api',
       'http://192.168.1.7:3000/api',
       'http://10.0.2.2:3000/api',
     ];
@@ -205,7 +207,7 @@ class MobileApiService {
     Map<String, dynamic>? result;
 
     try {
-      result = await _request('/mobile/rentals/${Uri.encodeComponent(id)}');
+      result = await _request('/mobile/rentals/${Uri.encodeComponent(id)}', forceRefresh: true);
     } on MobileApiException catch (error) {
       if (error.statusCode != 404) rethrow;
     }
@@ -254,7 +256,7 @@ class MobileApiService {
 
   Future<Map<String, dynamic>> rentalTicket(String id) async {
     final result =
-        await _request('/mobile/rentals/${Uri.encodeComponent(id)}/ticket');
+        await _request('/mobile/rentals/${Uri.encodeComponent(id)}/ticket', forceRefresh: true);
 
     try {
       return validateRentalTicket(
@@ -320,7 +322,7 @@ class MobileApiService {
       'POST' => _client.post(uri, headers: headers, body: encodedBody),
       _ => _client.get(uri, headers: headers),
     })
-        .timeout(requestTimeout);
+        .timeout(_baseUrls.length > 1 && uri.scheme == 'http' && uri.host != '127.0.0.1' && uri.host != 'localhost' && requestTimeout > const Duration(seconds: 3) ? const Duration(seconds: 3) : requestTimeout);
   }
 
   Future<Map<String, dynamic>> _request(
@@ -619,7 +621,7 @@ class MobileApiService {
   }
 
   Future<List<RentalModel>> listRentals() async {
-    final result = await _request('/mobile/rentals');
+    final result = await _request('/mobile/rentals', forceRefresh: true);
 
     nextRentalCursor = result['nextCursor'] as String?;
 

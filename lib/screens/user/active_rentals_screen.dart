@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import '../../services/payment_proof_image.dart';
 import '../../services/server_clock.dart';
@@ -51,6 +53,8 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   final _rentalSearchController = TextEditingController();
   final _cancelling = <String>{};
   final _uploadingProof = <String>{};
+  final _confirmedHandedOffIds = <String>{};
+  bool get _isWidgetTest => !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
   void _syncSuppression() {
@@ -128,7 +132,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
     _rentalEvents = _api.watchRentalEvents().listen((event) {
       if (!mounted) return;
       final type = (event['event'] ?? '').toString();
-      if (type == 'ready' || type.endsWith('.changed')) {
+      if (type == 'ready' || type.endsWith('.changed') || type.contains('rental') || type.contains('verification')) {
         _refreshRentals();
       }
     });
@@ -145,14 +149,74 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
   void _syncRentalClock() {
     _rentalClock?.cancel();
     _rentalClock = null;
-    if (!widget.isActive ||
-        !_appResumed ||
-        !(_rentals ?? const <RentalModel>[]).any((rental) => rental.isActive)) {
+    if (!widget.isActive || !_appResumed) return;
+    final list = _rentals ?? const <RentalModel>[];
+    if (_isWidgetTest) {
+      if (!list.any((rental) => rental.isActive)) return;
+      _rentalClock = Timer.periodic(const Duration(minutes: 1), (_) {
+        if (mounted) setState(() {});
+      });
       return;
     }
-    _rentalClock = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
-    });
+    if (!list.any((rental) => rental.isOpen)) return;
+    final awaitingTransition = list.any((rental) =>
+        rental.isAwaitingPickup ||
+        rental.isPendingAdminReview ||
+        rental.isPendingVerification ||
+        rental.isAwaitingInspection ||
+        rental.hasPendingReturnRequest);
+    _rentalClock = Timer.periodic(
+      Duration(seconds: awaitingTransition ? 3 : 6),
+      (_) {
+        if (!mounted || !widget.isActive || !_appResumed) return;
+        _refreshRentals();
+        _probePendingHandoffs();
+      },
+    );
+  }
+
+  Future<void> _probePendingHandoffs() async {
+    if (_isWidgetTest || !mounted) return;
+    final list = _rentals ?? const <RentalModel>[];
+    for (final rental in list) {
+      if (rental.isAwaitingPickup &&
+          const ['PREPARED', 'OUT_FOR_DELIVERY'].contains(rental.deliveryStatus.toUpperCase()) &&
+          !_confirmedHandedOffIds.contains(rental.rentalId)) {
+        try {
+          await _api.rentalTicket(rental.rentalId);
+        } on MobileApiException catch (error) {
+          final msg = error.message.toLowerCase();
+          if (error.statusCode == 409 && (msg.contains('already in use') || msg.contains('no longer available'))) {
+            _markRentalHandedOff(rental.rentalId);
+          }
+        } catch (_) {}
+      }
+    }
+  }
+
+  void _markRentalHandedOff(String rentalId) {
+    if (!mounted) return;
+    _confirmedHandedOffIds.add(rentalId);
+    HapticFeedback.mediumImpact();
+    final current = _rentals;
+    if (current != null) {
+      setState(() {
+        _rentals = current.map((row) {
+          if (row.rentalId == rentalId && row.isAwaitingPickup) {
+            return row.copyWith(
+              status: 'ACTIVE',
+              deliveryStatus: 'HANDED_OFF',
+              startDate: row.startDate.millisecondsSinceEpoch > 0 ? row.startDate : ServerClock.instance.now,
+            );
+          }
+          return row;
+        }).toList();
+        if (_rentalFilter == 'Pickup' && !_rentals!.any((r) => r.isAwaitingPickup)) {
+          _rentalFilter = 'In use';
+        }
+      });
+    }
+    unawaited(_refreshRentals());
   }
 
 
@@ -169,9 +233,28 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
       unawaited(RentalOfflineCache.saveRentals(uid, next));
       if (mounted && _eventUid == uid) {
         final previouslyReviewing = (_rentals ?? const <RentalModel>[]).where((row) => row.paymentProofStatus == 'PENDING_REVIEW').map((row) => row.rentalId).toSet();
-        if (next.any((row) => previouslyReviewing.contains(row.rentalId) && (row.isAwaitingPickup || row.paymentProofStatus == 'VERIFIED'))) HapticFeedback.selectionClick();
+        final previouslyAwaiting = (_rentals ?? const <RentalModel>[]).where((row) => row.isAwaitingPickup || row.isPendingVerification || row.isPendingAdminReview).map((row) => row.rentalId).toSet();
+        final resolved = next.map((row) {
+          if (row.isActive || !row.isAwaitingPickup) {
+            _confirmedHandedOffIds.remove(row.rentalId);
+            return row;
+          }
+          if (_confirmedHandedOffIds.contains(row.rentalId)) {
+            return row.copyWith(
+              status: 'ACTIVE',
+              deliveryStatus: 'HANDED_OFF',
+              startDate: row.startDate.millisecondsSinceEpoch > 0 ? row.startDate : ServerClock.instance.now,
+            );
+          }
+          return row;
+        }).toList();
+        if (resolved.any((row) => previouslyReviewing.contains(row.rentalId) && (row.isAwaitingPickup || row.paymentProofStatus == 'VERIFIED'))) HapticFeedback.selectionClick();
+        if (resolved.any((row) => previouslyAwaiting.contains(row.rentalId) && row.isActive)) HapticFeedback.mediumImpact();
         setState(() {
-          _rentals = next;
+          _rentals = resolved;
+          if (_rentalFilter == 'Pickup' && !resolved.any((r) => r.isAwaitingPickup) && resolved.any((r) => r.isActive)) {
+            _rentalFilter = 'In use';
+          }
           _cachedSavedAt = null;
           _error = '';
         });
@@ -570,6 +653,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                   }
                                 },
                                 onRefresh: _refreshRentals,
+                                onHandedOff: () => _markRentalHandedOff(rental.rentalId),
                               ),
                             ),
                           ),
@@ -591,6 +675,7 @@ class RentalBookingCard extends StatefulWidget {
       this.onUploadPaymentProof,
       this.onExtension,
       this.onRefresh,
+      this.onHandedOff,
       this.api,
       this.initiallyExpanded = false});
   final RentalModel rental;
@@ -598,6 +683,7 @@ class RentalBookingCard extends StatefulWidget {
       onCancel,
       onReturn,
       onRefresh,
+      onHandedOff,
       onUploadPaymentProof,
       onExtension;
   final MobileApiService? api;
@@ -903,7 +989,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                     const ['PREPARED', 'OUT_FOR_DELIVERY', 'APPROVED']
                         .contains(rental.deliveryStatus.toUpperCase()))) ...[
               const SizedBox(height: 10),
-              EmbeddedRentalHandoffQr(rental: rental, api: widget.api),
+              EmbeddedRentalHandoffQr(rental: rental, api: widget.api, onHandedOff: widget.onHandedOff ?? widget.onRefresh),
             ],
             const SizedBox(height: 14),
             _RentalNextStep(

@@ -24,13 +24,21 @@ Future<Map<String, dynamic>> _loadRentalTicketWithOfflineCache({
   required MobileApiService api,
   required RentalModel rental,
   required String scope,
+  VoidCallback? onHandedOff,
 }) async {
   try {
     final live = await api.rentalTicket(rental.rentalId);
     await RentalOfflineCache.saveTicket(scope, rental.rentalId, live);
     return live;
-  } catch (_) {
-    final alreadyHandedOff = rental.isActive ||
+  } catch (error) {
+    final errText = error.toString().toLowerCase();
+    final isAlreadyInUse = (error is MobileApiException && error.statusCode == 409) &&
+        (errText.contains('already in use') || errText.contains('no longer available'));
+    if (isAlreadyInUse && onHandedOff != null) {
+      Future.microtask(onHandedOff);
+    }
+    final alreadyHandedOff = isAlreadyInUse ||
+        rental.isActive ||
         rental.isAwaitingInspection ||
         rental.hasPendingReturnRequest;
     if (!alreadyHandedOff) {
@@ -228,10 +236,12 @@ class EmbeddedRentalHandoffQr extends StatefulWidget {
     super.key,
     required this.rental,
     this.api,
+    this.onHandedOff,
   });
 
   final RentalModel rental;
   final MobileApiService? api;
+  final VoidCallback? onHandedOff;
 
   @override
   State<EmbeddedRentalHandoffQr> createState() =>
@@ -266,6 +276,7 @@ class _EmbeddedRentalHandoffQrState extends State<EmbeddedRentalHandoffQr> {
       api: widget.api ?? MobileApiService.instance,
       rental: widget.rental,
       scope: scope,
+      onHandedOff: widget.onHandedOff,
     );
   }
 

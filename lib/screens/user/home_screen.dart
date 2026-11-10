@@ -66,6 +66,7 @@ class HomeScreenState extends State<HomeScreen> {
   String _catalogError = '';
   int _carouselIndex = 0;
   Timer? _carouselTimer;
+  Timer? _rentalPollTimer;
 
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
   StreamSubscription<Map<String, dynamic>>? _eventSubscription;
@@ -85,6 +86,7 @@ class HomeScreenState extends State<HomeScreen> {
 
   void _startCarouselTimer() {
     _carouselTimer?.cancel();
+    _rentalPollTimer?.cancel();
     if (_featuredItems.length <= 1) return;
     _carouselTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted || !_carouselController.hasClients || _featuredItems.length <= 1) return;
@@ -100,6 +102,16 @@ class HomeScreenState extends State<HomeScreen> {
   void _resetCarouselTimer() {
     _carouselTimer?.cancel();
     _startCarouselTimer();
+    _syncRentalPollTimer();
+  }
+
+  void _syncRentalPollTimer() {
+    _rentalPollTimer?.cancel();
+    _rentalPollTimer = null;
+    if (_isHomeTest || !_rentals.any((r) => r.isOpen)) return;
+    _rentalPollTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) _loadHome(quiet: true);
+    });
   }
 
   @override
@@ -738,9 +750,9 @@ class HomeScreenState extends State<HomeScreen> {
       key: ValueKey(title),
       title: title,
       itemCount: rentals.length,
-      contentHeight: 122 +
-          (scale.clamp(1.0, 3.0) - 1) * 72 +
-          (rentals.any((rental) => rental.hasPendingReturnRequest) ? 22 : 0),
+      contentHeight: 136 +
+          (scale.clamp(1.0, 3.0) - 1) * 76 +
+          (rentals.any((rental) => rental.hasPendingReturnRequest) ? 24 : 0),
       itemBuilder: (context, index) =>
           _buildRentalTile(context, rentals[index]),
     );
@@ -811,8 +823,9 @@ class HomeScreenState extends State<HomeScreen> {
             : Theme.of(context).colorScheme.onSurfaceVariant;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 4, 18, 12),
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 8),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
@@ -901,7 +914,7 @@ class HomeScreenState extends State<HomeScreen> {
             ],
           ),
           if (rental.isActive && dueDateIsSet) ...[
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             RepaintBoundary(child: _RentalCountdownProgress(rental: rental)),
           ],
           if (rental.isActive &&
