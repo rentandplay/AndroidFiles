@@ -1,4 +1,4 @@
-﻿import '../../services/server_clock.dart';
+import '../../services/server_clock.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -296,10 +296,10 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
     return LiquidGlassScope(
         child: Scaffold(
             appBar: GlassAppBar(titleText: 'Return status', actions: [
-              IconButton(
+              HeaderActionPod(
                   tooltip: 'Refresh return status',
-                  onPressed: _refresh,
-                  icon: const Icon(Icons.refresh))
+                  onTap: _refresh,
+                  icon: Icons.refresh_rounded)
             ]),
             bottomNavigationBar: rejected && _rental.isActive
                 ? SafeArea(

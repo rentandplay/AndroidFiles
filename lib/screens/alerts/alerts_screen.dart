@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../models/rental_model.dart';
 import '../../services/mobile_api_service.dart';
@@ -58,18 +58,24 @@ class _AlertsScreenState extends State<AlertsScreen> {
   }
 
   Widget _rentalCard(RentalModel rental) {
+    final hasDueDate = rental.dueDate.millisecondsSinceEpoch > 0;
     final left = rental.dueDate.difference(DateTime.now());
-    final overdue = rental.isActive && left.isNegative;
+    final overdue = rental.isActive && hasDueDate && left.isNegative;
     String message = rental.statusLabel;
     if (rental.isActive) {
-      final duration = left.abs();
-      final time =
-          '${duration.inHours.toString().padLeft(2, '0')}:${(duration.inMinutes % 60).toString().padLeft(2, '0')}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
-      message =
-          '${overdue ? 'Overdue by' : 'Time remaining'} $time. Return the equipment to the admin.';
+      if (hasDueDate) {
+        final duration = left.abs();
+        final time =
+            '${duration.inHours.toString().padLeft(2, '0')}:${(duration.inMinutes % 60).toString().padLeft(2, '0')}:${(duration.inSeconds % 60).toString().padLeft(2, '0')}';
+        message =
+            '${overdue ? 'Overdue by' : 'Time remaining'} $time. Return the equipment to the admin.';
+      } else {
+        message = 'Return time not recorded. Return the equipment to the admin.';
+      }
     } else if (rental.isAwaitingPickup) {
-      message =
-          'Approved. Show your rental QR when the operator delivers the item to your selected location. The timer starts at handoff.';
+      message = rental.isRentAndPlayPickup
+          ? 'Approved. Show your rental QR and valid ID at ${rental.customerHandoffLocation}. The timer starts at handoff.'
+          : 'Approved. Show your rental QR when the operator delivers the item to ${rental.customerHandoffLocation}. The timer starts at handoff.';
     } else if (rental.isPendingAdminReview) {
       message =
           'Waiting for admin approval. Your rental request hold has a limited duration.';
@@ -97,9 +103,9 @@ class _AlertsScreenState extends State<AlertsScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: GlassAppBar(titleText: 'Alerts & Rental Timers', actions: [
-          IconButton(
-              onPressed: _load,
-              icon: const Icon(Icons.refresh),
+          HeaderActionPod(
+              onTap: _load,
+              icon: Icons.refresh_rounded,
               tooltip: 'Refresh')
         ]),
         body: LiquidAmbientBackdrop(
