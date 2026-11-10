@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/rental_model.dart';
@@ -31,6 +32,7 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
   Map<String, dynamic> _workspace = {};
   String _error = '';
   bool _loading = true;
+  StreamSubscription<Map<String, dynamic>>? _events;
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
   bool get _admin => widget.audience == 'STAFF';
   @override
@@ -40,11 +42,23 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
         widget.notification.rentalId.isNotEmpty
             ? widget.notification.rentalId
             : widget.notification.rentalCode;
+    _events = _api.watchRentalEvents().listen((event) {
+      final id = event['rentalId']?.toString();
+      final targetId = widget.notification.rentalId.isNotEmpty
+          ? widget.notification.rentalId
+          : widget.notification.rentalCode;
+      if (event['event'] == 'ready' ||
+          (event['event'] == 'rental.changed' &&
+              (id == null || id.isEmpty || id == targetId))) {
+        if (mounted) _load();
+      }
+    });
     _load();
   }
 
   @override
   void dispose() {
+    _events?.cancel();
     RentalNotificationSuppression.activeRentalId = null;
     super.dispose();
   }
@@ -96,7 +110,7 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
   String _money(dynamic value) =>
       value is num ? '₱${value.toStringAsFixed(2)}' : 'Not recorded';
   int _progressStep(RentalModel rental) {
-    if (rental.isAwaitingInspection) return 3;
+    if (rental.normalizedStatus == 'COMPLETED' || rental.isAwaitingInspection) return 3;
     if (rental.isActive || rental.hasPendingReturnRequest) return 2;
     if (rental.isPendingVerification) {
       return rental.normalizedStatus.contains('RETURN') ? 3 : 1;
@@ -161,7 +175,8 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                                   rentalObj.isPendingVerification ||
                                   rentalObj.isAwaitingPickup ||
                                   rentalObj.isAwaitingInspection ||
-                                  rentalObj.hasPendingReturnRequest;
+                                  rentalObj.hasPendingReturnRequest ||
+                                  rentalObj.normalizedStatus == 'COMPLETED';
                               if (!isOngoing) return const SizedBox.shrink();
                               return Column(
                                 mainAxisSize: MainAxisSize.min,
@@ -281,6 +296,28 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                                   if (mounted) _load();
                                 },
                                 child: const Text('Request return')),
+                          if (!_admin &&
+                              (row['latest_return_request_status'] ==
+                                      'PENDING_ADMIN_APPROVAL' ||
+                                  status == 'RETURN_PENDING_INSPECTION' ||
+                                  status == 'COMPLETED'))
+                            FilledButton.icon(
+                                onPressed: () async {
+                                  await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) =>
+                                              RentalReturnStatusScreen(
+                                                  rental:
+                                                      RentalModel.fromMap(row),
+                                                  api: _api)));
+                                  if (mounted) _load();
+                                },
+                                icon: const Icon(
+                                    Icons.assignment_return_outlined),
+                                label: Text(status == 'COMPLETED'
+                                    ? 'View return confirmation & status'
+                                    : 'View return status & progress')),
                         ],
                       ])),
         ));
