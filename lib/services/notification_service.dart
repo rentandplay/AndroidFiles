@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import '../models/rental_notification.dart';
 import 'mobile_api_service.dart';
+import 'notification_sound.dart';
 
 class NotificationDevices {
   static String? token;
@@ -50,9 +51,16 @@ class NotificationDevices {
 }
 
 class RentalNotificationService extends ChangeNotifier {
-  RentalNotificationService({MobileApiService? api, this.pushEnabled = true})
-      : _api = api ?? MobileApiService.instance;
+  RentalNotificationService(
+      {MobileApiService? api,
+      this.pushEnabled = true,
+      Future<void> Function()? playSound})
+      : _api = api ?? MobileApiService.instance,
+        _playSound = playSound ?? NotificationSound.play;
   final MobileApiService _api;
+  final Future<void> Function() _playSound;
+  bool _muteCatchUpSound = false;
+  int _activityRevision = 0;
   MobileApiService get api => _api;
   final bool pushEnabled;
   final _arrivals = StreamController<RentalNotification>.broadcast();
@@ -96,6 +104,7 @@ class RentalNotificationService extends ChangeNotifier {
     _pending = false;
     _refreshAgain = false;
     _initialized = false;
+    _muteCatchUpSound = false;
     _hasOlder = false;
     _items.clear();
     _seen.clear();
@@ -118,21 +127,27 @@ class RentalNotificationService extends ChangeNotifier {
       if (_disposed || version != _generation) return;
       try {
         final profile = await _api.profile();
-        final prefs = (profile['user'] as Map?)?['notification_preferences'] as Map?;
+        final prefs =
+            (profile['user'] as Map?)?['notification_preferences'] as Map?;
         if (_disposed || version != _generation) return;
         _pushPreference = prefs?['push_enabled'] != false;
-      } catch (_) { return; }
+      } catch (_) {
+        return;
+      }
       if (_pushPreference) await _setupPush();
     });
   }
 
   void setActive(bool active) {
     if (_active == active) return;
+    _activityRevision++;
     _active = active;
     if (active) {
       if (_uid != null) _startRentalEvents(_generation);
       refresh();
     } else {
+      // Android already sounds background pushes; resuming must not replay them.
+      _muteCatchUpSound = true;
       _rentalEvents?.cancel();
       _rentalEvents = null;
     }
@@ -162,12 +177,19 @@ class RentalNotificationService extends ChangeNotifier {
       return;
     }
     final version = _generation;
+    final soundAllowed = _active && !_muteCatchUpSound;
+    final activityRevision = _activityRevision;
     _pending = true;
     _notify();
     try {
       final response = await _api.notifications(
           before: older ? nextCursor : null, since: older ? null : _revision);
       if (_disposed || version != _generation) return;
+      final playArrivalSound =
+          soundAllowed && activityRevision == _activityRevision;
+      if (!older && _active && activityRevision == _activityRevision) {
+        _muteCatchUpSound = false;
+      }
       if (response['unchanged'] == true) {
         error = '';
         return;
@@ -193,7 +215,10 @@ class RentalNotificationService extends ChangeNotifier {
       audience = response['audience']?.toString() ?? 'CUSTOMER';
       _initialized = true;
       error = '';
-      if (_active && arrivals.isNotEmpty) _arrivals.add(arrivals.first);
+      if (_active && arrivals.isNotEmpty) {
+        _arrivals.add(arrivals.first);
+        if (playArrivalSound && _pushPreference) unawaited(_sound());
+      }
     } catch (problem) {
       if (!_disposed && version == _generation) error = '$problem';
     } finally {
@@ -206,6 +231,12 @@ class RentalNotificationService extends ChangeNotifier {
         }
       }
     }
+  }
+
+  Future<void> _sound() async {
+    try {
+      await _playSound();
+    } catch (_) {/* Keep visual alerts available. */}
   }
 
   Future<void> markRead(Iterable<String> ids) async {
@@ -299,7 +330,12 @@ class RentalNotificationService extends ChangeNotifier {
   }
 
   Future<void> enablePhoneAlerts() async {
-    if (!phoneAlertsSupported || _uid == null || enablingPhoneAlerts || !_pushPreference) return;
+    if (!phoneAlertsSupported ||
+        _uid == null ||
+        enablingPhoneAlerts ||
+        !_pushPreference) {
+      return;
+    }
     final version = _generation;
     enablingPhoneAlerts = true;
     phoneAlertError = '';

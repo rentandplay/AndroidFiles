@@ -54,6 +54,7 @@ class MainActivity : FlutterActivity() {
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
+    private val notificationSound by lazy { NotificationSoundPlayer(applicationContext) }
     private val printExecutor = Executors.newSingleThreadExecutor()
     private var permissionAction: (() -> Unit)? = null
     private var permissionResult: MethodChannel.Result? = null
@@ -88,11 +89,15 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = android.app.NotificationChannel(
-                "rental_updates",
+                NotificationSoundPlayer.CHANNEL_ID,
                 "Rental updates",
                 android.app.NotificationManager.IMPORTANCE_HIGH,
             )
             channel.description = "Booking approvals, requests and return updates"
+            channel.setSound(
+                android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION),
+                NotificationSoundPlayer.audioAttributes(),
+            )
             getSystemService(android.app.NotificationManager::class.java)
                 .createNotificationChannel(channel)
         }
@@ -100,6 +105,13 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "rent_and_play/notification_sound")
+            .setMethodCallHandler { call, result ->
+                if (call.method == "play") {
+                    notificationSound.play()
+                    result.success(null)
+                } else result.notImplemented()
+            }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -889,6 +901,7 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onDestroy() {
+        notificationSound.stop()
         stopPrinterScan()
         disconnectPrinter()
         printExecutor.shutdownNow()

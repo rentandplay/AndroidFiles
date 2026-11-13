@@ -24,6 +24,15 @@ class NotificationsApi extends MobileApiService {
   Stream<Map<String, dynamic>> watchRentalEvents() => events.stream;
   List<Map<String, dynamic>> incoming = [event('one')];
   bool failFetch = false, failRead = false;
+  bool pushPreference = true;
+  @override
+  Future<Map<String, dynamic>> profile(
+          {String method = 'GET', Map<String, dynamic>? body}) async =>
+      {
+        'user': {
+          'notification_preferences': {'push_enabled': pushPreference}
+        }
+      };
   String? lastSince;
   Completer<Map<String, dynamic>>? delayed;
   final reads = <String>[];
@@ -59,7 +68,13 @@ void main() {
       'history stays silent, new updates alert once and polls send an inbox revision',
       () async {
     final api = NotificationsApi();
-    final inbox = RentalNotificationService(api: api, pushEnabled: false);
+    var sounds = 0;
+    final inbox = RentalNotificationService(
+        api: api,
+        pushEnabled: false,
+        playSound: () async {
+          sounds++;
+        });
     addTearDown(inbox.dispose);
     final alerts = <String>[];
     final subscription = inbox.arrivals.listen((row) => alerts.add(row.id));
@@ -68,15 +83,124 @@ void main() {
     await flush();
     expect(inbox.unreadCount, 1);
     expect(alerts, isEmpty);
+    expect(sounds, 0);
     api.incoming = [event('two'), event('one')];
     await inbox.refresh();
     await flush();
     await inbox.refresh();
     await flush();
     expect(alerts, ['two']);
+    expect(sounds, 1);
     expect(inbox.unreadCount, 2);
     expect(api.lastSince, 'revision-1');
   });
+  test(
+      'background catch-up stays silent and subsequent live updates sound once',
+      () async {
+    final api = NotificationsApi();
+    var sounds = 0;
+    final inbox = RentalNotificationService(
+        api: api,
+        pushEnabled: false,
+        playSound: () async {
+          sounds++;
+        });
+    addTearDown(api.events.close);
+    addTearDown(inbox.dispose);
+    inbox.setSession('customer');
+    await flush();
+    inbox.setActive(false);
+    api.incoming = [event('background'), ...api.incoming];
+    inbox.setActive(true);
+    await flush();
+    await flush();
+    expect(sounds, 0);
+    api.incoming = [event('live'), ...api.incoming];
+    api.events.add({'event': 'rental.changed'});
+    await flush();
+    await flush();
+    api.events.add({'event': 'rental.changed'});
+    await flush();
+    await flush();
+    expect(sounds, 1);
+  });
+
+  test(
+      'an in-flight response crossing a background transition does not replay a push sound',
+      () async {
+    final api = NotificationsApi();
+    var sounds = 0;
+    final inbox = RentalNotificationService(
+        api: api,
+        pushEnabled: false,
+        playSound: () async {
+          sounds++;
+        });
+    addTearDown(api.events.close);
+    addTearDown(inbox.dispose);
+    inbox.setSession('customer');
+    await flush();
+    api.delayed = Completer();
+    final request = inbox.refresh();
+    inbox.setActive(false);
+    inbox.setActive(true);
+    final pending = api.delayed!;
+    api.delayed = null;
+    api.incoming = [event('background'), ...api.incoming];
+    pending.complete({'notifications': api.incoming});
+    await request;
+    await flush();
+    await flush();
+    expect(sounds, 0);
+    api.incoming = [event('live'), ...api.incoming];
+    await inbox.refresh();
+    expect(sounds, 1);
+  });
+
+  test('sound playback errors do not fail notification delivery', () async {
+    final api = NotificationsApi();
+    final inbox = RentalNotificationService(
+        api: api,
+        pushEnabled: false,
+        playSound: () async {
+          throw StateError('Audio unavailable');
+        });
+    addTearDown(api.events.close);
+    addTearDown(inbox.dispose);
+    inbox.setSession('customer');
+    await flush();
+    api.incoming = [event('new'), ...api.incoming];
+    await inbox.refresh();
+    await flush();
+    expect(inbox.unreadCount, 2);
+    expect(inbox.error, isEmpty);
+  });
+
+  test('disabled phone alerts stay silent without hiding inbox notifications',
+      () async {
+    final api = NotificationsApi()..pushPreference = false;
+    var sounds = 0;
+    final inbox = RentalNotificationService(
+        api: api,
+        pushEnabled: false,
+        playSound: () async {
+          sounds++;
+        });
+    addTearDown(api.events.close);
+    addTearDown(inbox.dispose);
+    inbox.setSession('customer');
+    await flush();
+    await flush();
+    api.incoming = [event('new'), ...api.incoming];
+    await inbox.refresh();
+    expect(inbox.unreadCount, 2);
+    expect(sounds, 0);
+    await inbox.setPushPreference(true);
+    api.incoming = [event('enabled'), ...api.incoming];
+    await inbox.refresh();
+    expect(sounds, 1);
+  });
+
   test('late responses cannot restore a previous account inbox', () async {
     final api = NotificationsApi()..delayed = Completer();
     final inbox = RentalNotificationService(api: api, pushEnabled: false);

@@ -333,8 +333,17 @@ void main() {
         width: 320,
         scale: 2);
     expect(tester.takeException(), isNull);
-    await tester.ensureVisible(find.widgetWithText(ChoiceChip, 'Gaming'));
-    await tester.tap(find.widgetWithText(ChoiceChip, 'Gaming'));
+    final gamingChip = find.widgetWithText(ChoiceChip, 'Gaming');
+    await tester.scrollUntilVisible(
+      gamingChip,
+      100,
+      scrollable: find.descendant(
+        of: find.byType(ListView).first,
+        matching: find.byType(Scrollable),
+      ).first,
+    );
+    await tester.ensureVisible(gamingChip);
+    await tester.tap(gamingChip);
     await tester.pumpAndSettle();
     expect(find.text('Nintendo Switch'), findsOneWidget);
     expect(find.text('Bingo Set'), findsNothing);

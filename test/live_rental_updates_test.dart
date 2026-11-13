@@ -141,6 +141,57 @@ void main() {
   });
 
   testWidgets(
+      'website extension approval updates the active rental due time and balance through live events',
+      (tester) async {
+    final original = rental('ACTIVE');
+    final api = _RentalApi()
+      ..rentals = [
+        original.copyWith(extensionRequest: {
+          'status': 'PENDING',
+          'additional_minutes': 180,
+          'additional_fee': 500,
+        })
+      ];
+    final auth = _CustomerAuth();
+    final semantics = tester.ensureSemantics();
+    addTearDown(auth.dispose);
+    addTearDown(api.events.close);
+    await tester.pumpWidget(ChangeNotifierProvider<AuthService>.value(
+      value: auth,
+      child: MaterialApp(home: ActiveRentalsScreen(api: api)),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('Extension under review'), findsOneWidget);
+    final extendedDue = original.dueDate.add(const Duration(hours: 3));
+    api.rentals = [
+      RentalModel.fromMap({
+        ...original.toMap(),
+        'due_at': extendedDue.toUtc().toIso8601String(),
+        'rental_fee': 650,
+        'balance_due': 500,
+        'extension_request': {'status': 'APPROVED'},
+      })
+    ];
+    api.events.add({'event': 'rental.changed', 'rentalId': 'rental-1'});
+    await tester.pumpAndSettle();
+    final updated = tester
+        .widget<RentalBookingCard>(find.byType(RentalBookingCard))
+        .rental;
+    expect(updated.status, 'ACTIVE');
+    expect(updated.dueDate.isAtSameMomentAs(extendedDue), isTrue);
+    expect(updated.rateFee, 650);
+    expect(updated.balanceDue, 500);
+    expect(updated.receivedAt, isNull);
+    expect(updated.hasPendingReturnRequest, isFalse);
+    expect(find.text('Extension under review'), findsNothing);
+    expect(find.bySemanticsLabel(RegExp('Rental progress: In use stage')),
+        findsOneWidget);
+    expect(api.calls, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    semantics.dispose();
+  });
+
+  testWidgets(
       'a live change during a customer fetch is not overwritten by its older response',
       (tester) async {
     final api = _RentalApi()..pending = Completer<List<RentalModel>>();
