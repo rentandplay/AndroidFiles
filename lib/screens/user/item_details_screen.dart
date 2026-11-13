@@ -206,6 +206,55 @@ class ItemDetailsScreen extends StatelessWidget {
     );
   }
 
+  static Color _categoryAccent(String category) => switch (category) {
+        'Board Games' => const Color(0xFF27876B),
+        'Cards' => const Color(0xFF8062B5),
+        'Tech Rentals' => const Color(0xFF4678B3),
+        _ => const Color(0xFFDF762D),
+      };
+
+  static (IconData, String) _experienceVibe(String category) =>
+      switch (category) {
+        'Board Games' => (Icons.groups_rounded, 'Group & Barkada'),
+        'Cards' => (Icons.style_rounded, 'Tabletop Party'),
+        'Tech Rentals' => (Icons.sports_esports_rounded, 'Plug & Play'),
+        _ => (Icons.emoji_events_rounded, 'Outdoor Ready'),
+      };
+
+  Widget _highlightChip(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required Color accent,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: isDark ? 0.16 : 0.09),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: accent.withValues(alpha: isDark ? 0.34 : 0.24),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: accent),
+          const SizedBox(width: 5),
+          Text(
+            label,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF1E293B),
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   String get _availabilityLabel => switch (item.status.toUpperCase()) {
         'AVAILABLE' => item.totalQuantity > 1
             ? '${item.availableQuantity} of ${item.totalQuantity} available'
@@ -230,6 +279,9 @@ class ItemDetailsScreen extends StatelessWidget {
         : item.rateText.trim();
 
     final topPadding = MediaQuery.of(context).padding.top + kToolbarHeight;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final categoryAccent = _categoryAccent(item.category);
+    final vibe = _experienceVibe(item.category);
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -284,28 +336,28 @@ class ItemDetailsScreen extends StatelessWidget {
                             child: Stack(
                               children: [
                                 Container(
-                                  height: 224,
+                                  height: 236,
                                   width: double.infinity,
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.all(18),
                                   decoration: BoxDecoration(
                                     gradient: RadialGradient(
                                       center: Alignment.center,
-                                      radius: 0.85,
-                                      colors: Theme.of(context).brightness ==
-                                              Brightness.dark
-                                          ? const [
-                                              Color(0xFF233248),
-                                              Color(0xFF151F2E),
+                                      radius: 0.88,
+                                      colors: isDark
+                                          ? [
+                                              categoryAccent.withValues(
+                                                  alpha: 0.28),
+                                              const Color(0xFF151F2E),
                                             ]
-                                          : const [
-                                              Color(0xFFFBF6EE),
-                                              Color(0xFFF3ECE1),
+                                          : [
+                                              categoryAccent.withValues(
+                                                  alpha: 0.16),
+                                              const Color(0xFFF6EFE6),
                                             ],
                                     ),
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
-                                      color: Theme.of(context).brightness ==
-                                              Brightness.dark
+                                      color: isDark
                                           ? Colors.white.withValues(alpha: 0.10)
                                           : const Color(0xFFE8E0D5),
                                     ),
@@ -314,10 +366,56 @@ class ItemDetailsScreen extends StatelessWidget {
                                     tag: 'item-image-${item.id}',
                                     child: item.buildImage(
                                       fit: BoxFit.contain,
-                                      height: 192,
+                                      height: 196,
                                     ),
                                   ),
                                 ),
+                                if (item.isPopular)
+                                  Positioned(
+                                    left: 10,
+                                    top: 10,
+                                    child: Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 9, vertical: 4.5),
+                                      decoration: BoxDecoration(
+                                        gradient: const LinearGradient(
+                                          colors: [
+                                            Color(0xFFFF8A3D),
+                                            Color(0xFFDF762D),
+                                          ],
+                                        ),
+                                        borderRadius: BorderRadius.circular(16),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: const Color(0xFFDF762D)
+                                                .withValues(alpha: 0.35),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, 2),
+                                          ),
+                                        ],
+                                      ),
+                                      child: const Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            Icons.local_fire_department_rounded,
+                                            size: 13,
+                                            color: Colors.white,
+                                          ),
+                                          SizedBox(width: 4),
+                                          Text(
+                                            'POPULAR CHOICE',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
                                 Positioned(
                                   right: 10,
                                   bottom: 10,
@@ -333,9 +431,9 @@ class ItemDetailsScreen extends StatelessWidget {
                                             .withValues(alpha: 0.22),
                                       ),
                                     ),
-                                    child: Row(
+                                    child: const Row(
                                       mainAxisSize: MainAxisSize.min,
-                                      children: const [
+                                      children: [
                                         Icon(Icons.zoom_in_rounded,
                                             size: 14, color: Colors.white),
                                         SizedBox(width: 4),
@@ -359,9 +457,10 @@ class ItemDetailsScreen extends StatelessWidget {
                       Text(
                         item.category,
                         style: TextStyle(
-                          color: scheme.onSurfaceVariant,
+                          color: categoryAccent,
                           fontSize: 13,
-                          fontWeight: FontWeight.w600,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -370,39 +469,61 @@ class ItemDetailsScreen extends StatelessWidget {
                         style: Theme.of(context)
                             .textTheme
                             .headlineSmall
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: -0.4,
+                            ),
                       ),
                       const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 11, vertical: 7),
-                        decoration: BoxDecoration(
-                          color: statusColor.withValues(alpha: .10),
-                          border: Border.all(
-                              color: statusColor.withValues(alpha: .25)),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isAvailable
-                                  ? Icons.check_circle_rounded
-                                  : Icons.schedule_rounded,
-                              size: 17,
-                              color: statusColor,
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 11, vertical: 7),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: .10),
+                              border: Border.all(
+                                  color: statusColor.withValues(alpha: .25)),
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                            const SizedBox(width: 6),
-                            Text(
-                              _availabilityLabel,
-                              style: TextStyle(
-                                color: statusColor,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  isAvailable
+                                      ? Icons.check_circle_rounded
+                                      : Icons.schedule_rounded,
+                                  size: 17,
+                                  color: statusColor,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  _availabilityLabel,
+                                  style: TextStyle(
+                                    color: statusColor,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
+                          ),
+                          _highlightChip(
+                            context,
+                            icon: vibe.$1,
+                            label: vibe.$2,
+                            accent: categoryAccent,
+                          ),
+                          _highlightChip(
+                            context,
+                            icon: Icons.qr_code_scanner_rounded,
+                            label: 'QR Handoff',
+                            accent: const Color(0xFFDF762D),
+                          ),
+                        ],
                       ),
                       if (item.totalQuantity > 1) ...[
                         const SizedBox(height: 8),

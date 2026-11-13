@@ -18,7 +18,7 @@ String rentalStatusLabel(String status) => switch (status.toUpperCase()) {
       'PENDING_VERIFICATION' => 'Handoff awaiting confirmation',
       'PENDING_RETURN_VERIFICATION' ||
       'PENDING_ESP32_RETURN' =>
-        'Return awaiting confirmation',
+        'Receipt check · ESP32',
       'COMPLETED' => 'Returned',
       'CANCELLED' => 'Cancelled',
       'REJECTED' => 'Declined',

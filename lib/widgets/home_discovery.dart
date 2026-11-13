@@ -140,6 +140,8 @@ class HomeDiscovery extends StatelessWidget {
       onTap: () => onCategorySelected(category),
       child: LiquidGlassContainer(
         borderRadius: 22,
+        blurSigma: 10,
+        glowColor: accent,
         padding: const EdgeInsets.fromLTRB(8, 7, 16, 7),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
         Container(
@@ -147,9 +149,16 @@ class HomeDiscovery extends StatelessWidget {
           height: 36,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: accent.withValues(alpha: isDark ? 0.20 : 0.12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                accent.withValues(alpha: isDark ? 0.28 : 0.18),
+                accent.withValues(alpha: isDark ? 0.14 : 0.08),
+              ],
+            ),
             border: Border.all(
-              color: accent.withValues(alpha: isDark ? 0.40 : 0.28),
+              color: accent.withValues(alpha: isDark ? 0.45 : 0.32),
               width: 1.0,
             ),
           ),
@@ -159,7 +168,8 @@ class HomeDiscovery extends StatelessWidget {
         Text(category,
             style: TextStyle(
                 fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.15,
                 color: isDark ? Colors.white : const Color(0xFF1E293B))),
       ]),
     ),
@@ -180,6 +190,8 @@ class HomeDiscovery extends StatelessWidget {
         onTap: () => onItemSelected(item),
         child: LiquidGlassContainer(
           borderRadius: 22,
+          blurSigma: 10,
+          glowColor: accent,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -187,22 +199,22 @@ class HomeDiscovery extends StatelessWidget {
             Stack(
               children: [
                 Container(
-                  height: 112,
+                  height: 116,
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
                       center: Alignment.center,
-                      radius: 0.85,
+                      radius: 0.88,
                       colors: [
-                        accent.withValues(alpha: dark ? .22 : .12),
-                        accent.withValues(alpha: dark ? .03 : .01),
+                        accent.withValues(alpha: dark ? .26 : .16),
+                        accent.withValues(alpha: dark ? .04 : .02),
                       ],
                     ),
                   ),
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 6),
+                  padding: const EdgeInsets.fromLTRB(12, 14, 12, 6),
                   child: Center(
                     child: Hero(
                       tag: 'item-image-${item.id}',
-                      child: item.buildImage(fit: BoxFit.contain, height: 95),
+                      child: item.buildImage(fit: BoxFit.contain, height: 96),
                     ),
                   ),
                 ),
@@ -218,7 +230,7 @@ class HomeDiscovery extends StatelessWidget {
                           begin: Alignment.topCenter,
                           end: Alignment.bottomCenter,
                           colors: [
-                            Colors.white.withValues(alpha: dark ? 0.06 : 0.40),
+                            Colors.white.withValues(alpha: dark ? 0.08 : 0.45),
                             Colors.white.withValues(alpha: 0.0),
                           ],
                         ),
@@ -229,27 +241,55 @@ class HomeDiscovery extends StatelessWidget {
                 Positioned(
                   top: 8,
                   left: 8,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: (dark ? const Color(0xFF141D2C) : Colors.white)
-                          .withValues(alpha: 0.92),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: accent.withValues(alpha: 0.30),
-                        width: 1.0,
+                  right: 8,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: (dark ? const Color(0xFF141D2C) : Colors.white)
+                                .withValues(alpha: 0.94),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.34),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Text(
+                            item.category.toUpperCase(),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: accent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      item.category.toUpperCase(),
-                      style: TextStyle(
-                        color: accent,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
+                      if (item.isPopular) ...[
+                        const SizedBox(width: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFF8A3D), Color(0xFFDF762D)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.local_fire_department_rounded,
+                            size: 11,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
@@ -268,20 +308,21 @@ class HomeDiscovery extends StatelessWidget {
                         style: const TextStyle(
                             fontSize: 14,
                             height: 1.25,
+                            letterSpacing: -0.2,
                             fontWeight: FontWeight.w800)),
                   ),
                   const SizedBox(height: 6),
                   Container(
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                     decoration: BoxDecoration(
                       color: (dark
                               ? const Color(0xFF1E2838)
                               : const Color(0xFFFFF7ED))
-                          .withValues(alpha: 0.90),
+                          .withValues(alpha: 0.92),
                       borderRadius: BorderRadius.circular(9),
                       border: Border.all(
-                        color: const Color(0xFFDF762D).withValues(alpha: 0.28),
+                        color: const Color(0xFFDF762D).withValues(alpha: 0.30),
                         width: 1.0,
                       ),
                     ),
@@ -294,6 +335,7 @@ class HomeDiscovery extends StatelessWidget {
                               fontSize: 11,
                               height: 1.25,
                               color: Color(0xFFDF762D),
+                              fontFeatures: [FontFeature.tabularFigures()],
                               fontWeight: FontWeight.w800)),
                     ),
                   ),
@@ -307,6 +349,15 @@ class HomeDiscovery extends StatelessWidget {
                         color: available
                             ? const Color(0xFF10B981)
                             : scheme.onSurfaceVariant,
+                        boxShadow: available
+                            ? [
+                                BoxShadow(
+                                  color: const Color(0xFF10B981)
+                                      .withValues(alpha: 0.50),
+                                  blurRadius: 5,
+                                ),
+                              ]
+                            : null,
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -321,15 +372,14 @@ class HomeDiscovery extends StatelessWidget {
                                     : scheme.onSurfaceVariant,
                                 fontWeight: FontWeight.w700))),
                     Container(
-                      padding: const EdgeInsets.all(4),
+                      padding: const EdgeInsets.all(5),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: (dark
-                            ? Colors.white.withValues(alpha: 0.08)
-                            : Colors.black.withValues(alpha: 0.04)),
+                        color: const Color(0xFFDF762D)
+                            .withValues(alpha: dark ? 0.22 : 0.12),
                       ),
-                      child: Icon(Icons.arrow_forward_rounded,
-                          size: 13, color: scheme.onSurfaceVariant),
+                      child: const Icon(Icons.arrow_forward_rounded,
+                          size: 13, color: Color(0xFFDF762D)),
                     ),
                   ]),
                 ],

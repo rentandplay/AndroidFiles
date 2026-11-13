@@ -307,7 +307,7 @@ class CatalogScreenState extends State<CatalogScreen> {
       ),
       child: Scaffold(
         backgroundColor:
-            isDark ? const Color(0xFF0B1320) : const Color(0xFFF6F8FC),
+            isDark ? const Color(0xFF0D1219) : const Color(0xFFFBF8F5),
         body: AppGlassBackdrop(
             child: RefreshIndicator(
           edgeOffset: MediaQuery.of(context).padding.top + 50,
@@ -685,11 +685,27 @@ class CatalogScreenState extends State<CatalogScreen> {
     );
   }
 
+  static Color _categoryAccent(String category) => switch (category) {
+        'Board Games' => const Color(0xFF27876B),
+        'Cards' => const Color(0xFF8062B5),
+        'Tech Rentals' => const Color(0xFF4678B3),
+        _ => const Color(0xFFDF762D),
+      };
+
+  static IconData _categoryIcon(String category) => switch (category) {
+        'Sports' => Icons.sports_basketball_outlined,
+        'Board Games' => Icons.extension_outlined,
+        'Cards' => Icons.style_outlined,
+        'Tech Rentals' => Icons.sports_esports_outlined,
+        _ => Icons.category_outlined,
+      };
+
   Widget _buildItemCard(ItemModel item) {
     final isSaved = _savedItemIds.contains(item.id);
     final textScaler = MediaQuery.textScalerOf(context);
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final scheme = Theme.of(context).colorScheme;
+    final categoryColor = _categoryAccent(item.category);
     final statusKey = item.status.toUpperCase();
     final isAvailable = statusKey == 'AVAILABLE' && item.availableQuantity > 0;
     final statusColor = switch (statusKey) {
@@ -722,16 +738,13 @@ class CatalogScreenState extends State<CatalogScreen> {
                   decoration: BoxDecoration(
                     gradient: RadialGradient(
                       center: Alignment.center,
-                      radius: 0.85,
+                      radius: 0.88,
                       colors: [
-                        (isDark
-                                ? const Color(0xFF233248)
-                                : const Color(0xFFF6EFE6))
-                            .withValues(alpha: isDark ? 0.55 : 0.70),
+                        categoryColor.withValues(alpha: isDark ? 0.25 : 0.16),
                         (isDark
                                 ? const Color(0xFF151F2E)
                                 : const Color(0xFFFCF9F5))
-                            .withValues(alpha: 0.25),
+                            .withValues(alpha: 0.22),
                       ],
                     ),
                   ),
@@ -892,18 +905,40 @@ class CatalogScreenState extends State<CatalogScreen> {
                           style: const TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
+                            letterSpacing: -0.2,
                             height: 1.25,
                           ),
                         )),
                     const SizedBox(height: 4),
-                    Text(
-                      item.category,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        fontSize: 12,
-                      ),
+                    Row(
+                      children: [
+                        Icon(
+                          _categoryIcon(item.category),
+                          size: 12,
+                          color: categoryColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            item.category,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: categoryColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 11.5,
+                            ),
+                          ),
+                        ),
+                        if (item.isPopular) ...[
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.local_fire_department_rounded,
+                            size: 13,
+                            color: Color(0xFFDF762D),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Tooltip(
@@ -917,6 +952,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                           fontWeight: FontWeight.w800,
                           fontSize: 13,
                           height: 1.15,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
                       ),
                     ),
@@ -929,15 +965,30 @@ class CatalogScreenState extends State<CatalogScreen> {
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 180),
                         decoration: BoxDecoration(
-                          color: isHovered
-                              ? const Color(0xFFE46618)
-                              : (isDark
-                                  ? const Color(0xFF1E2838)
-                                  : const Color(0xFFFFF4EB)),
+                          gradient: isHovered
+                              ? const LinearGradient(
+                                  colors: [
+                                    Color(0xFFFF8533),
+                                    Color(0xFFE46618),
+                                  ],
+                                )
+                              : LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: isDark
+                                      ? const [
+                                          Color(0xFF232F42),
+                                          Color(0xFF1A2434),
+                                        ]
+                                      : const [
+                                          Color(0xFFFFF8F2),
+                                          Color(0xFFFFEDE0),
+                                        ],
+                                ),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: const Color(0xFFDF762D)
-                                .withValues(alpha: isHovered ? 0.80 : 0.35),
+                                .withValues(alpha: isHovered ? 0.85 : 0.38),
                             width: 1.1,
                           ),
                           boxShadow: [
@@ -959,7 +1010,7 @@ class CatalogScreenState extends State<CatalogScreen> {
                                 overflow: TextOverflow.ellipsis,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w800,
                                   color: isHovered
                                       ? Colors.white
                                       : const Color(0xFFDF762D),

@@ -1,12 +1,16 @@
 import '../../services/server_clock.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../models/rental_model.dart';
 import '../../services/mobile_api_service.dart';
 import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
+import '../../widgets/rental_receipt_card.dart';
 import '../../widgets/rental_ui.dart';
+import 'customer_home_screen.dart';
 
 class ReturnEquipmentScreen extends StatefulWidget {
   const ReturnEquipmentScreen({super.key, required this.rental, this.api});
@@ -150,9 +154,19 @@ class _ReturnEquipmentScreenState extends State<ReturnEquipmentScreen> {
 }
 
 class RentalReturnStatusScreen extends StatefulWidget {
-  const RentalReturnStatusScreen({super.key, required this.rental, this.api});
+  const RentalReturnStatusScreen({
+    super.key,
+    required this.rental,
+    this.api,
+    this.onPrintOrSavePdf,
+    this.onSharePdf,
+    this.onDone,
+  });
   final RentalModel rental;
   final MobileApiService? api;
+  final ReceiptPdfAction? onPrintOrSavePdf;
+  final ReceiptPdfAction? onSharePdf;
+  final VoidCallback? onDone;
 
   @override
   State<RentalReturnStatusScreen> createState() =>
@@ -169,17 +183,23 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
   String _error = '';
   MobileApiService get _api => widget.api ?? MobileApiService.instance;
 
+  bool get _isReturnStatusTest =>
+      !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
   @override
   void initState() {
     super.initState();
     _rental = widget.rental;
     WidgetsBinding.instance.addObserver(this);
     _events = _api.watchRentalEvents().listen((event) {
-      final id = event['rentalId']?.toString();
-      if (event['event'] == 'ready' ||
-          (event['event'] == 'rental.changed' &&
-              (id == null || id == _rental.rentalId))) {
-        unawaited(_refresh());
+      final type = (event['event'] ?? '').toString();
+      final id = event['rentalId']?.toString() ?? '';
+      if (type == 'ready' ||
+          type == 'verification.changed' ||
+          type == 'data.changed' ||
+          (type == 'rental.changed' &&
+              (id.isEmpty || id == _rental.rentalId))) {
+        unawaited(_refresh(silent: true));
       }
     });
     _syncClock();
@@ -189,15 +209,26 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
   void _syncClock() {
     _clock?.cancel();
     _clock = null;
-    if (!_rental.isActive) return;
-    _clock = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
+    if (_isReturnStatusTest) {
+      if (!_rental.isActive) return;
+      _clock = Timer.periodic(const Duration(minutes: 1), (_) {
+        if (mounted) setState(() {});
+      });
+      return;
+    }
+    const doneStatuses = ['COMPLETED', 'CANCELLED', 'REJECTED', 'EXPIRED'];
+    if (doneStatuses.contains(_rental.normalizedStatus)) return;
+    _clock = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) unawaited(_refresh(silent: true));
     });
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) unawaited(_refresh());
+    if (state == AppLifecycleState.resumed) {
+      _syncClock();
+      unawaited(_refresh(silent: true));
+    }
   }
 
   @override
@@ -208,7 +239,7 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool silent = false}) async {
     if (_refreshing) {
       _refreshAgain = true;
       return;
@@ -224,33 +255,29 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
         _syncClock();
       }
     } catch (error) {
-      if (mounted) setState(() => _error = '$error');
+      if (mounted && !silent) setState(() => _error = '$error');
     } finally {
       _refreshing = false;
       if (_refreshAgain && mounted) {
         _refreshAgain = false;
-        unawaited(_refresh());
+        unawaited(_refresh(silent: silent));
       }
     }
   }
 
   int _step() {
     if (_rental.normalizedStatus == 'COMPLETED') return 3;
-    if (_rental.isAwaitingInspection) return 2;
-    if (_rental.isPendingVerification &&
-        _rental.normalizedStatus.contains('RETURN')) {
-      return 1;
-    }
+    if (_rental.isReturnAwaitingTerminalConfirmation) return 2;
+    if (_rental.isAwaitingInspection) return 1;
     return 0;
   }
 
   String _title() {
     if (_rental.normalizedStatus == 'COMPLETED') return 'Return confirmed';
-    if (_rental.isAwaitingInspection) return 'Received · inspection pending';
-    if (_rental.isPendingVerification &&
-        _rental.normalizedStatus.contains('RETURN')) {
-      return 'Receipt awaiting confirmation';
+    if (_rental.isReturnAwaitingTerminalConfirmation) {
+      return 'Receipt check · counter terminal';
     }
+    if (_rental.isAwaitingInspection) return 'Inspection in progress';
     if (_rental.latestReturnRequestStatus.toUpperCase() == 'REJECTED') {
       return 'Return request needs an update';
     }
@@ -259,19 +286,18 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
 
   String _message() {
     if (_rental.normalizedStatus == 'COMPLETED') {
-      return 'The admin completed the inspection and confirmed this return.';
+      return 'The inspection and receipt check are complete. This return is confirmed.';
+    }
+    if (_rental.isReturnAwaitingTerminalConfirmation) {
+      return 'Inspection is recorded. Review, print, or save your receipt below, then confirm receipt on the ESP32 counter terminal to complete your return.';
     }
     if (_rental.isAwaitingInspection) {
-      return 'The admin recorded physical receipt at ${_date(_rental.receivedAt)}. The rental timer stopped then; inspection can finish afterward.';
-    }
-    if (_rental.isPendingVerification &&
-        _rental.normalizedStatus.contains('RETURN')) {
-      return 'The admin is confirming physical receipt. The rental timer stops when receipt is recorded.';
+      return 'The admin recorded physical receipt at ${_date(_rental.receivedAt)}. The rental timer stopped while the item and accessories are inspected.';
     }
     if (_rental.latestReturnRequestStatus.toUpperCase() == 'REJECTED') {
       return 'The admin did not accept this return request. Read the note in Notifications or contact the admin, then submit a new request when ready.';
     }
-    return 'Bring the equipment to the admin. The rental stays active and late charges, if any, are based on the time physical receipt is recorded.';
+    return 'Bring the equipment to the admin. No phone QR code is needed — staff will scan the equipment label, inspect it, and confirm receipt.';
   }
 
   String _date(DateTime? value) => value == null
@@ -286,10 +312,21 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
                 ReturnEquipmentScreen(rental: _rental, api: widget.api)));
   }
 
+  void _done() {
+    if (widget.onDone != null) {
+      widget.onDone!();
+      return;
+    }
+    CustomerHomeScreen.returnToHome(context);
+  }
+
   @override
   Widget build(BuildContext context) {
     final rejected =
         _rental.latestReturnRequestStatus.toUpperCase() == 'REJECTED';
+    final returned = _rental.normalizedStatus == 'COMPLETED';
+    final showReceipt =
+        returned || _rental.isReturnAwaitingTerminalConfirmation;
     final overdue = _rental.isActive &&
         _rental.dueDate.millisecondsSinceEpoch > 0 &&
         ServerClock.instance.now.isAfter(_rental.dueDate);
@@ -301,14 +338,20 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
                   onTap: _refresh,
                   icon: Icons.refresh_rounded)
             ]),
-            bottomNavigationBar: rejected && _rental.isActive
-                ? SafeArea(
-                    minimum: const EdgeInsets.all(16),
-                    child: FilledButton.icon(
-                        onPressed: _requestAgain,
-                        icon: const Icon(Icons.assignment_return_outlined),
-                        label: const Text('Send a new return request')))
-                : null,
+            bottomNavigationBar: returned
+                ? RentalActionBar(
+                    key: const ValueKey('return-done-button'),
+                    label: 'Done',
+                    onPressed: _done,
+                  )
+                : rejected && _rental.isActive
+                    ? SafeArea(
+                        minimum: const EdgeInsets.all(16),
+                        child: FilledButton.icon(
+                            onPressed: _requestAgain,
+                            icon: const Icon(Icons.assignment_return_outlined),
+                            label: const Text('Send a new return request')))
+                    : null,
             backgroundColor: Colors.transparent,
             body: LiquidAmbientBackdrop(
               child: RefreshIndicator(
@@ -330,9 +373,12 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
                               Text(_rental.displayReference),
                               const SizedBox(height: 16),
                               RentalStatusBadge(
-                                  status: _rental.hasPendingReturnRequest
-                                      ? 'RETURN_REQUESTED'
-                                      : _rental.normalizedStatus),
+                                  status: _rental
+                                          .isReturnAwaitingTerminalConfirmation
+                                      ? 'PENDING_RETURN_VERIFICATION'
+                                      : _rental.hasPendingReturnRequest
+                                          ? 'RETURN_REQUESTED'
+                                          : _rental.normalizedStatus),
                               const SizedBox(height: 20),
                               _ReturnProgressTracker(step: _step()),
                               const SizedBox(height: 18),
@@ -370,6 +416,14 @@ class _RentalReturnStatusScreenState extends State<RentalReturnStatusScreen>
                                 RentalValueRow('Balance due',
                                     rentalMoney(_rental.balanceDue)),
                             ])),
+                        if (showReceipt)
+                          RentalReceiptCard(
+                            key: const ValueKey('return-status-receipt-card'),
+                            rental: _rental,
+                            isPreview: !returned,
+                            onPrintOrSavePdf: widget.onPrintOrSavePdf,
+                            onSharePdf: widget.onSharePdf,
+                          ),
                       ])),
             )));
   }
@@ -382,8 +436,8 @@ class _ReturnProgressTracker extends StatelessWidget {
 
   static const labels = [
     'Request sent',
-    'Receipt check',
     'Inspection',
+    'Receipt check',
     'Returned'
   ];
 

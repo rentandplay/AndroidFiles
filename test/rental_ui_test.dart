@@ -14,6 +14,7 @@ import 'package:rent_and_play_app/models/rental_model.dart';
 import 'package:rent_and_play_app/screens/admin/rental_admin_view.dart';
 import 'package:rent_and_play_app/screens/user/checkout_screen.dart';
 import 'package:rent_and_play_app/screens/user/active_rentals_screen.dart';
+import 'package:rent_and_play_app/screens/user/customer_home_screen.dart';
 import 'package:rent_and_play_app/screens/user/return_equipment_screen.dart';
 import 'package:rent_and_play_app/screens/shared/transaction_ticket_dialog.dart';
 import 'package:rent_and_play_app/screens/alerts/notifications_screen.dart';
@@ -169,6 +170,15 @@ class UiApi extends MobileApiService {
       'item': {'name': 'Jenga', 'item_code': 'RENT-001'}
     };
   }
+}
+
+class _LiveReturnUiApi extends UiApi {
+  _LiveReturnUiApi(this._events);
+
+  final Stream<Map<String, dynamic>> _events;
+
+  @override
+  Stream<Map<String, dynamic>> watchRentalEvents() => _events;
 }
 
 final item = ItemModel(
@@ -478,6 +488,252 @@ void main() {
     expect(api.requests.any((row) => row['return_request'] == 'r1'), isTrue);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
+  });
+
+  testWidgets(
+      'return status updates live through request sent, inspection, receipt check, and returned',
+      (tester) async {
+    final events = StreamController<Map<String, dynamic>>.broadcast();
+    addTearDown(events.close);
+    final api = _LiveReturnUiApi(events.stream);
+    api.returnRecord = {
+      'id': 'r1',
+      'rental_code': 'R-0329',
+      'item_name': 'Bingo Set',
+      'status': 'ACTIVE',
+      'latest_return_request_status': 'PENDING_ADMIN_APPROVAL',
+    };
+    final semantics = tester.ensureSemantics();
+
+    await render(
+      tester,
+      RentalReturnStatusScreen(
+        rental: sampleRental('ACTIVE').copyWith(
+          latestReturnRequestStatus: 'PENDING_ADMIN_APPROVAL',
+        ),
+        api: api,
+      ),
+    );
+    expect(
+      find.bySemanticsLabel(RegExp('Return progress: Request sent stage')),
+      findsOneWidget,
+    );
+
+    // 1) Physical receipt recorded -> inspection stage
+    api.returnRecord = {
+      'id': 'r1',
+      'rental_code': 'R-0329',
+      'item_name': 'Bingo Set',
+      'status': 'RETURN_PENDING_INSPECTION',
+      'received_at': '2026-10-06T06:00:00Z',
+      'latest_return_request_status': 'RECEIVED',
+    };
+    events.add({'event': 'rental.changed', 'rentalId': ''});
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(RegExp('Return progress: Inspection stage')),
+      findsOneWidget,
+    );
+    expect(find.text('Inspection in progress'), findsOneWidget);
+
+    // 2) Sent to ESP32 counter terminal -> receipt check stage (preview receipt visible)
+    api.returnRecord = {
+      'id': 'r1',
+      'rental_code': 'R-0329',
+      'item_name': 'Bingo Set',
+      'item_code': 'BG-05',
+      'customer_name': 'Sai',
+      'status': 'RETURN_PENDING_INSPECTION',
+      'payment_method': 'Cash',
+      'rental_fee': 5100,
+      'rental_paid_amount': 5100,
+      'overtime_fee': 120,
+      'penalty_amount': 50,
+      'penalty_reason': 'Missing strap',
+      'final_rental_charges': 5270,
+      'balance_due': 170,
+      'due_at': '2026-10-06T05:00:00Z',
+      'received_at': '2026-10-06T06:00:00Z',
+      'latest_return_request_status': 'PENDING',
+      'latest_terminal_request_status': 'PENDING',
+      'return_condition': {
+        'condition': 'FAIR',
+        'notes': 'Minor wear',
+        'result': 'AVAILABLE',
+      },
+      'fee_breakdown': {
+        'rental_fee': 5100,
+        'overtime_fee': 120,
+        'penalty_amount': 50,
+        'penalty_reason': 'Missing strap',
+        'final_rental_charges': 5270,
+        'billed_minutes': 180,
+        'grace_minutes': 0,
+        'overtime_rate': 60,
+        'overtime_unit_minutes': 60,
+      },
+    };
+    events.add({'event': 'rental.changed', 'rentalId': 'r1'});
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(RegExp('Return progress: Receipt check stage')),
+      findsOneWidget,
+    );
+    expect(find.text('Receipt check · counter terminal'), findsOneWidget);
+    expect(find.byKey(const ValueKey('return-done-button')), findsNothing);
+    final previewHeader = find.text('Receipt preview');
+    await tester.scrollUntilVisible(previewHeader, 200);
+    await tester.ensureVisible(previewHeader);
+    await tester.pumpAndSettle();
+    expect(previewHeader, findsOneWidget);
+
+    final printButton = find.byKey(const ValueKey('receipt-print-save-pdf'));
+    await tester.scrollUntilVisible(printButton, 200);
+    await tester.ensureVisible(printButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Late charges'), findsOneWidget);
+    expect(find.text('Damage / missing penalty'), findsOneWidget);
+    expect(find.text('Total charges'), findsOneWidget);
+    expect(find.text('Missing strap'), findsWidgets);
+    expect(printButton, findsOneWidget);
+    expect(find.byKey(const ValueKey('receipt-share-pdf')), findsOneWidget);
+
+    // 3) Confirmed on ESP32 -> returned stage (official receipt + Done button)
+    api.returnRecord = {
+      ...api.returnRecord!,
+      'status': 'COMPLETED',
+      'confirmed_return_at': '2026-10-06T06:05:00Z',
+      'latest_return_request_status': 'CONFIRMED',
+      'latest_terminal_request_status': 'CONFIRMED',
+    };
+    events.add({'event': 'rental.changed', 'rentalId': 'r1'});
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('return-done-button')), findsOneWidget);
+    final officialReceipt = find.text('Official receipt');
+    await tester.scrollUntilVisible(officialReceipt, -200);
+    await tester.ensureVisible(officialReceipt);
+    await tester.pumpAndSettle();
+    expect(officialReceipt, findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Bingo Set'), -200);
+    await tester.ensureVisible(find.text('Bingo Set'));
+    await tester.pumpAndSettle();
+    expect(
+      find.bySemanticsLabel(RegExp('Return progress: Returned stage')),
+      findsOneWidget,
+    );
+    expect(find.text('Return confirmed'), findsWidgets);
+    expect(
+      find.text(
+          'The inspection and receipt check are complete. This return is confirmed.'),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    semantics.dispose();
+  });
+
+  testWidgets(
+      'return status supports print/share during receipt check and returns home on Done',
+      (tester) async {
+    final api = UiApi();
+    api.returnRecord = {
+      'id': 'r-done-1',
+      'rental_code': 'R-0331',
+      'item_name': 'Volleyball',
+      'status': 'RETURN_PENDING_INSPECTION',
+      'rental_fee': 250,
+      'rental_paid_amount': 250,
+      'overtime_fee': 0,
+      'penalty_amount': 0,
+      'final_rental_charges': 250,
+      'balance_due': 0,
+      'received_at': '2026-10-06T04:00:00Z',
+      'latest_return_request_status': 'PENDING',
+      'latest_terminal_request_status': 'PENDING',
+    };
+
+    var printedCount = 0;
+    var sharedCount = 0;
+    var doneCount = 0;
+
+    await tester.pumpWidget(MaterialApp(
+      home: RentalReturnStatusScreen(
+        rental: RentalModel.fromMap(api.returnRecord!, id: 'r-done-1'),
+        api: api,
+        onPrintOrSavePdf: (_, __) async {
+          printedCount++;
+        },
+        onSharePdf: (_, __) async {
+          sharedCount++;
+        },
+        onDone: () {
+          doneCount++;
+        },
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    final printButton = find.byKey(const ValueKey('receipt-print-save-pdf'));
+    await tester.scrollUntilVisible(printButton, 200);
+    await tester.ensureVisible(printButton);
+    await tester.pumpAndSettle();
+    await tester.tap(printButton);
+    await tester.pumpAndSettle();
+    final shareButton = find.byKey(const ValueKey('receipt-share-pdf'));
+    await tester.ensureVisible(shareButton);
+    await tester.pumpAndSettle();
+    await tester.tap(shareButton);
+    await tester.pumpAndSettle();
+    expect(printedCount, 1);
+    expect(sharedCount, 1);
+    expect(doneCount, 0);
+
+    // Default Done behavior pops back to root and signals Home tab selection
+    api.returnRecord = {
+      ...api.returnRecord!,
+      'status': 'COMPLETED',
+      'confirmed_return_at': '2026-10-06T04:05:00Z',
+      'latest_return_request_status': 'CONFIRMED',
+      'latest_terminal_request_status': 'CONFIRMED',
+    };
+    final startHomeSignal = CustomerHomeScreen.goHomeSignal.value;
+    await tester.pumpWidget(MaterialApp(
+      home: Builder(
+        builder: (context) => Scaffold(
+          body: TextButton(
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => RentalReturnStatusScreen(
+                    rental: RentalModel.fromMap(
+                      api.returnRecord!,
+                      id: 'r-done-1',
+                    ),
+                    api: api,
+                  ),
+                ),
+              );
+            },
+            child: const Text('Open return status'),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('Open return status'));
+    await tester.pumpAndSettle();
+
+    final officialReceipt = find.text('Official receipt');
+    await tester.scrollUntilVisible(officialReceipt, 200);
+    await tester.ensureVisible(officialReceipt);
+    await tester.pumpAndSettle();
+    expect(officialReceipt, findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('return-done-button')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Open return status'), findsOneWidget);
+    expect(find.byKey(const ValueKey('return-done-button')), findsNothing);
+    expect(CustomerHomeScreen.goHomeSignal.value, startHomeSignal + 1);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('admin rental queue highlights and filters due items',

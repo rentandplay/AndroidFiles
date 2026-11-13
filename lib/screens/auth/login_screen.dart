@@ -329,6 +329,10 @@ class _LoginScreenState extends State<LoginScreen> {
     final logoHeight = isCompactWidth
         ? 122.0
         : (screenSize.height > 840 ? 186.0 : 148.0);
+    // While typing, the hero shrinks to a compact badge so the form and the
+    // Login button stay above the keyboard instead of clipping the logo.
+    final keyboardOpen = MediaQuery.viewInsetsOf(context).bottom > 0;
+    const heroMotion = Duration(milliseconds: 280);
 
     return Scaffold(
       backgroundColor: AppTheme.brandNavy,
@@ -480,8 +484,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Column(
                                     mainAxisAlignment: MainAxisAlignment.center,
                                     children: [
-                                    SizedBox(
-                                      height: logoHeight,
+                                    AnimatedContainer(
+                                      duration: heroMotion,
+                                      curve: Curves.easeOutCubic,
+                                      height: keyboardOpen ? 64.0 : logoHeight,
                                       width: screenSize.width * 0.84,
                                       child: Image.asset(
                                         'assets/images/logo_rent_and_play.png',
@@ -499,6 +505,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                         ),
                                       ),
                                     ),
+                                    AnimatedSize(
+                                      duration: heroMotion,
+                                      curve: Curves.easeOutCubic,
+                                      child: AnimatedOpacity(
+                                        duration: heroMotion,
+                                        opacity: keyboardOpen ? 0 : 1,
+                                        child: keyboardOpen
+                                            ? const SizedBox(
+                                                width: double.infinity)
+                                            : Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
                                     const SizedBox(height: 8),
                                     const Text(
                                       'Play More. Rent Smarter.',
@@ -529,6 +547,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                           'Fast Handoff',
                                         ),
                                       ],
+                                    ),
+                                                ],
+                                              ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -641,6 +663,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                       const SizedBox(height: 6),
                                       TextFormField(
                                         controller: _emailController,
+                                        scrollPadding: const EdgeInsets.only(
+                                            bottom: 180),
                                         enabled: !_isLoading,
                                         autocorrect: false,
                                         textCapitalization:
@@ -713,6 +737,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                       const SizedBox(height: 4),
                                       TextFormField(
                                         controller: _passwordController,
+                                        // Reveal the Login button too, not
+                                        // just the focused field.
+                                        scrollPadding: const EdgeInsets.only(
+                                            bottom: 120),
                                         enabled: !_isLoading,
                                         autofillHints: const [
                                           AutofillHints.password

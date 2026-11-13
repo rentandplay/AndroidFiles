@@ -8,6 +8,7 @@ import '../../widgets/glass_app_bar.dart';
 import '../../widgets/liquid_glass.dart';
 import '../../widgets/rental_ui.dart';
 import '../admin/rental_admin_view.dart';
+import '../admin/rental_extra_screen.dart';
 import '../shared/transaction_ticket_dialog.dart';
 import '../user/return_equipment_screen.dart';
 import '../../widgets/rental_dual_tracker.dart';
@@ -265,6 +266,78 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                             FilledButton(
                                 onPressed: () => _adminAction('receipt'),
                                 child: const Text('Receive returned equipment')),
+                          if (row['extension_request'] is Map &&
+                              (row['extension_request']['status']?.toString() ??
+                                      '')
+                                  .isNotEmpty) ...[
+                            Builder(builder: (context) {
+                              final ext = Map<String, dynamic>.from(
+                                  row['extension_request'] as Map);
+                              final quote = ext['quote'] is Map
+                                  ? ext['quote'] as Map
+                                  : const {};
+                              final mins = (quote['billed_minutes'] as num?)
+                                      ?.round() ??
+                                  (ext['additional_minutes'] as num?)?.round() ??
+                                  0;
+                              final extStatus =
+                                  (ext['status']?.toString() ?? '')
+                                      .toUpperCase();
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    RentalValueRow(
+                                      'Extension status',
+                                      extStatus == 'PENDING'
+                                          ? 'Pending review (+${mins}m)'
+                                          : extStatus == 'APPROVED'
+                                              ? 'Approved (+${mins}m)'
+                                              : 'Declined',
+                                    ),
+                                    if (ext['requested_due_at'] != null)
+                                      RentalValueRow(
+                                        extStatus == 'APPROVED'
+                                            ? 'Extended due time'
+                                            : 'Requested due time',
+                                        _date(ext['requested_due_at']),
+                                      ),
+                                    if (ext['additional_fee'] != null)
+                                      RentalValueRow('Extension charge',
+                                          _money(ext['additional_fee'])),
+                                    if ((ext['reason']?.toString() ?? '')
+                                        .trim()
+                                        .isNotEmpty)
+                                      RentalValueRow('Extension note',
+                                          ext['reason'].toString().trim()),
+                                  ],
+                                ),
+                              );
+                            }),
+                          ],
+                          if (_admin &&
+                              status == 'ACTIVE' &&
+                              row['extension_request'] is Map &&
+                              (row['extension_request']['status']?.toString() ??
+                                      '')
+                                  .toUpperCase() ==
+                                  'PENDING') ...[
+                            const SizedBox(height: 10),
+                            FilledButton.icon(
+                                onPressed: () async {
+                                  final changed = await Navigator.push<bool>(
+                                      context,
+                                      MaterialPageRoute(
+                                          builder: (_) => RentalExtraScreen(
+                                              api: _api,
+                                              kind: 'extension-review',
+                                              row: row)));
+                                  if (changed == true && mounted) await _load();
+                                },
+                                icon: const Icon(Icons.more_time_rounded),
+                                label: const Text('Review extension')),
+                          ],
                           if (_admin && status == 'RETURN_PENDING_INSPECTION')
                             FilledButton(
                                 onPressed: () => _adminAction('complete-return'),
@@ -299,6 +372,8 @@ class _NotificationBookingScreenState extends State<NotificationBookingScreen> {
                           if (!_admin &&
                               (row['latest_return_request_status'] ==
                                       'PENDING_ADMIN_APPROVAL' ||
+                                  RentalModel.fromMap(row)
+                                      .isReturnAwaitingTerminalConfirmation ||
                                   status == 'RETURN_PENDING_INSPECTION' ||
                                   status == 'COMPLETED'))
                             FilledButton.icon(

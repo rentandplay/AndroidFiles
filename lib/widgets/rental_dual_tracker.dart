@@ -61,35 +61,60 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
     return DateFormat('MMM d').format(local);
   }
 
+  String _formatMinutes(int minutes) {
+    if (minutes <= 0) return '';
+    if (minutes < 60) return '${minutes}m';
+    if (minutes % 60 == 0) {
+      final h = minutes ~/ 60;
+      return h == 1 ? '1h' : '${h}h';
+    }
+    return '${minutes ~/ 60}h ${minutes % 60}m';
+  }
+
   List<RentalTimelineMilestone> _buildMilestones() {
     final rental = widget.rental;
     final milestones = <RentalTimelineMilestone>[];
 
     final isReturnStage = rental.isAwaitingInspection ||
+        rental.isReturnAwaitingTerminalConfirmation ||
         (rental.isPendingVerification &&
             rental.normalizedStatus.contains('RETURN')) ||
         rental.normalizedStatus == 'COMPLETED';
 
-    // 1. Completion / Inspection Finished
+    // 1. Completion / Receipt Check Finished
     if (rental.normalizedStatus == 'COMPLETED') {
       milestones.add(RentalTimelineMilestone(
         title: 'Rental Completed & Cleared',
         description: rental.conditionNotes.isNotEmpty
             ? 'Condition: ${rental.returnCondition} · ${rental.conditionNotes}'
-            : 'Returned in ${rental.returnCondition} condition. Deposit settled.',
+            : 'Returned in ${rental.returnCondition} condition. Receipt check complete.',
         timestamp: rental.returnedDate ?? rental.receivedAt,
         isActive: true,
         icon: Icons.check_circle_rounded,
       ));
     }
 
-    // 2. Physical Return Received at Hub / Inspection in progress
+    // 2. Final Receipt Check at ESP32 Counter Terminal
+    if (rental.isReturnAwaitingTerminalConfirmation) {
+      final isTop = milestones.isEmpty;
+      milestones.add(RentalTimelineMilestone(
+        title: 'Receipt Check · ESP32 Terminal',
+        description:
+            'Equipment inspection recorded. Confirm physical receipt on counter terminal.',
+        timestamp: rental.receivedAt ?? rental.returnedDate,
+        isActive: isTop,
+        icon: Icons.point_of_sale_rounded,
+      ));
+    }
+
+    // 3. Equipment Received & Inspection in Progress
     if (rental.receivedAt != null || rental.isAwaitingInspection) {
       final isTop = milestones.isEmpty;
       milestones.add(RentalTimelineMilestone(
-        title: 'Received at Hub · Inspection Pending',
-        description:
-            'Staff recorded physical receipt. Rental timer stopped. Testing hardware and items.',
+        title: isTop ? 'Inspection in Progress' : 'Received & Inspected',
+        description: isTop
+            ? 'Staff recorded physical receipt. Rental timer stopped while inspecting equipment.'
+            : 'Staff recorded physical receipt and completed inspection.',
         timestamp: rental.receivedAt ?? rental.returnedDate,
         isActive: isTop,
         icon: Icons.fact_check_outlined,
@@ -109,6 +134,64 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
       ));
     }
 
+    // 3.5 Rental Extensions (Pending, Approved, or Rejected)
+    if (rental.hasPendingExtensionRequest) {
+      final isTop = milestones.isEmpty;
+      final added = _formatMinutes(rental.requestedExtensionMinutes);
+      final proposedDue = rental.requestedExtensionDueDate;
+      milestones.add(RentalTimelineMilestone(
+        title: added.isNotEmpty
+            ? 'Extension Requested · +$added'
+            : 'Extension Requested',
+        description: proposedDue != null
+            ? 'Waiting for admin approval. Proposed return: ${_formatDate(proposedDue)} · ${_formatTime(proposedDue)}. Current due time still applies.'
+            : 'Waiting for admin approval. Current due time still applies.',
+        timestamp: RentalModel.parseAnyDate(
+            rental.extensionRequest['requested_at']),
+        isActive: isTop,
+        icon: Icons.more_time_rounded,
+      ));
+    } else if (rental.extensionStatus == 'REJECTED') {
+      final reason =
+          (rental.extensionRequest['reason']?.toString() ?? '').trim();
+      milestones.add(RentalTimelineMilestone(
+        title: 'Extension Declined',
+        description: reason.isNotEmpty
+            ? 'Original return time still applies. Reason: $reason'
+            : 'Original return time still applies.',
+        timestamp: RentalModel.parseAnyDate(
+            rental.extensionRequest['reviewed_at']),
+        isActive: false,
+        icon: Icons.event_busy_rounded,
+      ));
+    }
+
+    for (final entry in rental.extensionHistory.reversed) {
+      final quote = entry['quote'];
+      final rawMins = quote is Map ? quote['billed_minutes'] : null;
+      final mins = (rawMins is num
+              ? rawMins.round()
+              : int.tryParse('$rawMins')) ??
+          (entry['additional_minutes'] is num
+              ? (entry['additional_minutes'] as num).round()
+              : int.tryParse('${entry['additional_minutes']}') ?? 0);
+      final added = _formatMinutes(mins);
+      final extDue = RentalModel.parseAnyDate(entry['requested_due_at']);
+      final isTop = milestones.isEmpty;
+      milestones.add(RentalTimelineMilestone(
+        title: added.isNotEmpty
+            ? 'Extension Approved · +$added'
+            : 'Extension Approved',
+        description: extDue != null
+            ? 'New return deadline updated to ${_formatDate(extDue)} · ${_formatTime(extDue)}.'
+            : 'Additional rental time added to your timer.',
+        timestamp:
+            RentalModel.parseAnyDate(entry['reviewed_at'] ?? entry['requested_at']),
+        isActive: isTop,
+        icon: Icons.more_time_rounded,
+      ));
+    }
+
     // 4. In Use / Active Rental
     if (rental.isActive || isReturnStage) {
       final isTop = milestones.isEmpty;
@@ -119,7 +202,7 @@ class _RentalDualTrackerState extends State<RentalDualTracker> {
         title: isTop ? 'Active Rental · In Use' : 'Equipment Handed Over',
         description: isTop
             ? 'Handoff confirmed. Rental timer running. $dueText.'
-            : 'Handoff confirmed at ${rental.customerHandoffLocation}.',
+            : 'Handoff confirmed at ${rental.customerHandoffLocation}. $dueText.',
         timestamp: rental.startDate.millisecondsSinceEpoch > 0
             ? rental.startDate
             : null,

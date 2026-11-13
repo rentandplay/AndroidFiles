@@ -130,7 +130,7 @@ class _ScenePainter extends CustomPainter {
     canvas.drawPath(
         sceneShape,
         Paint()
-          ..color = dark ? const Color(0xFF0E1825) : const Color(0xFFF4F5F2));
+          ..color = dark ? const Color(0xFF0D1219) : const Color(0xFFFBF8F5));
     canvas.save();
     canvas.clipPath(sceneShape);
     void pool(Offset center, double radius, Color color, double alpha) {

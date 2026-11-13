@@ -23,6 +23,19 @@ Future<Uint8List> buildRentalReceipt(Map<String, dynamic> row) async {
             .format(parsed.toUtc().add(const Duration(hours: 8)));
   }
 
+  final returnCondition = row['return_condition'] is Map
+      ? Map<String, dynamic>.from(row['return_condition'])
+      : null;
+  String conditionText(dynamic value) {
+    final text = value?.toString().trim() ?? '';
+    if (text.isEmpty) return 'Not recorded';
+    final words = text.toLowerCase().replaceAll('_', ' ').split(' ');
+    return words
+        .where((w) => w.isNotEmpty)
+        .map((w) => '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+  }
+
   final fields = <List<String>>[
     ['Customer', row['customer_name']?.toString() ?? 'Not recorded'],
     ['Contact number', row['customer_phone']?.toString() ?? 'Not recorded'],
@@ -41,15 +54,39 @@ Future<Uint8List> buildRentalReceipt(Map<String, dynamic> row) async {
     ['Return due', date(row['due_at'])],
     ['Billed duration', '${fee['billed_minutes'] ?? 'Not recorded'} minutes'],
     ['Rental fee', money(row['rental_fee'])],
+    if (row['payment_method'] != null &&
+        row['payment_method'].toString().trim().isNotEmpty)
+      ['Payment method', row['payment_method'].toString()],
     ['Payment received', money(row['rental_paid_amount'])],
     [
       'Late fee',
       '${money(fee['overtime_rate'])} per started ${fee['overtime_unit_minutes'] ?? 60} minutes'
     ],
+    if (fee['overtime_fee'] != null)
+      ['Late charges', money(fee['overtime_fee'])],
+    if (fee['penalty_amount'] != null)
+      ['Damage / missing penalty', money(fee['penalty_amount'])],
+    if (fee['penalty_reason'] != null &&
+        fee['penalty_reason'].toString().trim().isNotEmpty)
+      ['Penalty reason', fee['penalty_reason'].toString().trim()],
     if (fee['final_rental_charges'] != null)
       ['Final rental charges', money(fee['final_rental_charges'])],
     ['Outstanding balance', money(row['balance_due'])],
+    if (row['refund_due'] is num && (row['refund_due'] as num) > 0)
+      ['Refund due', money(row['refund_due'])],
     ['Physical return received', date(row['received_at'])],
+    if (row['confirmed_return_at'] != null &&
+        row['confirmed_return_at'].toString().trim().isNotEmpty)
+      ['Return confirmed', date(row['confirmed_return_at'])],
+    if (returnCondition != null) ...[
+      ['Inspection condition', conditionText(returnCondition['condition'])],
+      if (returnCondition['result'] != null &&
+          returnCondition['result'].toString().trim().isNotEmpty)
+        ['Inspection result', conditionText(returnCondition['result'])],
+      if (returnCondition['notes'] != null &&
+          returnCondition['notes'].toString().trim().isNotEmpty)
+        ['Inspection notes', returnCondition['notes'].toString().trim()],
+    ],
     [
       'Grace period',
       fee['grace_minutes'] == null

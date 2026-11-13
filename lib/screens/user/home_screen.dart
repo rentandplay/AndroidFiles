@@ -7,6 +7,7 @@ import '../../widgets/premium_animations.dart';
 import 'package:flutter/services.dart';
 import '../../widgets/glass_app_bar.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import '../../widgets/live_business_settings.dart';
 import '../../services/server_clock.dart';
 
@@ -53,7 +54,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => HomeScreenState();
 }
 
-class HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _headerBackdropKey = BackdropKey();
   final _contentBackdropKey = BackdropKey();
   final PageController _carouselController =
@@ -74,6 +75,7 @@ class HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadHome();
     _eventSubscription = _api.watchRentalEvents().listen((event) {
       if (!mounted) return;
@@ -84,9 +86,16 @@ class HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _loadHome(quiet: true);
+    }
+  }
+
   void _startCarouselTimer() {
     _carouselTimer?.cancel();
-    _rentalPollTimer?.cancel();
+    _syncRentalPollTimer();
     if (_featuredItems.length <= 1) return;
     _carouselTimer = Timer.periodic(const Duration(seconds: 4), (_) {
       if (!mounted || !_carouselController.hasClients || _featuredItems.length <= 1) return;
@@ -102,7 +111,6 @@ class HomeScreenState extends State<HomeScreen> {
   void _resetCarouselTimer() {
     _carouselTimer?.cancel();
     _startCarouselTimer();
-    _syncRentalPollTimer();
   }
 
   void _syncRentalPollTimer() {
@@ -116,7 +124,9 @@ class HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _carouselTimer?.cancel();
+    _rentalPollTimer?.cancel();
     _eventSubscription?.cancel();
     _carouselController.dispose();
     super.dispose();
@@ -226,7 +236,7 @@ class HomeScreenState extends State<HomeScreen> {
       ),
       child: Scaffold(
         backgroundColor:
-            isDark ? const Color(0xFF0E1825) : const Color(0xFFF4F5F2),
+            isDark ? const Color(0xFF0D1219) : const Color(0xFFFBF8F5),
         body: RefreshIndicator(
           edgeOffset: safeTop + 54,
           onRefresh: _loadHome,
@@ -495,163 +505,230 @@ class HomeScreenState extends State<HomeScreen> {
                     top: 14,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: dark ? const Color(0xFF261D17) : const Color(0xFFFAF3EA),
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          stops: const [0.0, 0.55, 1.0],
+                          colors: dark
+                              ? const [
+                                  Color(0xFF231C18),
+                                  Color(0xFF1A1F2C),
+                                  Color(0xFF281B14),
+                                ]
+                              : const [
+                                  Color(0xFFFFFDFB),
+                                  Color(0xFFFFF6ED),
+                                  Color(0xFFFCEBD9),
+                                ],
+                        ),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: dark ? const Color(0xFF3E3025) : const Color(0xFFEFE2D3),
-                          width: 1,
+                          color: dark
+                              ? const Color(0xFFDF762D).withValues(alpha: 0.34)
+                              : const Color(0xFFDF762D).withValues(alpha: 0.26),
+                          width: 1.2,
                         ),
                         boxShadow: [
                           BoxShadow(
                             color: dark
-                                ? Colors.black.withValues(alpha: 0.35)
-                                : const Color(0xFFDF762D).withValues(alpha: 0.08),
-                            blurRadius: 18,
-                            offset: const Offset(0, 5),
+                                ? Colors.black.withValues(alpha: 0.42)
+                                : const Color(0xFFDF762D).withValues(alpha: 0.14),
+                            blurRadius: 22,
+                            offset: const Offset(0, 8),
                           ),
                         ],
                       ),
                       clipBehavior: Clip.antiAlias,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => widget.onItemSelected(item),
-                          borderRadius: BorderRadius.circular(24),
-                          child: Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.center,
-                              children: [
-                                // Left side: Details
-                                Expanded(
-                                  flex: 6,
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      // ⚡ POPULAR badge
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 9, vertical: 3.5),
-                                        decoration: BoxDecoration(
-                                          color: dark
-                                              ? const Color(0xFF382A20)
-                                              : const Color(0xFFF1E6D9),
-                                          borderRadius: BorderRadius.circular(16),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              Icons.bolt_rounded,
-                                              size: 13,
-                                              color: dark
-                                                  ? const Color(0xFFFFB37C)
-                                                  : const Color(0xFF2C1810),
-                                            ),
-                                            const SizedBox(width: 3),
-                                            Text(
-                                              'POPULAR',
-                                              style: TextStyle(
-                                                color: dark
-                                                    ? const Color(0xFFFFE7D6)
-                                                    : const Color(0xFF2C1810),
-                                                fontSize: 10.5,
-                                                fontWeight: FontWeight.w800,
-                                                letterSpacing: 0.6,
+                      child: Stack(
+                        children: [
+                          // Warm spotlight aura behind the 3D floating product
+                          Positioned(
+                            right: -18,
+                            top: -18,
+                            bottom: -18,
+                            width: 170,
+                            child: IgnorePointer(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: RadialGradient(
+                                    colors: [
+                                      const Color(0xFFFF8A3D)
+                                          .withValues(alpha: dark ? 0.24 : 0.22),
+                                      const Color(0xFFDF762D)
+                                          .withValues(alpha: 0.0),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: () => widget.onItemSelected(item),
+                              borderRadius: BorderRadius.circular(24),
+                              child: Padding(
+                                padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    // Left side: Details
+                                    Expanded(
+                                      flex: 6,
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          // ⚡ POPULAR badge
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 9, vertical: 3.5),
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: dark
+                                                    ? const [
+                                                        Color(0xFF432B1D),
+                                                        Color(0xFF2F1F16),
+                                                      ]
+                                                    : const [
+                                                        Color(0xFFFFECD9),
+                                                        Color(0xFFFDE0C3),
+                                                      ],
+                                              ),
+                                              borderRadius: BorderRadius.circular(16),
+                                              border: Border.all(
+                                                color: const Color(0xFFDF762D)
+                                                    .withValues(alpha: 0.35),
+                                                width: 0.9,
                                               ),
                                             ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(height: 6),
-                                      // Item Name
-                                      Text(
-                                        item.name,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: dark
-                                              ? const Color(0xFFFFF1E6)
-                                              : const Color(0xFF2C1810),
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.4,
-                                          height: 1.15,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 5),
-                                      // Price label (clean typography without border/pill)
-                                      Text(
-                                        _formatPopularRate(item),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
-                                          color: dark
-                                              ? const Color(0xFFFFB37C)
-                                              : const Color(0xFFDF762D),
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.2,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      // View details button
-                                      InkWell(
-                                        onTap: () => widget.onItemSelected(item),
-                                        borderRadius: BorderRadius.circular(20),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 10, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: dark
-                                                ? const Color(0xFF423226)
-                                                : const Color(0xFFE8D7C8),
-                                            borderRadius: BorderRadius.circular(20),
-                                          ),
-                                          child: FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            alignment: Alignment.centerLeft,
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
+                                                const Icon(
+                                                  Icons.bolt_rounded,
+                                                  size: 13,
+                                                  color: Color(0xFFDF762D),
+                                                ),
+                                                const SizedBox(width: 3),
                                                 Text(
-                                                  'View details',
+                                                  'POPULAR',
                                                   style: TextStyle(
                                                     color: dark
-                                                        ? const Color(0xFFFFE6D5)
-                                                        : const Color(0xFF3A200F),
-                                                    fontSize: 12,
-                                                    fontWeight: FontWeight.w700,
+                                                        ? const Color(0xFFFFD8BA)
+                                                        : const Color(0xFF8C3B0C),
+                                                    fontSize: 10.5,
+                                                    fontWeight: FontWeight.w800,
+                                                    letterSpacing: 0.6,
                                                   ),
-                                                ),
-                                                const SizedBox(width: 5),
-                                                Icon(
-                                                  Icons.arrow_forward_rounded,
-                                                  size: 13,
-                                                  color: dark
-                                                      ? const Color(0xFFFFE6D5)
-                                                      : const Color(0xFF3A200F),
                                                 ),
                                               ],
                                             ),
                                           ),
-                                        ),
+                                          const SizedBox(height: 6),
+                                          // Item Name
+                                          Text(
+                                            item.name,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: dark
+                                                  ? const Color(0xFFFFF5ED)
+                                                  : const Color(0xFF1A1512),
+                                              fontSize: 20,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.4,
+                                              height: 1.15,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          // Price label with tabular numerals
+                                          Text(
+                                            _formatPopularRate(item),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              color: dark
+                                                  ? const Color(0xFFFFB37C)
+                                                  : const Color(0xFFD9651B),
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800,
+                                              letterSpacing: -0.2,
+                                              fontFeatures: const [
+                                                FontFeature.tabularFigures(),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 8),
+                                          // Vibrant gradient CTA pill
+                                          InkWell(
+                                            onTap: () => widget.onItemSelected(item),
+                                            borderRadius: BorderRadius.circular(20),
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                  horizontal: 12, vertical: 6.5),
+                                              decoration: BoxDecoration(
+                                                gradient: const LinearGradient(
+                                                  begin: Alignment.topLeft,
+                                                  end: Alignment.bottomRight,
+                                                  colors: [
+                                                    Color(0xFFFF8A3D),
+                                                    Color(0xFFDF762D),
+                                                  ],
+                                                ),
+                                                borderRadius: BorderRadius.circular(20),
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: const Color(0xFFDF762D)
+                                                        .withValues(alpha: 0.35),
+                                                    blurRadius: 10,
+                                                    offset: const Offset(0, 3),
+                                                  ),
+                                                ],
+                                              ),
+                                              child: const FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      'View details',
+                                                      style: TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 12,
+                                                        fontWeight: FontWeight.w800,
+                                                        letterSpacing: -0.1,
+                                                      ),
+                                                    ),
+                                                    SizedBox(width: 5),
+                                                    Icon(
+                                                      Icons.arrow_forward_rounded,
+                                                      size: 13,
+                                                      color: Colors.white,
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // Right side spacer (reserved for 3D floating pop-up image)
+                                    const Expanded(
+                                      flex: 5,
+                                      child: SizedBox.shrink(),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 8),
-                                // Right side spacer (reserved for 3D floating pop-up image)
-                                const Expanded(
-                                  flex: 5,
-                                  child: SizedBox.shrink(),
-                                ),
-                              ],
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -815,7 +892,7 @@ class HomeScreenState extends State<HomeScreen> {
         dueDateIsSet &&
         !overdue &&
         rental.dueDate.difference(ServerClock.instance.now) <=
-            const Duration(hours: 24);
+            const Duration(hours: 2);
     final detailColor = overdue
         ? Theme.of(context).colorScheme.error
         : dueSoon
@@ -928,6 +1005,42 @@ class HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 10,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ] else if (rental.isActive &&
+              rental.hasPendingExtensionRequest &&
+              dueDateIsSet) ...[
+            const SizedBox(height: 5),
+            Text(
+              'Extension requested · awaiting admin approval',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.brandOrange,
+              ),
+            ),
+          ] else if (rental.isActive &&
+              rental.effectiveTotalExtendedMinutes > 0 &&
+              dueDateIsSet) ...[
+            const SizedBox(height: 5),
+            Text(
+              () {
+                final mins = rental.effectiveTotalExtendedMinutes;
+                final added = mins < 60
+                    ? '${mins}m'
+                    : mins % 60 == 0
+                        ? '${mins ~/ 60}h'
+                        : '${mins ~/ 60}h ${mins % 60}m';
+                return 'Extended · +$added added to timer';
+              }(),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF059669),
               ),
             ),
           ],
@@ -1130,7 +1243,7 @@ class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
     final scheme = Theme.of(context).colorScheme;
     final color = overdue
         ? scheme.error
-        : remaining <= const Duration(hours: 24)
+        : remaining <= const Duration(hours: 2)
             ? AppTheme.brandOrange
             : scheme.primary;
     final totalDuration = rental.dueDate.difference(rental.startDate);
@@ -1146,23 +1259,31 @@ class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
       children: [
         Row(
           children: [
-            Icon(Icons.timer_outlined, size: 16, color: color),
-            const SizedBox(width: 5),
-            Text(
-              overdue ? 'Overdue by' : 'Due in',
-              style: TextStyle(
-                fontSize: 12,
-                color: scheme.onSurfaceVariant,
-                fontWeight: FontWeight.w500,
+            _HomeCountdownRing(
+              progress: overdue ? 1.0 : (progress ?? 0.5),
+              color: color,
+              trackColor: scheme.surfaceContainerHighest,
+            ),
+            const SizedBox(width: 7),
+            Expanded(
+              child: Text(
+                overdue ? 'Overdue by' : 'Due in',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: scheme.onSurfaceVariant,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ),
-            const Spacer(),
+            const SizedBox(width: 6),
             Text(
               _countdownLabel(remaining),
               style: TextStyle(
                 fontSize: 13,
                 color: color,
                 fontWeight: FontWeight.w800,
+                fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
           ],
@@ -1188,6 +1309,79 @@ class _RentalCountdownProgressState extends State<_RentalCountdownProgress> {
         ],
       ],
     );
+  }
+}
+
+class _HomeCountdownRing extends StatelessWidget {
+  const _HomeCountdownRing({
+    required this.progress,
+    required this.color,
+    required this.trackColor,
+  });
+
+  final double progress;
+  final Color color;
+  final Color trackColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 18,
+      height: 18,
+      child: CustomPaint(
+        painter: _HomeCountdownRingPainter(
+          progress: progress,
+          color: color,
+          trackColor: trackColor,
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeCountdownRingPainter extends CustomPainter {
+  const _HomeCountdownRingPainter({
+    required this.progress,
+    required this.color,
+    required this.trackColor,
+  });
+
+  final double progress;
+  final Color color;
+  final Color trackColor;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (math.min(size.width, size.height) - 2.6) / 2;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = trackColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.6,
+    );
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        math.pi * 2 * progress,
+        false,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2.6
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _HomeCountdownRingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color ||
+        oldDelegate.trackColor != trackColor;
   }
 }
 
@@ -1278,7 +1472,7 @@ class _Floating3DCardImageState extends State<_Floating3DCardImage>
                 child: Transform(
                   alignment: Alignment.center,
                   transform: Matrix4.identity()
-                    ..translate(0.0, -floatY - 4.0, 0.0)
+                    ..translateByDouble(0.0, -floatY - 4.0, 0.0, 1.0)
                     ..rotateZ(tilt),
                   child: Container(
                     decoration: BoxDecoration(

@@ -33,15 +33,22 @@ import '../auth/login_screen.dart';
 /// Keeps the customer's main destinations within reach on small screens.
 
 class CustomerHomeScreen extends StatefulWidget {
-
   const CustomerHomeScreen({super.key});
 
+  /// Requests any mounted [CustomerHomeScreen] to switch to the Home tab
+  /// and refresh its data, then pops routes back to the root screen.
+  static final ValueNotifier<int> goHomeSignal = ValueNotifier<int>(0);
 
+  static void returnToHome(BuildContext context) {
+    goHomeSignal.value++;
+    final navigator = Navigator.of(context);
+    if (navigator.canPop()) {
+      navigator.popUntil((route) => route.isFirst);
+    }
+  }
 
   @override
-
   State<CustomerHomeScreen> createState() => _CustomerHomeScreenState();
-
 }
 
 
@@ -76,6 +83,19 @@ class _CustomerHomeScreenState extends State<CustomerHomeScreen> {
 
     _pages[_selectedIndex] = _pageFor(_selectedIndex);
 
+    CustomerHomeScreen.goHomeSignal.addListener(_handleGoHome);
+
+  }
+
+  void _handleGoHome() {
+    if (!mounted) return;
+    _selectPage(_isSignedIn ? 0 : 1);
+  }
+
+  @override
+  void dispose() {
+    CustomerHomeScreen.goHomeSignal.removeListener(_handleGoHome);
+    super.dispose();
   }
 
 

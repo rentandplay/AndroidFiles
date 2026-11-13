@@ -11,9 +11,11 @@ import 'package:provider/provider.dart';
 import '../../models/rental_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/mobile_api_service.dart';
+import '../../services/rental_receipt.dart';
 import '../../widgets/rental_ui.dart';
 import '../../widgets/mobile_controls.dart';
 import '../../utils/error_sanitizer.dart';
+import 'package:printing/printing.dart';
 import '../auth/login_screen.dart';
 import '../user/catalog_screen.dart';
 
@@ -464,6 +466,17 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                     ),
                     const SizedBox(height: 12),
                     RentalValueRow('Rental fee', rentalMoney(rental.rateFee)),
+                    if (rental.overtimeFee != null && rental.overtimeFee! > 0)
+                      RentalValueRow(
+                          'Late charges', rentalMoney(rental.overtimeFee!)),
+                    if (rental.penaltyAmount != null &&
+                        rental.penaltyAmount! > 0)
+                      RentalValueRow('Damage / missing penalty',
+                          rentalMoney(rental.penaltyAmount!)),
+                    if (rental.finalRentalCharges != null)
+                      RentalValueRow('Final total',
+                          rentalMoney(rental.finalRentalCharges!),
+                          emphasis: true),
                     RentalValueRow('Payment', _paymentLabel(rental)),
                     if (rental.balanceDue > 0)
                       RentalValueRow(
@@ -477,7 +490,44 @@ class _RentalHistoryScreenState extends State<RentalHistoryScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              if (rental.normalizedStatus == 'COMPLETED') ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final ref = rental.rentalCode.trim().isNotEmpty
+                          ? rental.rentalCode.trim()
+                          : rental.rentalId;
+                      try {
+                        await Printing.layoutPdf(
+                          name: 'Rental-$ref.pdf',
+                          onLayout: (_) =>
+                              buildRentalReceipt(rental.toReceiptMap()),
+                        );
+                      } catch (error) {
+                        if (sheetContext.mounted) {
+                          ScaffoldMessenger.of(sheetContext).showSnackBar(
+                            SnackBar(
+                                content:
+                                    Text('Could not open receipt PDF: $error')),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                    label: const Text('Print / Save receipt PDF'),
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 16),
 
               // Dismiss / Close Button
               SizedBox(

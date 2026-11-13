@@ -189,7 +189,10 @@ void main() {
     await tester.tap(find.text('Review price'));
     await tester.pumpAndSettle();
     expect(api.calls.single['path'], '/mobile/rentals/rental/extension-quote');
+    expect(find.text('1 hour'), findsOneWidget);
+    expect(find.text('1 hours'), findsNothing);
     expect(find.text('Additional charge: ₱100.00'), findsOneWidget);
+    expect(find.text('Added time: 1 hour (60 minutes)'), findsOneWidget);
     await tester.tap(find.text('Agree & request extension'));
     await tester.pumpAndSettle();
     expect(api.calls.last['expectedAdditionalFee'], 100);

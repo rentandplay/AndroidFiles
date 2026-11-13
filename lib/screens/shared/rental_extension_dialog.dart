@@ -1,6 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../services/mobile_api_service.dart';
+import '../../utils/error_sanitizer.dart';
+
+String _formatExtensionDuration(int minutes) {
+  if (minutes < 60) return '$minutes minutes';
+  if (minutes % 60 == 0) {
+    final hours = minutes ~/ 60;
+    return hours == 1 ? '1 hour' : '$hours hours';
+  }
+  final hours = minutes ~/ 60;
+  final mins = minutes % 60;
+  return '${hours}h ${mins}m';
+}
 
 Future<bool> showRentalExtensionDialog(
     BuildContext context, MobileApiService api, String rentalId,
@@ -26,18 +38,19 @@ Future<bool> showRentalExtensionDialog(
                               'Request before your due time. The operator checks the next reservation before approval.'),
                           DropdownButtonFormField<int>(
                               initialValue: minutes,
-                              items: [15, 30, 60, 120, 180, 1440]
+                              items: [15, 30, 60, 120, 180, 360, 720, 1440]
                                   .map((value) => DropdownMenuItem(
                                       value: value,
-                                      child: Text(value < 60
-                                          ? '$value minutes'
-                                          : '${value ~/ 60} hours')))
+                                      child: Text(
+                                          _formatExtensionDuration(value))))
                                   .toList(),
                               onChanged: busy
                                   ? null
                                   : (value) => setState(() {
                                         minutes = value!;
                                         quote = null;
+                                        error = '';
+                                        customerAgreed = false;
                                         requestKey =
                                             MobileApiService.operationKey();
                                       })),
@@ -46,9 +59,10 @@ Future<bool> showRentalExtensionDialog(
                             Text(
                                 'Additional charge: ₱${(quote!['additional_fee'] as num).toStringAsFixed(2)}'),
                             Text(
-                                'Added time: ${quote!['billed_minutes']} minutes'),
+                                'Added time: ${_formatExtensionDuration((quote!['billed_minutes'] as num).round())} (${quote!['billed_minutes']} minutes)'),
                             Text(
                                 'New due time: ${DateFormat('MMM d · h:mm a').format(DateTime.parse(quote!['due_at']).toUtc().add(const Duration(hours: 8)))}'),
+                            const SizedBox(height: 4),
                             const Text(
                                 'The added balance is collected in person or verified through QR. The current due time applies until approval.')
                           ],
@@ -117,7 +131,8 @@ Future<bool> showRentalExtensionDialog(
                                     }
                                   } catch (problem) {
                                     if (context.mounted) {
-                                      setState(() => error = '$problem');
+                                      setState(() => error =
+                                          ErrorSanitizer.format(problem));
                                     }
                                   } finally {
                                     if (context.mounted) {
@@ -126,7 +141,9 @@ Future<bool> showRentalExtensionDialog(
                                   }
                                 },
                           child: Text(busy
-                              ? 'Checking…'
+                              ? (quote == null
+                                  ? 'Checking…'
+                                  : 'Sending request…')
                               : quote == null
                                   ? 'Review price'
                                   : 'Agree & request extension'))

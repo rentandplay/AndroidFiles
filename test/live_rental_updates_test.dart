@@ -251,4 +251,100 @@ void main() {
     expect(api.calls, 1);
     await tester.pumpWidget(const SizedBox.shrink());
   });
+
+  testWidgets(
+      'ActiveRentalsScreen shows pending extension status and reflects approved extended time and timer live',
+      (tester) async {
+    final baseDue = DateTime.now().add(const Duration(hours: 1));
+    final extendedDue = baseDue.add(const Duration(hours: 3));
+    final api = _RentalApi()
+      ..rentals = [
+        RentalModel.fromMap({
+          'id': 'r-ext-1',
+          'rental_code': 'R-0332',
+          'item_id': 'bike',
+          'item_name': 'Bicycle',
+          'customer_id': 'customer',
+          'status': 'ACTIVE',
+          'rental_fee': 4700,
+          'confirmed_rental_at':
+              DateTime.now().subtract(const Duration(hours: 23)).toUtc().toIso8601String(),
+          'due_at': baseDue.toUtc().toIso8601String(),
+          'extension_request': {
+            'status': 'PENDING',
+            'additional_minutes': 180,
+            'additional_fee': 500,
+            'requested_due_at': extendedDue.toUtc().toIso8601String(),
+            'quote': {'billed_minutes': 180},
+          },
+        }),
+      ];
+    addTearDown(api.events.close);
+
+    await tester.pumpWidget(
+      ChangeNotifierProvider<AuthService>.value(
+        value: _CustomerAuth(),
+        child: MaterialApp(
+          home: ActiveRentalsScreen(api: api, onBrowse: () {}, isActive: true),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Extension pending (+3h)'), findsOneWidget);
+    expect(find.text('Extension under review'), findsOneWidget);
+    expect(find.text('Extension Requested · +3h'), findsOneWidget);
+    expect(find.textContaining('Waiting for admin approval'),
+        findsAtLeastNWidgets(1));
+
+    api.rentals = [
+      RentalModel.fromMap({
+        'id': 'r-ext-1',
+        'rental_code': 'R-0332',
+        'item_id': 'bike',
+        'item_name': 'Bicycle',
+        'customer_id': 'customer',
+        'status': 'ACTIVE',
+        'rental_fee': 5200,
+        'balance_due': 500,
+        'total_extended_minutes': 180,
+        'confirmed_rental_at':
+            DateTime.now().subtract(const Duration(hours: 23)).toUtc().toIso8601String(),
+        'due_at': extendedDue.toUtc().toIso8601String(),
+        'extension_request': {
+          'status': 'APPROVED',
+          'additional_minutes': 180,
+          'additional_fee': 500,
+          'requested_due_at': extendedDue.toUtc().toIso8601String(),
+          'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+          'quote': {'billed_minutes': 180},
+        },
+        'extension_history': [
+          {
+            'status': 'APPROVED',
+            'additional_minutes': 180,
+            'additional_fee': 500,
+            'requested_due_at': extendedDue.toUtc().toIso8601String(),
+            'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+            'quote': {'billed_minutes': 180},
+          },
+        ],
+      }),
+    ];
+    api.events.add({'event': 'rental.changed', 'rentalId': 'r-ext-1'});
+    await tester.pump();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Extended (+3h)'), findsOneWidget);
+    expect(find.textContaining('+3h extended'), findsOneWidget);
+    expect(find.text('Extension Approved · +3h'), findsOneWidget);
+    expect(find.textContaining('New return deadline updated to'),
+        findsAtLeastNWidgets(1));
+    expect(find.text('Request more time'), findsOneWidget);
+    expect(find.text('₱5,200.00'), findsOneWidget);
+    expect(find.text('₱500.00'), findsOneWidget);
+    expect(find.textContaining('03:5'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 }

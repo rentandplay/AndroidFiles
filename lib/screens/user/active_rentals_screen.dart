@@ -1,4 +1,5 @@
 import 'dart:io' show Platform;
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import '../../services/payment_proof_image.dart';
@@ -163,8 +164,10 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
         rental.isAwaitingPickup ||
         rental.isPendingAdminReview ||
         rental.isPendingVerification ||
+        rental.isReturnAwaitingTerminalConfirmation ||
         rental.isAwaitingInspection ||
-        rental.hasPendingReturnRequest);
+        rental.hasPendingReturnRequest ||
+        rental.hasPendingExtensionRequest);
     _rentalClock = Timer.periodic(
       Duration(seconds: awaitingTransition ? 3 : 6),
       (_) {
@@ -308,7 +311,7 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
       return false;
     }
     final remaining = rental.dueDate.difference(now);
-    return !remaining.isNegative && remaining <= const Duration(hours: 24);
+    return !remaining.isNegative && remaining <= const Duration(hours: 2);
   }
 
   bool _isReturning(RentalModel rental) =>
@@ -632,6 +635,8 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                   final isTrackingReturn =
                                       rental.hasPendingReturnRequest ||
                                           rental.isAwaitingInspection ||
+                                          rental
+                                              .isReturnAwaitingTerminalConfirmation ||
                                           (rental.isPendingVerification &&
                                               rental.normalizedStatus
                                                   .contains('RETURN'));
@@ -646,10 +651,19 @@ class _ActiveRentalsScreenState extends State<ActiveRentalsScreen>
                                   if (mounted) _refreshRentals();
                                 },
                                 onExtension: () async {
+                                  final messenger =
+                                      ScaffoldMessenger.of(context);
                                   if (await showRentalExtensionDialog(
                                           context, _api, rental.rentalId) &&
                                       mounted) {
                                     await _refreshRentals();
+                                    if (!mounted) return;
+                                    messenger.showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                            'Extension request sent. Your timer will update once the admin approves.'),
+                                      ),
+                                    );
                                   }
                                 },
                                 onRefresh: _refreshRentals,
@@ -700,7 +714,10 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
 
   int _progressStep() {
     final rental = widget.rental;
-    if (rental.isAwaitingInspection) return 3;
+    if (rental.isAwaitingInspection ||
+        rental.isReturnAwaitingTerminalConfirmation) {
+      return 3;
+    }
     if (rental.isActive || rental.hasPendingReturnRequest) return 2;
     if (rental.isPendingVerification) {
       return rental.normalizedStatus.contains('RETURN') ? 3 : 1;
@@ -777,30 +794,35 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                                     ? 'Staff is preparing your item. Rental time starts at handoff.'
                                     : 'Staff is preparing your item for ${rental.deliveryLocation}. Rental time has not started yet.'
                       )
-                    : rental.isActive && rental.hasPendingReturnRequest
+                    : rental.isReturnAwaitingTerminalConfirmation
                         ? (
-                            overdue
-                                ? 'Return request sent · overdue'
-                                : 'Return request sent',
-                            overdue
-                                ? 'Bring the equipment to the admin as soon as possible. Late charges are based on when the admin records physical receipt.'
-                                : 'Your request is recorded. The rental stays active and the timer stops when the admin physically receives the equipment.'
+                            'Receipt check · ESP32 pending',
+                            'Inspection recorded. Press OK on the counter terminal to confirm physical receipt.'
                           )
-                        : rental.isPendingVerification
-                            ? rental.normalizedStatus.contains('RETURN')
-                                ? (
-                                    'Return awaiting confirmation',
-                                    'Bring the equipment to the admin. The timer stops when they record receipt.'
-                                  )
-                                : (
-                                    'Handoff awaiting confirmation',
-                                    'The rental timer starts after the operator confirms the handoff.'
-                                  )
-                            : rental.isAwaitingInspection
-                                ? (
-                                    'Returned · inspection in progress',
-                                    'The rental timer stopped when the admin recorded receipt. They will inspect the item and finalize any balance.'
-                                  )
+                        : rental.isActive && rental.hasPendingReturnRequest
+                            ? (
+                                overdue
+                                    ? 'Return request sent · overdue'
+                                    : 'Return request sent',
+                                overdue
+                                    ? 'Bring the equipment to the admin as soon as possible. Late charges are based on when the admin records physical receipt.'
+                                    : 'Your request is recorded. The rental stays active and the timer stops when the admin physically receives the equipment.'
+                              )
+                            : rental.isPendingVerification
+                                ? rental.normalizedStatus.contains('RETURN')
+                                    ? (
+                                        'Receipt check · ESP32 pending',
+                                        'Equipment inspected. Confirm physical receipt on the counter terminal.'
+                                      )
+                                    : (
+                                        'Handoff awaiting confirmation',
+                                        'The rental timer starts after the operator confirms the handoff.'
+                                      )
+                                : rental.isAwaitingInspection
+                                    ? (
+                                        'Inspection in progress',
+                                        'The rental timer stopped when the admin recorded receipt. They are inspecting the equipment before final terminal receipt check.'
+                                      )
                                 : rental.isActive
                                     ? (
                                         overdue
@@ -828,6 +850,11 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
     final alertColor = holdEnded || overdue || paymentRejected
         ? Theme.of(context).colorScheme.error
         : dueImminent ? const Color(0xFFD97706) : Theme.of(context).colorScheme.primary;
+    final badgeStatus = rental.isReturnAwaitingTerminalConfirmation
+        ? 'PENDING_RETURN_VERIFICATION'
+        : rental.hasPendingReturnRequest
+            ? 'RETURN_REQUESTED'
+            : rental.normalizedStatus;
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 240),
@@ -883,7 +910,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                     ],
                   ),
                   const SizedBox(height: 8),
-                  Align(alignment: Alignment.centerLeft, child: RentalStatusBadge(status: rental.hasPendingReturnRequest ? 'RETURN_REQUESTED' : rental.normalizedStatus)),
+                  Align(alignment: Alignment.centerLeft, child: RentalStatusBadge(status: badgeStatus)),
                   if (overdue) Padding(padding: const EdgeInsets.only(top: 8), child: Text(overtimeLabel, style: TextStyle(color: alertColor, fontWeight: FontWeight.w700))),
                   const SizedBox(height: 10),
                   Container(
@@ -897,8 +924,13 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                     ),
                     child: Row(
                       children: [
-                        Icon(nextIcon, size: 14, color: alertColor),
-                        const SizedBox(width: 6),
+                        if (rental.isActive &&
+                            hasDueDate &&
+                            !rental.hasPendingReturnRequest)
+                          _CompactRentalRing(rental: rental, size: 18)
+                        else
+                          Icon(nextIcon, size: 14, color: alertColor),
+                        const SizedBox(width: 7),
                         Expanded(
                           child: Text(
                             heading,
@@ -907,7 +939,10 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                             style: TextStyle(
                                 fontSize: 11.5,
                                 fontWeight: FontWeight.w700,
-                                color: alertColor),
+                                color: alertColor,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures()
+                                ]),
                           ),
                         ),
                       ],
@@ -971,10 +1006,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                           fontSize: 12,
                           color: Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(height: 8),
-                  RentalStatusBadge(
-                      status: rental.hasPendingReturnRequest
-                          ? 'RETURN_REQUESTED'
-                          : rental.normalizedStatus),
+                  RentalStatusBadge(status: badgeStatus),
                 ]),
               ),
             ]),
@@ -991,6 +1023,21 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
               const SizedBox(height: 10),
               EmbeddedRentalHandoffQr(rental: rental, api: widget.api, onHandedOff: widget.onHandedOff ?? widget.onRefresh),
             ],
+            if (rental.isActive &&
+                hasDueDate &&
+                !rental.hasPendingReturnRequest) ...[
+              const SizedBox(height: 12),
+              _LiveRentalRingBanner(rental: rental),
+            ],
+            if (rental.isActive &&
+                !rental.hasPendingReturnRequest &&
+                (rental.hasPendingExtensionRequest ||
+                    rental.extensionStatus == 'REJECTED' ||
+                    rental.extensionCount > 0 ||
+                    rental.extensionStatus == 'APPROVED')) ...[
+              const SizedBox(height: 10),
+              _RentalExtensionNotice(rental: rental, formatDate: _date),
+            ],
             const SizedBox(height: 14),
             _RentalNextStep(
                 title: heading,
@@ -1001,6 +1048,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                 paymentRejected ||
                 rental.hasPendingReturnRequest ||
                 rental.isAwaitingInspection ||
+                rental.isReturnAwaitingTerminalConfirmation ||
                 rental.isActive) ...[
               const SizedBox(height: 14),
               if (holdEnded)
@@ -1015,8 +1063,7 @@ class _RentalBookingCardState extends State<RentalBookingCard> {
                     label: const Text('Upload receipt'))
               else if (rental.hasPendingReturnRequest ||
                   rental.isAwaitingInspection ||
-                  (rental.isPendingVerification &&
-                      rental.normalizedStatus.contains('RETURN')))
+                  rental.isReturnAwaitingTerminalConfirmation)
                 OutlinedButton.icon(
                     onPressed: widget.onReturn,
                     icon: const Icon(Icons.assignment_return_outlined),
@@ -1333,5 +1380,368 @@ class _RentalNextStep extends StatelessWidget {
         ),
       ]),
     );
+  }
+}
+
+bool get _isActiveRentalsTest =>
+    !kIsWeb && Platform.environment.containsKey('FLUTTER_TEST');
+
+({double progress, Color color, bool overdue, Duration delta})
+    _rentalRingMetrics(RentalModel rental, ColorScheme scheme) {
+  final now = ServerClock.instance.now;
+  final start = rental.startDate;
+  final due = rental.dueDate;
+  final totalSeconds = due.difference(start).inSeconds;
+  final remaining = due.difference(now);
+  final overdue = remaining.isNegative;
+
+  double progress;
+  if (overdue) {
+    progress = 1.0;
+  } else if (totalSeconds > 0) {
+    progress = (remaining.inSeconds / totalSeconds).clamp(0.05, 1.0);
+  } else {
+    progress = 0.5;
+  }
+
+  final color = overdue
+      ? scheme.error
+      : remaining.inHours < 2
+          ? const Color(0xFFD97706)
+          : const Color(0xFF10B981);
+
+  return (
+    progress: progress,
+    color: color,
+    overdue: overdue,
+    delta: remaining.abs(),
+  );
+}
+
+String _formatTabularDuration(Duration d) {
+  final days = d.inDays;
+  final hours = (d.inHours % 24).toString().padLeft(2, '0');
+  final mins = (d.inMinutes % 60).toString().padLeft(2, '0');
+  final secs = (d.inSeconds % 60).toString().padLeft(2, '0');
+  if (days > 0) {
+    return '${days}d $hours:$mins:$secs';
+  }
+  return '$hours:$mins:$secs';
+}
+
+class _CompactRentalRing extends StatelessWidget {
+  const _CompactRentalRing({required this.rental, this.size = 18});
+
+  final RentalModel rental;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final metrics = _rentalRingMetrics(rental, scheme);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(
+        painter: _RentalRingPainter(
+          progress: metrics.progress,
+          color: metrics.color,
+          trackColor: metrics.color.withValues(alpha: 0.22),
+          strokeWidth: 2.4,
+        ),
+      ),
+    );
+  }
+}
+
+/// Live 1-second circular countdown card rendered inside an expanded active rental.
+class _LiveRentalRingBanner extends StatefulWidget {
+  const _LiveRentalRingBanner({required this.rental});
+
+  final RentalModel rental;
+
+  @override
+  State<_LiveRentalRingBanner> createState() => _LiveRentalRingBannerState();
+}
+
+class _LiveRentalRingBannerState extends State<_LiveRentalRingBanner> {
+  Timer? _ticker;
+
+  @override
+  void initState() {
+    super.initState();
+    if (!_isActiveRentalsTest) {
+      _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _ticker?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final isDark = theme.brightness == Brightness.dark;
+    final metrics = _rentalRingMetrics(widget.rental, scheme);
+    final pct = (metrics.progress * 100).round().clamp(0, 100);
+    final dueLocal =
+        widget.rental.dueDate.toUtc().add(const Duration(hours: 8));
+    final dueLabel = DateFormat('MMM d · h:mm a').format(dueLocal);
+
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? [
+                  metrics.color.withValues(alpha: 0.14),
+                  const Color(0xFF141E2E),
+                ]
+              : [
+                  metrics.color.withValues(alpha: 0.09),
+                  const Color(0xFFFFFCFA),
+                ],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: metrics.color.withValues(alpha: 0.30)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 62,
+            height: 62,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                Positioned.fill(
+                  child: CustomPaint(
+                    painter: _RentalRingPainter(
+                      progress: metrics.progress,
+                      color: metrics.color,
+                      trackColor: metrics.color.withValues(alpha: 0.16),
+                      strokeWidth: 5.5,
+                    ),
+                  ),
+                ),
+                Text(
+                  metrics.overdue ? 'LATE' : '$pct%',
+                  style: TextStyle(
+                    fontSize: metrics.overdue ? 11 : 13,
+                    fontWeight: FontWeight.w900,
+                    color: metrics.color,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  metrics.overdue ? 'OVERDUE BY' : 'LIVE RENTAL TIMER',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                    color: metrics.color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _formatTabularDuration(metrics.delta),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.w900,
+                    color: metrics.overdue ? scheme.error : scheme.onSurface,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  widget.rental.effectiveTotalExtendedMinutes > 0
+                      ? 'Due $dueLabel · +${_formatExtensionDurationShort(widget.rental.effectiveTotalExtendedMinutes)} extended'
+                      : 'Due $dueLabel',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+String _formatExtensionDurationShort(int minutes) {
+  if (minutes <= 0) return '';
+  if (minutes < 60) return '${minutes}m';
+  if (minutes % 60 == 0) return '${minutes ~/ 60}h';
+  return '${minutes ~/ 60}h ${minutes % 60}m';
+}
+
+class _RentalExtensionNotice extends StatelessWidget {
+  const _RentalExtensionNotice({
+    required this.rental,
+    required this.formatDate,
+  });
+
+  final RentalModel rental;
+  final String Function(DateTime) formatDate;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final pending = rental.hasPendingExtensionRequest;
+    final rejected = !pending && rental.extensionStatus == 'REJECTED';
+    final color = pending
+        ? const Color(0xFFD97706)
+        : rejected
+            ? scheme.error
+            : const Color(0xFF059669);
+    final icon = pending
+        ? Icons.hourglass_top_rounded
+        : rejected
+            ? Icons.event_busy_rounded
+            : Icons.more_time_rounded;
+
+    final String title;
+    final String body;
+    if (pending) {
+      final minsLabel = _formatExtensionDurationShort(rental.requestedExtensionMinutes);
+      final proposed = rental.requestedExtensionDueDate;
+      title = minsLabel.isNotEmpty
+          ? 'Extension pending (+$minsLabel)'
+          : 'Extension pending';
+      body = [
+        if (rental.requestedExtensionFee > 0)
+          '+${rentalMoney(rental.requestedExtensionFee)}',
+        if (proposed != null) 'New due ${formatDate(proposed)}',
+        'Current timer applies until admin approves.'
+      ].join(' · ');
+    } else if (rejected) {
+      final reason =
+          (rental.extensionRequest['reason']?.toString() ?? '').trim();
+      title = 'Extension request declined';
+      body = reason.isNotEmpty
+          ? '$reason · Current return time still applies.'
+          : 'Your current return time still applies.';
+    } else {
+      final added = _formatExtensionDurationShort(
+          rental.effectiveTotalExtendedMinutes);
+      title = added.isNotEmpty ? 'Extended (+$added)' : 'Rental extended';
+      body = [
+        'Updated return time ${formatDate(rental.dueDate)}',
+        if (rental.balanceDue > 0)
+          'Added balance due: ${rentalMoney(rental.balanceDue)}',
+      ].join(' · ');
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  body,
+                  style: TextStyle(
+                    fontSize: 11,
+                    height: 1.3,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RentalRingPainter extends CustomPainter {
+  const _RentalRingPainter({
+    required this.progress,
+    required this.color,
+    required this.trackColor,
+    required this.strokeWidth,
+  });
+
+  final double progress;
+  final Color color;
+  final Color trackColor;
+  final double strokeWidth;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = size.center(Offset.zero);
+    final radius = (math.min(size.width, size.height) - strokeWidth) / 2;
+    canvas.drawCircle(
+      center,
+      radius,
+      Paint()
+        ..color = trackColor
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = strokeWidth,
+    );
+    if (progress > 0) {
+      canvas.drawArc(
+        Rect.fromCircle(center: center, radius: radius),
+        -math.pi / 2,
+        math.pi * 2 * progress,
+        false,
+        Paint()
+          ..color = color
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = strokeWidth
+          ..strokeCap = StrokeCap.round,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RentalRingPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.color != color ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.strokeWidth != strokeWidth;
   }
 }
