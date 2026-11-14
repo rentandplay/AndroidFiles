@@ -15,15 +15,15 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.rent_and_play_app"
+    namespace = "com.rentandplay.rent_and_play"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.example.rent_and_play_app"
+        applicationId = "com.rentandplay.rent_and_play"
         minSdk = 24
         targetSdk = 37
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     compileOptions {

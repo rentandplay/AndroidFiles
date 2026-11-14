@@ -41,7 +41,7 @@ class DefaultFirebaseOptions {
 
   static const FirebaseOptions android = FirebaseOptions(
     apiKey: 'AIzaSyCU2JqrqKXFyNxHBbNVstC9CVyHa3yz5jQ',
-    appId: '1:641470891206:android:dba95c3b78c635e8d003c7',
+    appId: '1:641470891206:android:ce22560e900dd890d003c7',
     messagingSenderId: '641470891206',
     projectId: 'rent-and-play',
     storageBucket: 'rent-and-play.firebasestorage.app',

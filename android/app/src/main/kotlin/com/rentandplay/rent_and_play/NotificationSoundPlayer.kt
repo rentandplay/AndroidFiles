@@ -1,4 +1,4 @@
-package com.example.rent_and_play_app
+﻿package com.rentandplay.rent_and_play
 
 import android.app.NotificationManager
 import android.content.Context

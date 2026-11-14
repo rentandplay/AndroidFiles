@@ -1,4 +1,4 @@
-package com.example.rent_and_play_app
+﻿package com.rentandplay.rent_and_play
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -774,7 +774,7 @@ class MainActivity : FlutterActivity() {
         val moduleSize = floor(min(boxWidth, boxHeight).toDouble() / moduleCount).toInt()
         if (moduleSize < 1) {
             bitmap.recycle()
-            throw IllegalArgumentException("This equipment QR is too detailed for a 50 × 30 mm label.")
+            throw IllegalArgumentException("This equipment QR is too detailed for a 50 Ã— 30 mm label.")
         }
         val qrLeft = left + (boxWidth - moduleCount * moduleSize) / 2
         val qrTop = top
@@ -811,7 +811,7 @@ class MainActivity : FlutterActivity() {
             textSize = 12f
             typeface = Typeface.create("sans-serif", Typeface.BOLD)
         }
-        val shortName = if (itemName.length > 20) itemName.take(17) + "…" else itemName
+        val shortName = if (itemName.length > 20) itemName.take(17) + "â€¦" else itemName
         canvas.drawText(code.take(15), 230f, 29f, codePaint)
         canvas.drawText(shortName, 230f, 61f, namePaint)
         canvas.drawText("RENT & PLAY", 230f, 93f, brandPaint)
